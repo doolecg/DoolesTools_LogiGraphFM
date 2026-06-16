@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "III",
+    "IFI",
+    "IRI"
+  ],
+  "key": {
+    "I": "minecraft:iron_ingot",
+    "F": "minecraft:furnace",
+    "R": "minecraft:redstone"
+  },
+  "result": {
+    "id": "doolestools:network_generator",
+    "count": 1
+  }
+}

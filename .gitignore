@@ -1,0 +1,51 @@
+# --- Build output ---
+build/
+out/
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# --- Gradle ---
+.gradle/
+gradle-app.setting
+.gradletasknamecache
+
+# --- Run / dev directories ---
+/run/
+/runs/
+logs/
+crash-reports/
+
+# --- IDE: IntelliJ IDEA ---
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# --- IDE: Eclipse ---
+.classpath
+.project
+.settings/
+bin/
+
+# --- IDE: VS Code ---
+.vscode/
+
+# --- Kotlin ---
+.kotlin/
+
+# --- OS cruft ---
+.DS_Store
+Thumbs.db
+
+# --- Project-specific (kept off GitHub intentionally) ---
+/docs/*
+!/docs/LOGIGRAPH_ASSET_CREATION_AND_IMPLEMENTATION_PROMPT.md
+!/docs/superpowers/
+/docs/superpowers/*
+!/docs/superpowers/plans/
+!/docs/superpowers/plans/*.md
+/.claude/
+gen_textures.py
+CLAUDE.md
+AGENTS.md
+SPEC.md

@@ -1,0 +1,12 @@
+{
+  "parent": "minecraft:block/cube",
+  "textures": {
+    "down": "doolestools:block/logistics_monitor_side",
+    "up": "doolestools:block/logistics_monitor_side",
+    "north": "doolestools:block/logistics_monitor_front",
+    "south": "doolestools:block/logistics_monitor_back",
+    "east": "doolestools:block/logistics_monitor_side",
+    "west": "doolestools:block/logistics_monitor_side",
+    "particle": "doolestools:block/logistics_monitor_side"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "parent": "minecraft:block/cube",
+  "textures": {
+    "north": "doolestools:block/gen_back",
+    "east": "doolestools:block/gen_side",
+    "south": "doolestools:block/gen_front",
+    "west": "doolestools:block/gen_side",
+    "up": "doolestools:block/gen_top",
+    "down": "doolestools:block/gen_bottom",
+    "particle": "doolestools:block/gen_side"
+  }
+}

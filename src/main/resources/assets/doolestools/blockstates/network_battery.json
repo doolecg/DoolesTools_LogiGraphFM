@@ -1,0 +1,5 @@
+{
+  "variants": {
+    "": { "model": "doolestools:block/network_battery" }
+  }
+}

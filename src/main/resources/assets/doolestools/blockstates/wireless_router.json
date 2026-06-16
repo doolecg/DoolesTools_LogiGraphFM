@@ -1,0 +1,10 @@
+{
+  "variants": {
+    "facing=up":    { "model": "doolestools:block/wireless_router", "x": 90 },
+    "facing=down":  { "model": "doolestools:block/wireless_router", "x": 270 },
+    "facing=north": { "model": "doolestools:block/wireless_router", "y": 180 },
+    "facing=east":  { "model": "doolestools:block/wireless_router", "y": 270 },
+    "facing=south": { "model": "doolestools:block/wireless_router" },
+    "facing=west":  { "model": "doolestools:block/wireless_router", "y": 90 }
+  }
+}

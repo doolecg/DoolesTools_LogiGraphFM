@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "III",
+    "GGG",
+    "IRI"
+  ],
+  "key": {
+    "I": "minecraft:iron_ingot",
+    "G": "minecraft:glass",
+    "R": "minecraft:redstone"
+  },
+  "result": {
+    "id": "doolestools:logistics_monitor",
+    "count": 1
+  }
+}

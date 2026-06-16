@@ -1,0 +1,10 @@
+{
+  "parent": "doolestools:block/network_wire_core",
+  "elements": [
+    { "from": [0, 6, 6], "to": [6, 10, 10], "faces": {
+      "north": { "texture": "#wire" }, "south": { "texture": "#wire" },
+      "east": { "texture": "#wire" }, "west": { "texture": "#wire" },
+      "up": { "texture": "#wire" }, "down": { "texture": "#wire" }
+    }}
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=north": { "model": "doolestools:block/logistics_computer", "y": 180 },
+    "facing=east":  { "model": "doolestools:block/logistics_computer", "y": 270 },
+    "facing=south": { "model": "doolestools:block/logistics_computer" },
+    "facing=west":  { "model": "doolestools:block/logistics_computer", "y": 90 }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "multipart": [
+    { "apply": { "model": "doolestools:block/network_wire_core" } },
+    { "when": { "down": "true" }, "apply": { "model": "doolestools:block/network_wire_down" } },
+    { "when": { "up": "true" }, "apply": { "model": "doolestools:block/network_wire_up" } },
+    { "when": { "north": "true" }, "apply": { "model": "doolestools:block/network_wire_north" } },
+    { "when": { "south": "true" }, "apply": { "model": "doolestools:block/network_wire_south" } },
+    { "when": { "west": "true" }, "apply": { "model": "doolestools:block/network_wire_west" } },
+    { "when": { "east": "true" }, "apply": { "model": "doolestools:block/network_wire_east" } },
+    { "when": { "endpoint_down": "true" }, "apply": { "model": "doolestools:block/network_wire_endpoint_down" } },
+    { "when": { "endpoint_up": "true" }, "apply": { "model": "doolestools:block/network_wire_endpoint_up" } },
+    { "when": { "endpoint_north": "true" }, "apply": { "model": "doolestools:block/network_wire_endpoint_north" } },
+    { "when": { "endpoint_south": "true" }, "apply": { "model": "doolestools:block/network_wire_endpoint_south" } },
+    { "when": { "endpoint_west": "true" }, "apply": { "model": "doolestools:block/network_wire_endpoint_west" } },
+    { "when": { "endpoint_east": "true" }, "apply": { "model": "doolestools:block/network_wire_endpoint_east" } }
+  ]
+}

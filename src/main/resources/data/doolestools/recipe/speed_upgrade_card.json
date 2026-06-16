@@ -1,0 +1,16 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    " R ",
+    "RPR",
+    " R "
+  ],
+  "key": {
+    "R": "minecraft:redstone",
+    "P": "minecraft:paper"
+  },
+  "result": {
+    "id": "doolestools:speed_upgrade_card",
+    "count": 1
+  }
+}

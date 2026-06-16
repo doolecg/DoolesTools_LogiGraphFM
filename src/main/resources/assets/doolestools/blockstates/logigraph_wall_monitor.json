@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=north": { "model": "doolestools:block/logigraph_wall_monitor" },
+    "facing=east": { "model": "doolestools:block/logigraph_wall_monitor", "y": 90 },
+    "facing=south": { "model": "doolestools:block/logigraph_wall_monitor", "y": 180 },
+    "facing=west": { "model": "doolestools:block/logigraph_wall_monitor", "y": 270 }
+  }
+}

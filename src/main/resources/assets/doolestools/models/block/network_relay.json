@@ -1,0 +1,25 @@
+{
+  "parent": "minecraft:block/block",
+  "textures": {
+    "case": "doolestools:block/logistics_monitor_side",
+    "light": "doolestools:gui/status_ok",
+    "particle": "doolestools:block/logistics_monitor_side"
+  },
+  "elements": [
+    { "from": [3, 0, 3], "to": [13, 3, 13], "faces": {
+      "north": { "texture": "#case" }, "south": { "texture": "#case" },
+      "east": { "texture": "#case" }, "west": { "texture": "#case" },
+      "up": { "texture": "#case" }, "down": { "texture": "#case" }
+    }},
+    { "from": [6, 3, 6], "to": [10, 12, 10], "faces": {
+      "north": { "texture": "#case" }, "south": { "texture": "#case" },
+      "east": { "texture": "#case" }, "west": { "texture": "#case" },
+      "up": { "texture": "#light" }, "down": { "texture": "#case" }
+    }},
+    { "from": [5, 12, 5], "to": [11, 15, 11], "faces": {
+      "north": { "texture": "#light" }, "south": { "texture": "#light" },
+      "east": { "texture": "#light" }, "west": { "texture": "#light" },
+      "up": { "texture": "#light" }, "down": { "texture": "#case" }
+    }}
+  ]
+}

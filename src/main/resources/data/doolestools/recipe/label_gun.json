@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    " IN",
+    " RI",
+    "S  "
+  ],
+  "key": {
+    "I": "minecraft:iron_ingot",
+    "N": "minecraft:name_tag",
+    "R": "minecraft:redstone",
+    "S": "minecraft:stick"
+  },
+  "result": {
+    "id": "doolestools:label_gun",
+    "count": 1
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "replace": false,
+  "values": [
+    "doolestools:logistics_computer",
+    "doolestools:logistics_monitor",
+    "doolestools:logigraph_wall_monitor",
+    "doolestools:wireless_router",
+    "doolestools:network_modem",
+    "doolestools:network_wire",
+    "doolestools:network_generator"
+  ]
+}

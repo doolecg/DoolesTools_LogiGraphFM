@@ -1,0 +1,8 @@
+{
+  "parent": "minecraft:block/orientable",
+  "textures": {
+    "front": "doolestools:block/logigraph_wall_monitor_front",
+    "side": "doolestools:block/logigraph_wall_monitor_side",
+    "top": "doolestools:block/logigraph_wall_monitor_back"
+  }
+}

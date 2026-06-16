@@ -1,0 +1,9 @@
+{
+  "parent": "minecraft:block/block",
+  "textures": { "plate": "doolestools:block/grey", "particle": "doolestools:block/grey" },
+  "elements": [
+    { "from": [14, 3, 3], "to": [16, 13, 13], "faces": { "down": { "texture": "#plate" }, "up": { "texture": "#plate" }, "north": { "texture": "#plate" }, "south": { "texture": "#plate" }, "east": { "texture": "#plate" }, "west": { "texture": "#plate" } } },
+    { "from": [12, 5, 5], "to": [14, 11, 11], "faces": { "down": { "texture": "#plate" }, "up": { "texture": "#plate" }, "north": { "texture": "#plate" }, "south": { "texture": "#plate" }, "east": { "texture": "#plate" }, "west": { "texture": "#plate" } } },
+    { "from": [10, 6, 6], "to": [12, 10, 10], "faces": { "down": { "texture": "#plate" }, "up": { "texture": "#plate" }, "north": { "texture": "#plate" }, "south": { "texture": "#plate" }, "east": { "texture": "#plate" }, "west": { "texture": "#plate" } } }
+  ]
+}

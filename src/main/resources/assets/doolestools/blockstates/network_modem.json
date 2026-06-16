@@ -1,0 +1,10 @@
+{
+  "variants": {
+    "facing=up":    { "model": "doolestools:block/network_modem", "x": 90 },
+    "facing=down":  { "model": "doolestools:block/network_modem", "x": 270 },
+    "facing=north": { "model": "doolestools:block/network_modem", "y": 180 },
+    "facing=east":  { "model": "doolestools:block/network_modem", "y": 270 },
+    "facing=south": { "model": "doolestools:block/network_modem" },
+    "facing=west":  { "model": "doolestools:block/network_modem", "y": 90 }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "parent": "minecraft:block/cube",
+  "textures": {
+    "north": "doolestools:block/battery_back",
+    "east": "doolestools:block/battery_side",
+    "south": "doolestools:block/battery_front",
+    "west": "doolestools:block/battery_side",
+    "up": "doolestools:block/battery_top",
+    "down": "doolestools:block/battery_bottom",
+    "particle": "doolestools:block/battery_side"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "III",
+    "GCG",
+    "IRI"
+  ],
+  "key": {
+    "I": "minecraft:iron_ingot",
+    "G": "minecraft:glass",
+    "C": "minecraft:comparator",
+    "R": "minecraft:redstone"
+  },
+  "result": {
+    "id": "doolestools:logistics_computer",
+    "count": 1
+  }
+}
