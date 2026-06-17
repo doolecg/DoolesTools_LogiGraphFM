@@ -25,7 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   scans when those mods are present.
 - **CC:Tweaked peripheral** — Logistics Computers expose scan, warning, storage, power, and network data
   through optional reflection-based peripheral hooks.
-- **Multi-computer mesh** — computers can link peers and merge saved peer scan snapshots read-only.
+- **Multi-computer mesh** — computers can link peers and merge saved peer scan snapshots without
+  mutating the peer world or graph.
 - **Throughput planner** — pure stats-page analysis estimates bottlenecks/starvation from route capacity
   and machine progress snapshots.
 
@@ -44,9 +45,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.5.0] — 2026-06-16
 
-The big one: a powered device network, device upgrades, optional item routing, and a
-performance/UX pass. Everything still honours the two contracts — the scanner/graph path stays
-strictly read-only, and every world-mutating action is server-authoritative and config-gated.
+The big one: a powered device network, device upgrades, item routing, and a performance/UX pass.
+Everything still honours the two contracts — diagnostics stay non-mutating, and every world-mutating
+action is server-authoritative and config-gated.
 
 ### Added
 
@@ -61,9 +62,8 @@ strictly read-only, and every world-mutating action is server-authoritative and 
 - **Numeric identities** — devices and networks get globally-unique four-digit IDs
   (`NETWORK#0001`), allocated by per-world saved data; networks can be named and access-gated
   (shared / private / whitelist).
-- **Easy Factory item routing** — optional, **off by default** and server-gated, moves items along
-  the links you draw. All transfers are two-phase (simulate then commit) so a partial insert never
-  voids items.
+- **Easy Factory item routing** — server-gated item movement along the links you draw. All transfers
+  are two-phase (simulate then commit) so a partial insert never voids items.
 - **Power dashboard** — supply/demand history graph in the computer terminal.
 
 ### Changed

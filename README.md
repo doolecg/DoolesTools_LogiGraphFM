@@ -1,44 +1,26 @@
-# Doole's Tools — LogiGraph
+# Doole's Tools - LogiGraph
 
-> Scan your base, wire it into a flowgraph, watch it breathe.
-> Optional automation to move items — or just the map. Either way it's useful.
+LogiGraph is a powered logistics network and factory graph for NeoForge. A Logistics Computer does not
+magically list every nearby machine anymore: blocks show up when they are connected to the computer's
+network through a modem, router, dongle, or wire-hosted endpoint. Once connected, the computer can scan
+their inventories/capabilities, place them on a flowgraph, warn about problems, and route items, fluids,
+or energy when server config allows it.
 
-**LogiGraph** is a node-based logistics dashboard for NeoForge. Scan the blocks around you, lay them
-out on a flowgraph, label them, monitor warnings, and run a powered device network on top. When the
-server config allows it, Easy Factory routing can move items, fluids, and energy along the links you draw.
-
-Minecraft `26.1.2` · NeoForge `26.1.2.76` · Java `25`
-
----
-
-## Two halves, one tool
-
-LogiGraph has a strict split that the whole codebase is built around:
-
-- **Diagnostics (always read-only).** Scanning, the flowgraph, warnings, and the monitors never
-  transport, insert, extract, mutate machines, or force-load chunks. Unreadable blocks are marked
-  `UNKNOWN`, never crash the scan.
-- **Automation (server-authoritative, config-gated).** Easy Factory routing, power buffering, and route
-  transfers do move resources, but only on the server, only when the relevant config flag allows it,
-  and only after the server re-validates the request. UI toggles are advisory — the server decides.
+Minecraft `26.1.2` | NeoForge `26.1.2.76` | Java `25`
 
 ---
 
 ## Contents
 
 - [Quick Start](#quick-start)
-- [Blocks and Items](#blocks-and-items)
-- [The Editor](#the-editor)
-- [The Power Network](#the-power-network)
-- [Device Upgrades](#device-upgrades)
+- [How Scanning Works Now](#how-scanning-works-now)
+- [Blocks And Items](#blocks-and-items)
+- [Computer UI](#computer-ui)
+- [Power Network](#power-network)
 - [Easy Factory Routing](#easy-factory-routing)
-- [Feature Highlights](#feature-highlights)
-- [What the Scanner Reads](#what-the-scanner-reads)
-- [Warnings](#warnings)
-- [Modded Machine Support](#modded-machine-support)
-- [Mod Compatibility](#mod-compatibility)
 - [Wiki](#wiki)
-- [Building from Source](#building-from-source)
+- [Compatibility](#compatibility)
+- [Building From Source](#building-from-source)
 - [Project Layout](#project-layout)
 - [FAQ](#faq)
 
@@ -46,294 +28,258 @@ LogiGraph has a strict split that the whole codebase is built around:
 
 ## Quick Start
 
-1. Place a **Logistics Computer** near the machines or storage you want to inspect.
-2. Right-click it and press **Scan Area**. Every logistics-relevant block in range appears in the
-   left panel.
-3. Double-click a block — or select it and press **Add Selected** — to drop it on the flowgraph.
-4. Drag nodes to arrange them. Drag an **OUT** socket onto a compatible **IN** socket to draw a link.
-5. Add Filter / Splitter / Combine / Channel nodes if you want Easy Factory to route through logic.
-6. Select a node for details and live throughput; warnings show along the bottom. Press **Save**.
-7. Place a **Logistics Monitor** within 16 blocks and right-click it to mirror the computer as a
-   read-only wall display.
+1. Place a **Logistics Computer**.
+2. Connect machines/storage to it:
+   - Wired: run **Network Wire** from the computer to a **Network Modem** attached to the target block.
+   - Wireless: place a **Wireless Router** or **Wireless Dongle** on the target block within range.
+   - Extended wireless: place **Network Relays** between the computer and far wireless endpoints.
+3. Open endpoint/relay naming screens with sneak + right-click if you want names, network assignment, or upgrades.
+4. Open the Logistics Computer and press **Scan Network**. Connected reachable devices appear in the left panel.
+5. Add scanned devices to the graph, draw typed links between ports, then press **Save**.
+6. Add Filter / Splitter / Combine / Channel nodes if you want routing logic.
+7. Use the Stats page for power, battery, throughput, and planner information.
+8. Place a **Logistics Monitor** or **LogiGraph Wall Monitor** if you want an external display.
 
 ---
 
-## Blocks and Items
+## How Scanning Works Now
+
+The scanner discovers network endpoints, not arbitrary loose blocks. A chest, furnace, tank, machine, or
+storage controller must be attached to a reachable endpoint before it appears in the computer.
+
+What counts as reachable:
+
+- A **Network Modem** attached to the target and wired back to the computer.
+- A wire-hosted endpoint/socket attached to the target and connected through the wire graph.
+- A **Wireless Router** or **Wireless Dongle** attached to the target and inside wireless range.
+- A wireless endpoint reachable through one or more **Network Relays**.
+- A peer computer's latest saved scan, if the two computers are linked in the mesh.
+
+Network assignment matters. Devices with a blank network id are treated as unclaimed and can appear on
+nearby computers. Devices assigned to a network only appear for matching computers.
+
+Scans still stay safe: unreadable blocks are skipped or marked unknown, unloaded chunks are skipped, and
+the scanner does not force-load chunks. Automation is separate from scanning and only happens through the
+server tick/routing code.
+
+---
+
+## Blocks And Items
 
 | Block / Item | What it does |
 |---|---|
-| **Logistics Computer** | Scans on demand, stores the latest scan + your flowgraph, hosts the editor, and runs the power network and (if enabled) routing. |
-| **Logistics Monitor** | Read-only wall display; auto-links to the nearest computer within 16 blocks. Cycles Flowgraph / Warnings / Storage Summary. |
-| **LogiGraph Wall Monitor** | Multi-block in-world display; adjacent tiles form a larger read-only wall screen. |
-| **Label Gun** | Names blocks so scans read at a glance. Right-click in air to set the remembered name; sneak + right-click a block to stamp it. While held, nearby block labels **and** network device names render as see-through holograms. |
-| **Network Wire** | Carries the wired side of the network between the computer and its endpoints. |
-| **Network Modem** | A wired endpoint that attaches the network to a machine/storage face. |
-| **Wireless Router** | A wireless endpoint; reaches the computer (or a relay) within range. |
-| **Wireless Dongle** | Compact wireless endpoint variant for attaching machines to a network. |
-| **Network Relay** | Extends wireless reach by hopping the signal further out (hop count is config-limited). |
-| **Network Generator** | Burns fuel to feed FE into the network. |
-| **Network Battery** | 4 MFE buffer; soaks up surplus FE and feeds deficits back into the network transactionally. |
-| **Network Screwdriver** | Removes one installed upgrade card from a device. |
-| **Upgrade Cards** | Speed, Stack, Range, Efficiency — installed into network devices (max 4 each). |
+| **Logistics Computer** | Network controller, scanner, graph editor, power dashboard, automation engine. |
+| **Logistics Monitor** | Single-block external display linked to a nearby computer. |
+| **LogiGraph Wall Monitor** | Multi-block in-world display; adjacent tiles combine into one larger screen. |
+| **Network Wire** | Wired network backbone; can also host endpoint/router data depending on placement. |
+| **Network Modem** | Wired endpoint attached to a machine/storage face. |
+| **Wireless Router** | Wireless endpoint attached to a block. |
+| **Wireless Dongle** | Compact wireless endpoint variant. |
+| **Network Relay** | Extends wireless reach across relay hops. |
+| **Network Generator** | Burns fuel and supplies FE to the network. |
+| **Network Battery** | 4 MFE buffer; charges from surplus and discharges during deficits. |
+| **Network Screwdriver** | Removes one installed upgrade card and returns it. |
+| **Speed Card** | Increases route budget contribution. |
+| **Stack Card** | Increases item move size. |
+| **Range Card** | Extends wireless reach. |
+| **Efficiency Card** | Reduces network/wireless cost. |
+| **Label Gun** | Stores and stamps labels; while held, shows block labels and network device names as holograms. |
 
-Sneak + right-click any network endpoint or relay to open its **naming screen** — set a nickname,
-assign it to a network, and see its four-digit ID and installed upgrades.
-
----
-
-## The Editor
-
-A terminal-style interface: dark CRT styling, glowing green text, real item icons.
-
-| Action | Input |
-|---|---|
-| Context menu | Right-click (node, label, frame, or empty canvas) |
-| Add scanned block | Double-click in the list, or **Add Selected** |
-| Select / marquee-select | Left-click / left-drag on empty canvas |
-| Move node(s) | Drag any selected node |
-| Draw a link | Drag an OUT socket onto a compatible IN socket |
-| Retarget / remove a link | Drag the link's IN endpoint |
-| Pan / Zoom | Middle-drag / scroll |
-| Delete selection | Delete |
-| Rename | Type in the name field while the node/frame/label is selected |
-
-Each node exposes typed ports (machines read like a furnace — Input, Fuel/Power, Output — plus fluid
-ports where relevant). Node cards show a status dot, the real item icon, contents, and a live recipe
-progress bar for machines. Frames group nodes; free-floating text labels annotate. **Auto Arrange**
-and **Fit View** are in the empty-canvas menu.
-
-Filter nodes have a searchable 3x3 ghost item picker with recents. The computer screen deliberately
-keeps JEI/REI/EMI side panels outside its bounds so recipe overlays do not cover the modal.
-
-Client-only settings (not synced): grid, animation, auto-refresh, real item icons.
+Upgrade cards install with shift + right-click on endpoints/relays. The Network Screwdriver removes one
+installed card with shift + right-click.
 
 ---
 
-## The Power Network
+## Computer UI
 
-The Logistics Computer flood-fills its connected infrastructure each tick (server-side, read-only, no
-force-loading) and tallies wires, endpoints, relays, wireless routers, batteries, and route costs to
-compute the network's **demand**. Supply comes from FE sources such as Network Generators and adjacent
-energy providers. Wired Network Batteries smooth supply by charging from surplus and discharging into
-deficit.
+### Network / Graph Page
 
-Graph automation (Easy Factory, below) only runs when the network has usable power. Full power runs at
-full budget; partial power throttles throughput; zero usable power pauses automation without breaking
-machines or links.
+- **Scan Network** refreshes reachable connected devices.
+- **Refresh Data** requests the latest server state without forcing a new scan.
+- Double-click a scanned device or press **Add Selected** to place it on the graph.
+- Drag compatible OUT ports to IN ports to create links.
+- Right-click empty canvas, nodes, frames, or labels for context actions.
+- The right panel shows inventory, energy, machine progress, warnings, and live per-link throughput.
 
-Wireless math (base range, per-range-upgrade distance, max range, relay hop limit, per-device costs)
-all lives under the `networkPower` section of the server config. Standalone relays and wireless
-routers register in a persistent per-dimension index, so adding more of them doesn't make the
-recalculation walk the world. Very large wired grids can raise `scan.maxWireTraversalSteps`.
+### Filter Picker
+
+Filter nodes have a 3x3 ghost item grid. Click a grid slot to open a searchable item picker with recent
+items. The computer screen keeps JEI/REI/EMI panels outside the modal so recipe overlays do not cover it.
+
+### Stats Page
+
+- Current power supply/demand and satisfaction.
+- Battery capacity and stored FE.
+- Power history across NOW / 30M / 1H / 12H / 1D / ALL views.
+- Route/device counts and warning counts.
+- Throughput planner summary for bottlenecks and starved links.
+
+### Settings Page
+
+- Client-only display settings: grid, animations, icons, auto-refresh, UI scale.
+- Graph export/import as compact base64 clipboard blueprints.
+- Network name/access controls and whitelist entries.
 
 ---
 
-## Device Upgrades
+## Power Network
 
-Four card types, four max per type per device:
+The computer calculates network demand from connected infrastructure and graph routes. Supply comes from
+Network Generators, Network Batteries, and compatible FE providers exposed to the network.
 
-| Card | Effect |
-|---|---|
-| **Speed** | More routing throughput per tick for the attached device. |
-| **Stack** | Larger per-route move size. |
-| **Range** | Extends a wireless device's reach. |
-| **Efficiency** | Reduces the device's power cost / wireless surcharge. |
+If power is full, routing runs at full budget. If power is partial, routing throttles. If no usable power
+is available, automation pauses until power returns.
 
-**Install:** Shift + right-click the device with a card in hand. **Remove:** Shift + right-click with
-the **Network Screwdriver** (the card pops back into your inventory). The device's naming screen shows
-the current counts and these same instructions.
+Important tuning lives in server config:
+
+- `networkPower.*` for device costs, wireless ranges, relay traversal, generator output, and battery cost.
+- `scan.maxWireTraversalSteps` for very large wired grids.
+- `scan.autoScanIntervalTicks` for scheduled server-side scans.
 
 ---
 
 ## Easy Factory Routing
 
-Server-authoritative and gated behind `ModServerConfig`. Current defaults enable Easy Factory and
-item/fluid/energy route types; server config is the source of truth. The computer moves resources along
-links in filter/priority order, capped by route budget, power satisfaction, and upgrades. Every move is
-two-phase (simulate, then commit) through NeoForge transactions, so a partial insert can never void
-resources. Filter nodes let you channel, round-robin, rate-limit, and whitelist what flows through.
+Easy Factory reads the saved graph and moves resources through the connected blocks. Current server config
+defaults enable the master Easy Factory switch and item/fluid/energy route types, but server config is the
+source of truth.
 
-Each successful route reports moved amounts back to the computer. The editor shows per-link throughput
-in node details, and the stats page includes a read-only throughput planner that flags bottlenecks and
-starved links from the current scan snapshot.
+Routing behavior:
 
----
-
-## Feature Highlights
-
-- **Scheduled auto-scan:** set `scan.autoScanIntervalTicks` above `0` to refresh computer data without
-  a player opening the GUI.
-- **Alert redstone output:** when `scan.redstoneAlertOnError` is true, the Logistics Computer emits redstone
-  strength `15` while any ERROR-level warning is active.
-- **Per-link throughput:** Easy Factory records server-side moved counts per link and syncs rolling samples
-  to the client.
-- **Configurable wire depth:** `scan.maxWireTraversalSteps` controls how far wired network traversal may walk.
-- **Shareable graph blueprints:** Settings page export/import uses compact base64 graph JSON on the clipboard.
-- **Filter item picker:** click the filter grid to open a searchable item modal with recents.
-- **Mod-aware scan providers:** optional readers exist for AE2, Mekanism, and Create when those mods are loaded.
-- **CC:Tweaked peripheral:** Logistics Computers expose scan, warning, power, storage, and network data.
-- **Multi-computer mesh:** linked computers can merge saved scan snapshots for larger read-only coverage.
-- **Throughput planner:** stats page estimates bottlenecks from route capacity and observed machine progress.
-
----
-
-## What the Scanner Reads
-
-For each block entity in range, read-only:
-
-- **Vanilla containers** — chests (incl. doubles), barrels, hoppers, droppers, dispensers.
-- **Furnaces / blast furnaces / smokers** — slots, active recipe, real cook progress and remaining
-  time from the block's own timers.
-- **NeoForge capabilities** — item, fluid, and energy handlers (amounts, capacity, resource metadata
-  only; never insert/extract).
-- **Mod-aware providers** — AE2 storage, Mekanism tanks/chemicals, and Create inventories where available.
-- **Modded machine process** — see [Modded Machine Support](#modded-machine-support).
-
-Blocks are categorised automatically. Anything with a block entity but no readable standard data shows
-as `UNKNOWN_MACHINE` rather than being dropped. Conduits/infrastructure and anything in the
-`doolestools:scanner_blacklist` tag (or implementing `ScannerHiddenBlock`) are excluded before any
-probing.
-
----
-
-## Warnings
-
-Pure, side-free rules over the snapshot: storage (Empty / Nearly full / Full), furnace (No fuel /
-No input / Output full / Not progressing), and graph structure (unlinked nodes, source with no
-output, sink with no input, link target nearly full). A furnace with all three slots occupied is
-normal operation, not an error.
-
----
-
-## Modded Machine Support
-
-Many mods don't expose recipe progress through vanilla APIs, so a best-effort read-only probe
-(`ModMachineProgress`) surfaces real process state instead of defaulting to the energy buffer: it
-reads a blockstate `active`/`running`/`working` flag (or reflects `getActive()`/`isActive()`), and
-reflects common progress getters/fields into a real progress bar. Everything is guarded and
-per-class cached; unknown mods fall back to scan-to-scan activity detection.
-
-> **Diagnostic:** unmapped machines log one line per class to `logs/latest.log`:
-> `[probe] <class> | activeProps=… | getters=… | fields=…`. Disable with
-> `-DdoolesTools.probeDebug=false`.
-
----
-
-## Mod Compatibility
-
-LogiGraph reads other mods' blocks through vanilla `Container`, NeoForge capabilities, and optional
-provider hooks. There are no hard dependencies beyond NeoForge and Minecraft.
-
-- **Inventory overlays (JEI/REI/EMI):** the computer terminal keeps their panels off-screen so they
-  don't draw over the editor or filter modal.
-- **AE2 / Mekanism / Create:** optional scan providers load only when the target mod is present.
-- **CC:Tweaked:** optional peripheral hooks load only if the mod is present and fail safe if not.
-- **Hiding your pipes/cables from scans:** add them to the `doolestools:scanner_blacklist` block tag
-  or implement `ScannerHiddenBlock`.
+- Item, fluid, and energy links are handled server-side.
+- Moves are transactional: extract/insert simulate and commit together so resources are not voided.
+- Filter / Splitter / Combine / Channel nodes shape item paths.
+- Side overrides and machine port roles affect where items can be extracted/inserted.
+- Speed/stack/range/efficiency upgrades change budget, move size, range, and cost.
+- Per-link moved counts are recorded by the server and synced to clients as throughput stats.
 
 ---
 
 ## Wiki
 
-### Admin Config
+### Connecting A Machine
 
-Server config is authoritative. Useful keys:
+For a wired machine:
 
-| Key | Default | Notes |
-|---|---:|---|
-| `easyFactory.enableEasyFactoryTransport` | `true` | Master switch for automation. |
-| `easyFactory.enableItemRoutes` / `enableFluidRoutes` / `enableEnergyRoutes` | `true` | Per-resource route gates. |
-| `easyFactory.easyFactoryTickInterval` | `20` | Route tick interval; lower is more responsive and more expensive. |
-| `scan.scanRadius` | `16` | Base scan radius; effective scan also covers configured wireless max range. |
-| `scan.autoScanIntervalTicks` | `0` | `0` disables scheduled scans; `1200` is roughly one minute. |
-| `scan.maxWireTraversalSteps` | `256` | Raise for huge wire grids if debug logs report traversal caps. |
-| `scan.redstoneAlertOnError` | `true` | Computer emits redstone while ERROR warnings exist. |
+1. Place the machine/storage block.
+2. Place a Network Modem on the face that should connect to the network.
+3. Run Network Wire from the modem back to the Logistics Computer.
+4. Scan the network from the computer.
 
-### Graph Blueprints
+For a wireless machine:
 
-Use **Settings → Export Graph** to copy a compact base64 string. Use **Settings → Import Graph** to paste
-it into another world. Imported graphs still pass through server-side `SaveGraphPayload` sanitization, so
-old or hostile strings cannot bypass graph limits.
+1. Place a Wireless Router or Wireless Dongle on the machine/storage block.
+2. Keep it within computer range or relay range.
+3. Assign it to the desired network if needed.
+4. Scan the network from the computer.
 
-### Filters
+### Network Names And Access
 
-Add a **Filter** node from the tool palette, select it, then click its 3x3 ghost grid. The picker searches
-all registered items by display name and registry id, remembers recent choices, and leaves JEI/REI/EMI
-panels outside the modal.
+Computers allocate stable internal network ids and display names like `NETWORK#0001`. Endpoint and relay
+naming screens can assign a device to a network, rename it, and show upgrade counts. Blank device network
+ids are unclaimed and can be discovered by nearby computers.
 
 ### Multi-Computer Mesh
 
-Computers can store peer computer links and merge those peers' latest saved scan snapshots during a new
-scan. Mesh merging is read-only: it never scans unloaded chunks, force-loads peers, or edits the peer's
-graph.
+Computers can link peer computers. On scan, a computer merges its own reachable devices with the peer's
+latest saved scan results. This expands coverage without force-loading chunks or editing the peer graph.
+
+### Graph Blueprints
+
+Use **Settings -> Export Graph** to copy a base64 blueprint string. Use **Settings -> Import Graph** to
+paste it into another world. Imported graphs still go through server-side graph sanitization.
+
+### Admin Config
+
+| Key | Default | Notes |
+|---|---:|---|
+| `easyFactory.enableEasyFactoryTransport` | `true` | Master automation switch. |
+| `easyFactory.enableItemRoutes` | `true` | Enables item links. |
+| `easyFactory.enableFluidRoutes` | `true` | Enables fluid links. |
+| `easyFactory.enableEnergyRoutes` | `true` | Enables energy links. |
+| `easyFactory.easyFactoryTickInterval` | `20` | Route tick interval. |
+| `easyFactory.maxEasyFactoryRoutesPerTick` | `16` | Base route budget per tick. |
+| `scan.scanRadius` | `16` | Endpoint search radius around computer/relays. |
+| `scan.autoScanIntervalTicks` | `0` | `0` disables scheduled scans. `1200` is about one minute. |
+| `scan.maxWireTraversalSteps` | `256` | Raise for very large wired networks. |
+| `scan.redstoneAlertOnError` | `true` | Computer outputs redstone strength 15 while ERROR warnings exist. |
 
 ### CC:Tweaked Peripheral
 
-When CC:Tweaked is installed, a Logistics Computer exposes peripheral type `logistics_computer` with:
+When CC:Tweaked is present, a Logistics Computer exposes peripheral type `logistics_computer` with:
 `getStatus`, `getPower`, `getDevices`, `getWarnings`, `getStorageSummary`, `scan`, and `getNetworkId`.
-All returned data is plain Lua-friendly tables derived from server-owned scan/power state.
+
+### What The Scanner Reads From Connected Blocks
+
+- Vanilla containers: chests, barrels, hoppers, droppers, dispensers.
+- Furnaces, blast furnaces, smokers: slots, recipe state, cook progress, fuel state.
+- NeoForge item/fluid/energy capabilities.
+- Modded machine progress through guarded reflection.
+- Optional provider data for AE2, Mekanism, and Create when loaded.
+
+Unknown block entities appear as `UNKNOWN_MACHINE` if they are connected but do not expose useful data.
+
+### Warnings
+
+Warnings are generated from scan and graph state: empty/full storage, missing furnace input/fuel, full
+outputs, not-progressing machines, unlinked nodes, sources with no output, sinks with no input, and nearly
+full link targets.
 
 ---
 
-## Building from Source
+## Compatibility
+
+- **JEI/REI/EMI:** panels are kept outside the computer GUI so they do not cover the editor or picker.
+- **AE2 / Mekanism / Create:** optional scan providers add extra storage/tank/machine data when present.
+- **CC:Tweaked:** optional peripheral hooks load only when CC:Tweaked is installed.
+- **Hiding blocks:** add them to `doolestools:scanner_blacklist` or implement `ScannerHiddenBlock`.
+
+---
+
+## Building From Source
 
 ```powershell
-.\gradlew.bat build       # compile + package → build/libs/doolestools-<version>.jar
+.\gradlew.bat build       # compile + package -> build/libs/doolestools-<version>.jar
 .\gradlew.bat runClient   # dev client
 .\gradlew.bat runServer   # dedicated dev server (--nogui)
-.\gradlew.bat test        # JUnit 5 unit suite (pure logic only)
+.\gradlew.bat test        # JUnit 5 unit suite
 ```
 
-There's no lint/CI; `build` plus `test` are the correctness gates. The unit suite under
-`src/test/java` covers pure logic that doesn't need a live `Level` (e.g. `WirelessNetworkPolicy`,
-`EasyFactoryManager` helpers).
-
-**Toolchain:** Java 25 · Gradle 9.1 (wrapper) · ModDevGradle 2.x · mod id `doolestools` · root package
-`net.doole.doolestools`. Version pins live in `gradle.properties`. Mod metadata expands at build time
-from `src/main/templates/META-INF/neoforge.mods.toml` — never hand-edit the generated copy.
+There is no lint/CI workflow in this checkout. `build` is the main correctness gate. The unit tests under
+`src/test/java` cover pure logic that does not need a live `Level`.
 
 ---
 
 ## Project Layout
 
-```
+```text
 net.doole.doolestools
   registry/     blocks, items, block entities, menus, creative tabs
-  block/        computer, monitor, and network blocks
-  blockentity/  data stores (Value I/O persistence)
-  config/       ModServerConfig feature flags + tuning
-  menu/         container/slotless menus
-  logistics/    scanner, graph ops, port discovery, warnings, machine probe,
-                power calculator, network node index, easyfactory, throughput planner, data records
-  network/      payloads + validated server-side handlers
-  world/        per-world saved data (labels, numeric identities)
-  client/       client-only: screens, GUI widgets, editor state, renderers
-  integration/  optional CC:Tweaked and mod-aware scan providers
+  block/        computer, monitor, endpoint, wire, power blocks
+  blockentity/  computer state, endpoint state, batteries, generators, monitors
+  config/       server/client config flags and tuning
+  logistics/    scanner, graph ops, warnings, port discovery, power, routing, planner, data records
+  network/      payload records, codecs, validated server handlers
+  client/       screens, widgets, editor state, renderers, client preferences
+  integration/  optional mod-aware scan providers and CC:Tweaked hooks
+  world/        saved labels and stable network/device identities
 ```
-
-Repo-local agent guidance files may be ignored by git; use the checked-in README and source config as the public source of truth.
 
 ---
 
 ## FAQ
 
-**Does it move items?** Easy Factory can move items, fluids, and energy when server config allows it.
-Current defaults enable the route types, but diagnostics and the flowgraph are always read-only.
+**Why does Scan Network not show my chest/machine?** It must be attached to a reachable modem, router,
+dongle, or wire-hosted endpoint. Loose nearby blocks are not listed just because they are inside radius.
 
-**Will scanning lag my world or load chunks?** It scans on demand or by `autoScanIntervalTicks`, and never
-force-loads chunks; unloaded chunks are skipped.
+**Can it move items/fluids/energy?** Yes, when the server config allows Easy Factory and the relevant
+route type. The graph must be saved before server automation uses it.
 
-**How do I share a factory layout?** Use Settings → Export Graph to copy a base64 blueprint string, then
-Settings → Import Graph in the destination world.
+**Does it load chunks?** No. Unloaded chunks are skipped.
 
-**Why is throughput different from the planner?** Throughput is live server transfer history. The planner
-is a read-only estimate from route config and machine progress snapshots.
+**How do I share a layout?** Use Settings -> Export Graph, then import the base64 string elsewhere.
 
-**I can't install upgrades.** Hold an upgrade card and **Shift + right-click** the network device.
-Use the **Network Screwdriver** (also Shift + right-click) to take one back out.
+**Why do planner estimates differ from throughput?** Throughput is actual server transfer history.
+Planner output is an estimate from graph capacity and current scan snapshots.
 
-**I named a network device but don't see it floating.** Hold the **Label Gun** — device names render
-as holograms alongside block labels.
-
-**A block shows as `UNKNOWN_MACHINE`.** It has a block entity but no vanilla container or standard
-NeoForge capability; a mod-specific provider would be needed to read it.
+**How do I remove upgrades?** Shift + right-click the endpoint or relay with the Network Screwdriver.
