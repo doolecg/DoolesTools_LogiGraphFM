@@ -3,6 +3,8 @@ package net.doole.doolestools.network;
 import net.doole.doolestools.client.ClientPayloadHandlers;
 import net.doole.doolestools.network.payload.ClearScanPayload;
 import net.doole.doolestools.network.payload.ComputerStatePayload;
+import net.doole.doolestools.network.payload.LinkedComputersPayload;
+import net.doole.doolestools.network.payload.LinkComputerPayload;
 import net.doole.doolestools.network.payload.MonitorStatePayload;
 import net.doole.doolestools.network.payload.RequestComputerSyncPayload;
 import net.doole.doolestools.network.payload.RequestMonitorSyncPayload;
@@ -17,6 +19,7 @@ import net.doole.doolestools.network.payload.SetNetworkEndpointNamePayload;
 import net.doole.doolestools.network.payload.RequestNearbyLabelsPayload;
 import net.doole.doolestools.network.payload.NearbyLabelsPayload;
 import net.doole.doolestools.network.payload.KnownNetworksPayload;
+import net.doole.doolestools.network.payload.UnlinkComputerPayload;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 
@@ -52,6 +55,10 @@ public final class ModNetworking {
                 ServerPayloadHandlers::handleRequestNearbyLabels);
         registrar.playToServer(RequestKnownNetworksPayload.TYPE, RequestKnownNetworksPayload.STREAM_CODEC,
                 ServerPayloadHandlers::handleRequestKnownNetworks);
+        registrar.playToServer(LinkComputerPayload.TYPE, LinkComputerPayload.STREAM_CODEC,
+                ServerPayloadHandlers::handleLinkComputer);
+        registrar.playToServer(UnlinkComputerPayload.TYPE, UnlinkComputerPayload.STREAM_CODEC,
+                ServerPayloadHandlers::handleUnlinkComputer);
         // Server -> Client. Handlers live in a client-only class; the lambda bodies only class-load
         // ClientPayloadHandlers when actually executed on the physical client.
         registrar.playToClient(ComputerStatePayload.TYPE, ComputerStatePayload.STREAM_CODEC,
@@ -62,5 +69,7 @@ public final class ModNetworking {
                 (payload, ctx) -> ClientPayloadHandlers.handleNearbyLabels(payload, ctx));
         registrar.playToClient(KnownNetworksPayload.TYPE, KnownNetworksPayload.STREAM_CODEC,
                 (payload, ctx) -> ClientPayloadHandlers.handleKnownNetworks(payload, ctx));
+        registrar.playToClient(LinkedComputersPayload.TYPE, LinkedComputersPayload.STREAM_CODEC,
+                (payload, ctx) -> ClientPayloadHandlers.handleLinkedComputers(payload, ctx));
     }
 }

@@ -19,9 +19,11 @@ import net.doole.doolestools.client.gui.TerminalButton;
 import net.doole.doolestools.client.gui.WarningBarWidget;
 import net.doole.doolestools.logistics.LogisticsGraph;
 import net.doole.doolestools.logistics.FilterSettings;
+import net.doole.doolestools.logistics.WarningGenerator;
 import net.doole.doolestools.logistics.NodeType;
 import net.doole.doolestools.logistics.PortDirection;
 import net.doole.doolestools.logistics.ScannedType;
+import net.doole.doolestools.logistics.ThroughputPlanner;
 import net.doole.doolestools.logistics.data.GraphCanvasData;
 import net.doole.doolestools.logistics.data.GraphLinkData;
 import net.doole.doolestools.logistics.data.GraphNodeData;
@@ -80,9 +82,10 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
     private static final int KEY_LEFT = 263;
     private static final int MOD_ALT = 4;
     private static final int MOD_SHIFT = 1;
+    private static final int MOD_CTRL = 2;
     /** Bottom-left page bar order + short labels. */
     private static final int[] PAGE_ORDER = {PAGE_SCANNED, PAGE_GRAPH, PAGE_STATS, PAGE_SETTINGS};
-    private static final String[] PAGE_TABS = {"NETWORK", "FACTORY", "POWER", "SETTINGS"};
+    private static final String[] PAGE_TABS = {"NETWORK", "FACTORY", "STATS", "SETTINGS"};
     private static final int SNAP = 12;
     private static final int PICKER_RECENT_LIMIT = 24;
     private static final List<String> FILTER_PICKER_RECENTS = new ArrayList<>();
@@ -96,8 +99,11 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
     private EditBox nameField;
     private EditBox filterRuleField;
     private EditBox whitelistEntryField;
-    private TerminalButton linkButton;
     private TerminalButton filterButton;
+    /** Tool-palette buttons paired with their two-line hover tooltip. */
+    private final List<ToolTip> toolButtons = new ArrayList<>();
+
+    private record ToolTip(TerminalButton button, String title, String desc) {}
 
     private int guiW = MIN_GUI_W;
     private int guiH = MIN_GUI_H;
@@ -110,6 +116,11 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
 
     private int page = PAGE_GRAPH;
     private int scannedScroll;
+    /** Stats page time-scale selection: 0=NOW, 1=30M, 2=1H, 3=12H, 4=1D, 5=ALL. */
+    private int statsTimeScale = 0;
+    private int statsGraphScrollOffset = 0;
+    private final TerminalButton[] statsScaleButtons = new TerminalButton[6];
+    private static final String[] STATS_SCALE_LABELS = {"NOW", "30M", "1H", "12H", "1D", "ALL"};
     private final TerminalButton[] tabButtons = new TerminalButton[4];
     private final List<AbstractWidget>[] pageWidgets = new List[]{
             new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>()};
@@ -144,6 +155,9 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
     private int filterPickerScroll;
     private String filterPickerSearch = "";
     private boolean filterPickerRecentTab;
+    /** Set when the user shift-clicks a node — shows the copy/instance modal. */
+    private String shiftModalNodeId = null;
+    private double shiftModalX, shiftModalY;
     private List<PickerEntry> filterPickerEntries;
 
     public LogisticsComputerScreen(LogisticsComputerMenu menu, Inventory inv, Component title) {
@@ -214,6 +228,7 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
                 .accent(DUTheme.OK));
 
         initGraphPage(lx, ty);
+        initStatsPage();
         initSettingsPage();
 
         setPage(page);
@@ -254,16 +269,29 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
                 .sprite(GuiSprites.FILTER).accent(DUTheme.TEXT_GREEN);
         paged(PAGE_GRAPH, filterButton);
 
-        // Floating tool palette inside the canvas (top-left corner).
+        // Floating tool palette inside the canvas (top-left corner), single vertical column.
+        toolButtons.clear();
         int px = canvasX + 4, py = contentY + 14;
-        paged(PAGE_GRAPH, toolBtn(px, py, "Add Selected", Glyphs::plus, () -> ctx.addNodeForSelectedScan()));
-        linkButton = toolBtn(px, py + 18, "Link Mode", Glyphs::link, this::toggleLinkMode);
-        paged(PAGE_GRAPH, linkButton);
-        paged(PAGE_GRAPH, toolBtn(px, py + 36, "Delete", Glyphs::trash, () -> ctx.deleteSelectedNode()).accent(DUTheme.ERROR));
-        paged(PAGE_GRAPH, toolBtn(px, py + 54, "Auto Arrange", Glyphs::arrange, () -> ctx.autoArrange()));
-        paged(PAGE_GRAPH, toolBtn(px, py + 72, "Add Frame", Glyphs::frame, this::addFrameAtView));
-        paged(PAGE_GRAPH, toolBtn(px, py + 90, "Add Filter Node", Glyphs::link, this::addFilterAtView).accent(DUTheme.PROGRESS_BLUE));
-        paged(PAGE_GRAPH, toolBtn(px, py + 108, "Fit View", Glyphs::fit, () -> canvasWidget.fitView()));
+        addToolBtn(toolBtn(px, py,       "Add Selected", Glyphs::plus, () -> ctx.addNodeForSelectedScan()),
+                "Add Selected", "Drop the selected scanned device as a node");
+        addToolBtn(toolBtn(px, py + 18,  "Delete", Glyphs::trash, () -> ctx.deleteSelectedNode()).accent(DUTheme.ERROR),
+                "Delete", "Remove the selected node(s)");
+        addToolBtn(toolBtn(px, py + 36,  "Auto Arrange", Glyphs::arrange, () -> ctx.autoArrange()),
+                "Auto Arrange", "Lay nodes out left-to-right by link depth");
+        addToolBtn(toolBtn(px, py + 54,  "Fit View", Glyphs::fit, () -> canvasWidget.fitView()),
+                "Fit View", "Zoom and pan to frame the whole graph");
+        addToolBtn(toolBtn(px, py + 72,  "Filter", Glyphs::link, this::addFilterAtView).accent(DUTheme.PROGRESS_BLUE),
+                "Filter", "Route items matching a filter list");
+        addToolBtn(toolBtn(px, py + 90,  "Splitter", Glyphs::arrange, this::addSplitterAtView).accent(DUTheme.PROGRESS_ORANGE),
+                "Splitter", "Split one input into multiple outputs");
+        addToolBtn(toolBtn(px, py + 108, "Combine", Glyphs::graph, this::addCombineAtView).accent(DUTheme.TEXT_GREEN),
+                "Combine", "Merge multiple inputs into one output");
+        addToolBtn(toolBtn(px, py + 126, "Channel", Glyphs::link, this::addChannelAtView).accent(DUTheme.SELECTED),
+                "Channel", "Logical grouping / label");
+        addToolBtn(toolBtn(px, py + 144, "Frame", Glyphs::frame, this::addFrameAtView),
+                "Frame", "Annotate a region of the canvas");
+        addToolBtn(toolBtn(px, py + 162, "Text", Glyphs::list, this::addTextAtView),
+                "Text", "Free-floating label");
 
         // Canvas header zoom controls.
         paged(PAGE_GRAPH, new TerminalButton(canvasX + canvasW - 24, contentY + 1, 11, 9,
@@ -280,6 +308,59 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
                 Component.literal(tr("doolestools.computer.button.set_type")), this::cycleType).sprite(GuiSprites.FILTER));
         paged(PAGE_GRAPH, new TerminalButton(rightX + 8 + (rightW - 12) / 2, contentY + contentH - 16, (rightW - 12) / 2, 13,
                 Component.literal(tr("doolestools.computer.button.remove")), () -> ctx.deleteSelectedNode()).sprite(GuiSprites.CLEAR).accent(DUTheme.ERROR));
+    }
+
+    // --- Stats page layout (shared by init + render so the scale tabs line up) ---
+    private int statsContentX() { return leftPos + 10 + 16; }
+    private int statsBarsTop() { return contentY + 18; }
+    /** Y of the time-scale tab strip (below the Row-1 production/consumption bars). */
+    private int statsTabStripY() { return statsBarsTop() + 2 * 12 + 6; }
+    private int statsGraphTop() { return statsTabStripY() + 16; }
+
+    private void initStatsPage() {
+        int x = statsContentX();
+        int y = statsTabStripY();
+        int bw = 34, gap = 3, h = 12;
+        for (int i = 0; i < STATS_SCALE_LABELS.length; i++) {
+            final int idx = i;
+            TerminalButton b = new TerminalButton(x + i * (bw + gap), y, bw, h,
+                    Component.literal(STATS_SCALE_LABELS[i]), () -> setStatsTimeScale(idx))
+                    .accent(DUTheme.SELECTED);
+            b.setToggled(i == statsTimeScale);
+            statsScaleButtons[i] = b;
+            paged(PAGE_STATS, b);
+        }
+    }
+
+    private void setStatsTimeScale(int scale) {
+        statsTimeScale = Math.max(0, Math.min(STATS_SCALE_LABELS.length - 1, scale));
+        statsGraphScrollOffset = 0;
+        for (int i = 0; i < statsScaleButtons.length; i++) {
+            if (statsScaleButtons[i] != null) statsScaleButtons[i].setToggled(i == statsTimeScale);
+        }
+    }
+
+    /** Supply/demand history series for the currently selected stats time-scale. */
+    private List<? extends Number> statsSupplySeries() {
+        return switch (statsTimeScale) {
+            case 1 -> ctx.supply30m();
+            case 2 -> ctx.supply1h();
+            case 3 -> ctx.supply12h();
+            case 4 -> ctx.supply1d();
+            case 5 -> ctx.supplyAllTime();
+            default -> ctx.powerSupplyHistory();
+        };
+    }
+
+    private List<? extends Number> statsDemandSeries() {
+        return switch (statsTimeScale) {
+            case 1 -> ctx.demand30m();
+            case 2 -> ctx.demand1h();
+            case 3 -> ctx.demand12h();
+            case 4 -> ctx.demand1d();
+            case 5 -> ctx.demandAllTime();
+            default -> ctx.powerDemandHistory();
+        };
     }
 
     private static final int SETTINGS_COL_W = 168;
@@ -318,6 +399,7 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         ref[0] = new TerminalButton(x, y, w, h, Component.literal(label + ": " + (get.getAsBoolean() ? "ON" : "OFF")), () -> {
             boolean nv = !get.getAsBoolean();
             set.accept(nv);
+            ClientPrefs.save();
             ref[0].setMessage(Component.literal(label + ": " + (nv ? "ON" : "OFF")));
             ref[0].setToggled(nv);
         }).accent(DUTheme.OK);
@@ -330,6 +412,7 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         ref[0] = new TerminalButton(x, y, w, h, Component.literal(uiScaleLabel()), () -> {
             float current = ClientPrefs.uiScale;
             ClientPrefs.uiScale = current < 1.0f ? 1.0f : current < 1.25f ? 1.25f : current < 1.5f ? 1.5f : 0.75f;
+            ClientPrefs.save();
             ref[0].setMessage(Component.literal(uiScaleLabel()));
             rebuildWidgets();
         }).accent(DUTheme.PROGRESS_BLUE);
@@ -342,6 +425,12 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
 
     private TerminalButton toolBtn(int x, int y, String tip, Glyphs.Drawer icon, Runnable action) {
         return new TerminalButton(x, y, 16, 16, Component.literal(tip), action).iconOnly(icon);
+    }
+
+    /** Registers a tool-palette button on the graph page and remembers its hover tooltip. */
+    private void addToolBtn(TerminalButton button, String title, String desc) {
+        paged(PAGE_GRAPH, button);
+        toolButtons.add(new ToolTip(button, title, desc));
     }
 
     private <T extends AbstractWidget> T paged(int p, T widget) {
@@ -379,14 +468,18 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
     }
 
     private void exportGraphToClipboard() {
-        LogisticsGraphData.CODEC.encodeStart(JsonOps.INSTANCE, ctx.graph()).result().ifPresent(json ->
-                Minecraft.getInstance().keyboardHandler.setClipboard(new GsonBuilder().setPrettyPrinting().create().toJson(json)));
+        LogisticsGraphData.CODEC.encodeStart(JsonOps.INSTANCE, ctx.graph()).result().ifPresent(json -> {
+            String compactJson = new GsonBuilder().create().toJson(json);
+            String encoded = java.util.Base64.getEncoder().encodeToString(compactJson.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            Minecraft.getInstance().keyboardHandler.setClipboard(encoded);
+        });
     }
 
     private void importGraphFromClipboard() {
         try {
             String text = Minecraft.getInstance().keyboardHandler.getClipboard();
-            LogisticsGraphData.CODEC.parse(JsonOps.INSTANCE, JsonParser.parseString(text)).result().ifPresent(graph -> {
+            String json = new String(java.util.Base64.getDecoder().decode(text.trim()), java.nio.charset.StandardCharsets.UTF_8);
+            LogisticsGraphData.CODEC.parse(JsonOps.INSTANCE, JsonParser.parseString(json)).result().ifPresent(graph -> {
                 ctx.setGraph(graph);
                 ClientNetworkSender.saveGraph(ctx.pos(), graph);
                 ctx.markSaved();
@@ -414,12 +507,6 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         filterButton.setMessage(Component.literal(ctx.filter.label));
     }
 
-    private void toggleLinkMode() {
-        ctx.linkMode = !ctx.linkMode;
-        ctx.linkSourceId = null;
-        linkButton.setToggled(ctx.linkMode);
-    }
-
     private void cycleType() {
         GraphNodeData n = ctx.selectedNode();
         if (n == null) return;
@@ -438,17 +525,42 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
 
     private void zoomBy(float delta) {
         float old = ctx.zoom;
-        ctx.zoom = Math.max(0.4f, Math.min(2.0f, old + delta));
+        ctx.zoom = Math.max(0.1f, Math.min(2.0f, old + delta));
         double cx = canvasWidget.x + canvasWidget.w / 2.0;
         double cy = canvasWidget.y + canvasWidget.h / 2.0;
         ctx.panX -= (cx - canvasWidget.x - ctx.panX) * (ctx.zoom / old - 1f);
         ctx.panY -= (cy - canvasWidget.y - ctx.panY) * (ctx.zoom / old - 1f);
     }
 
+    private int viewCenterX() {
+        return snap((int) canvasWidget.toCanvasX(canvasWidget.x + canvasWidget.w / 2.0) - GraphNodeData.DEFAULT_WIDTH / 2);
+    }
+
+    private int viewCenterY() {
+        return snap((int) canvasWidget.toCanvasY(canvasWidget.y + canvasWidget.h / 2.0) - GraphNodeData.DEFAULT_HEIGHT / 2);
+    }
+
     private void addFilterAtView() {
-        int cx = snap((int) canvasWidget.toCanvasX(canvasWidget.x + canvasWidget.w / 2.0) - GraphNodeData.DEFAULT_WIDTH / 2);
-        int cy = snap((int) canvasWidget.toCanvasY(canvasWidget.y + canvasWidget.h / 2.0) - GraphNodeData.DEFAULT_HEIGHT / 2);
-        ctx.addFilterNode(cx, cy);
+        ctx.addFilterNode(viewCenterX(), viewCenterY());
+    }
+
+    private void addSplitterAtView() {
+        ctx.addSplitterNode(viewCenterX(), viewCenterY());
+    }
+
+    private void addCombineAtView() {
+        ctx.addCombineNode(viewCenterX(), viewCenterY());
+    }
+
+    private void addChannelAtView() {
+        ctx.addChannelNode(viewCenterX(), viewCenterY());
+    }
+
+    private void addTextAtView() {
+        int cx = snap((int) canvasWidget.toCanvasX(canvasWidget.x + canvasWidget.w / 2.0));
+        int cy = snap((int) canvasWidget.toCanvasY(canvasWidget.y + canvasWidget.h / 2.0));
+        ctx.addTextLabel(cx, cy);
+        focusNameField();
     }
 
     private void addFrameAtView() {
@@ -560,6 +672,9 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         pushUi(g);
         int designMouseX = designX(mouseX), designMouseY = designY(mouseY);
         super.extractRenderState(g, designMouseX, designMouseY, a);
+        if (page == PAGE_GRAPH && !startMenuOpen && !filterPickerOpen && contextMenu == null && inventoryPopup == null) {
+            renderToolTooltips(g, designMouseX, designMouseY);
+        }
         if (startMenuOpen) renderStartMenu(g, leftPos, topPos, designMouseX, designMouseY);
         if (filterPickerOpen) renderFilterPicker(g, designMouseX, designMouseY);
         g.pose().popMatrix();
@@ -593,6 +708,7 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
 
         if (contextMenu != null) contextMenu.render(g, font, mouseX, mouseY);
         if (inventoryPopup != null) inventoryPopup.render(g, font, guiW, guiH);
+        if (shiftModalNodeId != null && page == PAGE_GRAPH) renderShiftModal(g, mouseX, mouseY);
 
         g.pose().popMatrix();
     }
@@ -694,15 +810,8 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         panel(g, x, y, w, h, tr("doolestools.computer.page.power"));
 
         List<ScannedBlockData> scan = ctx.scan();
-        int storage = 0, machine = 0, transport = 0, unknown = 0, warnings = 0, errors = 0, running = 0;
-        long usedSlots = 0, totalSlots = 0;
+        int warnings = 0, errors = 0;
         for (ScannedBlockData s : scan) {
-            if (s.isStorageLike()) storage++;
-            else if (s.isMachineLike()) machine++;
-            else if (s.type() == ScannedType.TRANSPORT) transport++;
-            else unknown++;
-            if (s.inventory().hasData()) { usedSlots += s.inventory().usedSlots(); totalSlots += s.inventory().totalSlots(); }
-            if (s.furnace().hasData() && "Running".equals(s.furnace().status())) running++;
             for (var wd : s.warnings()) {
                 if (wd.severity() == net.doole.doolestools.logistics.data.WarningData.Severity.ERROR) errors++;
                 else if (wd.severity() == net.doole.doolestools.logistics.data.WarningData.Severity.WARNING) warnings++;
@@ -710,77 +819,264 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         }
 
         NetworkPowerData power = ctx.power();
-        int cx = x + 16, cy = y + 22, colW = (w - 48) / 2;
-        // Three-state, AE2/Factorio-style: satisfied / brownout (degraded, slow) / no power (stopped).
+        int cx = statsContentX();
+        int fullContentW = (x + w) - cx - 16;
+
+        // Two-column split: left 57% (power/graph/breakdown), right 43% (caps/network/alerts).
+        int leftColW = fullContentW * 57 / 100;
+        int rightColX = cx + leftColW + 14;
+        int rightColW = fullContentW - leftColW - 14;
+
+        // ── LEFT COLUMN ──────────────────────────────────────────
+        // Status line
         int statusColor = power.starved() ? DUTheme.ERROR : power.degraded() ? DUTheme.WARN : DUTheme.OK;
-        String statusText = power.starved() ? "NOT ENOUGH POWER — STOPPED"
-                : power.degraded() ? "LOW POWER — RUNNING SLOW (" + Math.round(power.satisfaction() * 100) + "%)"
-                : "ELECTRIC NETWORK SATISFIED";
-        g.text(font, statusText, cx, cy, statusColor, false);
-        g.text(font, "Production", cx, cy + 14, DUTheme.OK, false);
-        g.text(font, formatFe(power.supplyCentiFe()) + "/t", cx + 74, cy + 14, DUTheme.TEXT, false);
-        DUTheme.progress(g, cx + 150, cy + 12, Math.max(80, colW - 150), 10, powerRatio(power.supplyCentiFe(), Math.max(power.supplyCentiFe(), power.demandCentiFe())), DUTheme.OK);
-        g.text(font, "Consumption", cx, cy + 28, DUTheme.PROGRESS_ORANGE, false);
-        g.text(font, formatFe(power.demandCentiFe()) + "/t", cx + 74, cy + 28, DUTheme.TEXT, false);
-        DUTheme.progress(g, cx + 150, cy + 26, Math.max(80, colW - 150), 10, powerRatio(power.demandCentiFe(), Math.max(power.supplyCentiFe(), power.demandCentiFe())), power.powered() ? DUTheme.PROGRESS_ORANGE : DUTheme.ERROR);
-        g.text(font, "Deficit", cx, cy + 42, DUTheme.TEXT_DIM, false);
-        g.text(font, formatFe(power.deficitCentiFe()) + "/t", cx + 74, cy + 42, power.deficitCentiFe() > 0 ? DUTheme.ERROR : DUTheme.TEXT_DIM, false);
+        String statusText = power.starved() ? "NO POWER — STOPPED"
+                : power.degraded() ? "LOW POWER — " + Math.round(power.satisfaction() * 100) + "%"
+                : "NETWORK SATISFIED";
+        DUTheme.dot(g, cx, contentY + 6, statusColor);
+        g.text(font, statusText, cx + 8, contentY + 4, statusColor, false);
 
-        int graphX = cx;
-        int graphY = cy + 60;
-        int graphW = colW;
-        int graphH = 76;
-        renderPowerHistoryGraph(g, graphX, graphY, graphW, graphH);
-        cy = graphY + graphH + 14;
+        // Production / Consumption segmented bars
+        int barsTop = statsBarsTop();
+        int peak = Math.max(1, Math.max(power.supplyCentiFe(), power.demandCentiFe()));
+        statBar(g, cx, barsTop, leftColW, "Production", powerRatio(power.supplyCentiFe(), peak),
+                formatFe(power.supplyCentiFe()) + "/t", DUTheme.OK);
+        statBar(g, cx, barsTop + 12, leftColW, "Consumption", powerRatio(power.demandCentiFe(), peak),
+                formatFe(power.demandCentiFe()) + "/t", DUTheme.ERROR);
 
-        g.text(font, "TOP CONSUMERS", cx, cy, DUTheme.TEXT_GREEN, false); cy += 14;
-        cy = stat(g, cx, cy, "Computer", formatFe(power.computerCentiFe()) + "/t");
-        cy = stat(g, cx, cy, "Routers/modems", formatFe(power.endpointCentiFe()) + "/t  (" + power.endpointCount() + ")");
-        cy = stat(g, cx, cy, "Cable", formatFe(power.wireCentiFe()) + "/t  (" + power.wireCount() + ")");
-        cy = stat(g, cx, cy, "Devices", formatFe(power.deviceCentiFe()) + "/t  (" + power.deviceCount() + ")");
-        cy = stat(g, cx, cy, "Routes", formatFe(power.routeCentiFe()) + "/t  (" + power.routeCount() + ")");
+        // Time-scale tab strip (widgets) + power history graph
+        int graphY = statsGraphTop();
+        int graphH = 58;
+        renderPowerHistoryGraph(g, cx, graphY, leftColW, graphH);
 
-        cy += 6;
-        g.text(font, "OVERVIEW", cx, cy, DUTheme.TEXT_GREEN, false); cy += 14;
-        cy = stat(g, cx, cy, "Network devices", String.valueOf(scan.size()));
-        cy = stat(g, cx, cy, "Graph nodes", String.valueOf(ctx.graph().activeCanvas().nodes().size()));
-        cy = stat(g, cx, cy, "Machines running", running + " / " + machine);
-        int fill = totalSlots > 0 ? (int) Math.round(usedSlots * 100.0 / totalSlots) : 0;
-        g.text(font, "Total storage", cx, cy + 1, DUTheme.TEXT_DIM, false);
-        DUTheme.progress(g, cx + 96, cy, 120, 9, fill / 100f, fill >= 90 ? DUTheme.ERROR : fill >= 70 ? DUTheme.WARN : DUTheme.OK);
-        g.text(font, fill + "%", cx + 222, cy + 1, DUTheme.TEXT, false); cy += 18;
+        // BREAKDOWN
+        int breakY = graphY + graphH + 8;
+        g.text(font, "BREAKDOWN", cx, breakY, DUTheme.TEXT_GREEN, false);
+        int ly = breakY + 12;
+        ly = statSmall(g, cx, ly, leftColW, "Computer", formatFe(power.computerCentiFe()) + " cF/t");
+        ly = statSmall(g, cx, ly, leftColW, "Sockets", formatFe(power.endpointCentiFe()) + " cF/t");
+        ly = statSmall(g, cx, ly, leftColW, "Cable", formatFe(power.wireCentiFe()) + " cF/t");
+        ly = statSmall(g, cx, ly, leftColW, "Devices", formatFe(power.deviceCentiFe()) + " cF/t");
+        ly = statSmall(g, cx, ly, leftColW, "Routes", formatFe(power.routeCentiFe()) + " cF/t");
+        ly = statSmall(g, cx, ly, leftColW, "Batteries", formatFe(power.batteryCentiFe()) + " cF/t");
 
-        // Right column: block-type bar chart.
-        int bx = x + 16 + colW + 16, by = y + 24;
-        g.text(font, "NETWORK INVENTORY", bx, by, DUTheme.TEXT_GREEN, false); by += 14;
-        int max = Math.max(1, Math.max(Math.max(storage, machine), Math.max(transport, unknown)));
-        by = bar(g, bx, by, colW, "Storage", storage, max, 0xFFb07a3a);
-        by = bar(g, bx, by, colW, "Machines", machine, max, 0xFF8a8f96);
-        by = bar(g, bx, by, colW, "Transport", transport, max, 0xFF6a7066);
-        by = bar(g, bx, by, colW, "Unknown", unknown, max, 0xFF55405a);
+        // ── RIGHT COLUMN ─────────────────────────────────────────
+        int ry = contentY + 4;
 
-        // Warnings summary.
-        g.text(font, "ALERTS", bx, by + 6, DUTheme.TEXT_GREEN, false); by += 20;
-        Glyphs.warning(g, bx, by, DUTheme.WARN);
-        g.text(font, warnings + " warnings", bx + 14, by + 1, DUTheme.WARN, false);
-        Glyphs.warning(g, bx + 120, by, DUTheme.ERROR);
-        g.text(font, errors + " errors", bx + 134, by + 1, DUTheme.ERROR, false);
+        // CAPACITIES section
+        g.text(font, "CAPACITIES", rightColX, ry, DUTheme.TEXT_GREEN, false); ry += 12;
+        if (power.batteryCapacity() > 0) {
+            float storedFrac = Math.max(0f, Math.min(1f, (float) power.batteryStored() / power.batteryCapacity()));
+            int battColor = storedFrac > 0.6f ? 0xFF3af0a0 : storedFrac >= 0.3f ? 0xFFf09030 : 0xFFf03030;
+            // Wide horizontal battery bar
+            renderHorizBattery(g, rightColX, ry, rightColW - 2, 14, storedFrac, battColor);
+            // Small readout text below the bar
+            int pctVal = Math.round(storedFrac * 100f);
+            String readout = pctVal + "%  " + formatMfe(power.batteryStored()) + " / " + formatMfe(power.batteryCapacity());
+            g.text(font, readout, rightColX, ry + 16, DUTheme.TEXT_DIM, false);
+            ry += 30;
+            // Mini vertical battery grid — one icon per battery, all sharing the same aggregate fill
+            if (power.batteryCount() > 0) {
+                int miniW = 12, miniH = 24, miniGap = 3;
+                int perRow = Math.max(1, (rightColW - 2) / (miniW + miniGap));
+                int gridRows = (power.batteryCount() + perRow - 1) / perRow;
+                for (int bi = 0; bi < power.batteryCount() && bi < 24; bi++) {
+                    int col = bi % perRow;
+                    int row = bi / perRow;
+                    renderMiniVertBattery(g,
+                            rightColX + col * (miniW + miniGap),
+                            ry + row * (miniH + 4),
+                            miniW, miniH, storedFrac, battColor);
+                }
+                ry += gridRows * (miniH + 4) + 4;
+            }
+        } else {
+            g.text(font, "No batteries", rightColX, ry, DUTheme.TEXT_DIM, false); ry += 14;
+        }
+
+        // NETWORK
+        ry += 2;
+        g.text(font, "NETWORK", rightColX, ry, DUTheme.TEXT_GREEN, false); ry += 12;
+        ry = stat(g, rightColX, ry, "Generators", String.valueOf(power.generatorCount()));
+        ry = stat(g, rightColX, ry, "Batteries", String.valueOf(power.batteryCount()));
+        ry = stat(g, rightColX, ry, "Sockets", String.valueOf(power.endpointCount()));
+        ry = stat(g, rightColX, ry, "Devices", String.valueOf(power.deviceCount()));
+
+        // ALERTS
+        ry += 4;
+        g.text(font, "ALERTS", rightColX, ry, DUTheme.TEXT_GREEN, false); ry += 12;
+        if (warnings == 0 && errors == 0) {
+            DUTheme.dot(g, rightColX, ry + 2, DUTheme.OK);
+            g.text(font, "No issues", rightColX + 8, ry + 1, DUTheme.TEXT_DIM, false);
+            ry += 12;
+        } else {
+            if (warnings > 0) {
+                Glyphs.warning(g, rightColX, ry, DUTheme.WARN);
+                g.text(font, warnings + " warnings", rightColX + 12, ry + 1, DUTheme.WARN, false);
+                ry += 11;
+            }
+            if (errors > 0) {
+                Glyphs.warning(g, rightColX, ry, DUTheme.ERROR);
+                g.text(font, errors + " errors", rightColX + 12, ry + 1, DUTheme.ERROR, false);
+                ry += 11;
+            }
+        }
+
+        // ACTIVITY
+        ry += 2;
+        g.text(font, "ACTIVITY", rightColX, ry, DUTheme.TEXT_GREEN, false); ry += 12;
+        boolean routing = power.powered() && ClientPrefs.autoRefresh;
+        g.text(font, "Routes", rightColX, ry, DUTheme.TEXT_DIM, false);
+        g.text(font, String.valueOf(power.routeCount()), rightColX + 60, ry, DUTheme.TEXT, false);
+        g.text(font, routing ? "● LIVE" : "○ IDLE", rightColX + 80, ry, routing ? DUTheme.OK : DUTheme.DISABLED, false);
+        ry += 10;
+        g.text(font, "Devices", rightColX, ry, DUTheme.TEXT_DIM, false);
+        g.text(font, String.valueOf(power.deviceCount()), rightColX + 60, ry, DUTheme.TEXT, false);
+        ry += 14;
+
+        ThroughputPlanner.PlannerResult plan = ThroughputPlanner.analyse(ctx.graph(), scan);
+        g.text(font, "PLANNER", rightColX, ry, DUTheme.TEXT_GREEN, false); ry += 12;
+        ry = stat(g, rightColX, ry, "Bottlenecks", String.valueOf(plan.totalBottlenecks()));
+        ry = stat(g, rightColX, ry, "Starved", String.valueOf(plan.totalStarved()));
+        if (!plan.links().isEmpty()) {
+            ThroughputPlanner.LinkAnalysis first = plan.links().get(0);
+            String summary = first.sourceName() + " -> " + first.targetName() + " " + first.capacityPerMin() + "/min";
+            g.text(font, trim(font, summary, rightColW), rightColX, ry, first.isBottleneck() ? DUTheme.WARN : DUTheme.TEXT_DIM, false);
+        }
+
+        // ── INVENTORY WATCH (full width, below both columns) ─────
+        int sepY = Math.max(ly, ry) + 8;
+        // Thin separator
+        g.fill(cx, sepY, x + w - 16, sepY + 1, DUTheme.PANEL_BORDER);
+        sepY += 6;
+
+        List<ScannedBlockData> invBlocks = new ArrayList<>();
+        for (ScannedBlockData s : scan) {
+            if (s.inventory().hasData()) invBlocks.add(s);
+        }
+        invBlocks.sort(java.util.Comparator.comparingInt(s -> -s.inventory().fillPercent()));
+
+        if (!invBlocks.isEmpty()) {
+            g.text(font, "INVENTORY WATCH", cx, sepY, DUTheme.TEXT_GREEN, false); sepY += 12;
+            // Two-column grid of inventory bars
+            int colGap = 8;
+            int entryW = (fullContentW - colGap) / 2;
+            int nameW = 80;
+            int suffixW = 30;
+            int invBarW = Math.max(20, entryW - nameW - suffixW - 6);
+            int panelBottom = y + h - 4;
+            int col0Y = sepY, col1Y = sepY;
+            for (int i = 0; i < invBlocks.size(); i++) {
+                ScannedBlockData s = invBlocks.get(i);
+                boolean rightSide = (i % 2 == 1);
+                int entX = rightSide ? cx + entryW + colGap : cx;
+                int entY = rightSide ? col1Y : col0Y;
+                if (entY + 9 > panelBottom) break;
+                int pct = s.inventory().fillPercent();
+                boolean isFull = s.inventory().usedSlots() >= s.inventory().totalSlots();
+                boolean isStorage = s.isStorageLike();
+                int barColor = isFull ? DUTheme.ERROR : pct >= WarningGenerator.NEARLY_FULL_PERCENT ? DUTheme.WARN : DUTheme.OK;
+                int nameColor = isFull && isStorage ? DUTheme.WARN : DUTheme.TEXT_DIM;
+                String name = s.blockName();
+                while (font.width(name) > nameW && name.length() > 3) name = name.substring(0, name.length() - 1);
+                g.text(font, name, entX, entY, nameColor, false);
+                int bx = entX + nameW + 2;
+                DUTheme.progress(g, bx, entY, invBarW, 7, pct / 100f, barColor);
+                // 4 segment dividers inside the bar
+                for (int seg = 1; seg < 5; seg++) {
+                    int sx = bx + 1 + (invBarW - 2) * seg / 5;
+                    g.fill(sx, entY + 1, sx + 1, entY + 6, 0x66000000);
+                }
+                String suffix = isFull ? "FULL" : pct + "%";
+                g.text(font, suffix, bx + invBarW + 3, entY, isFull && isStorage ? DUTheme.WARN : DUTheme.TEXT_DIM, false);
+                if (rightSide) col1Y += 10; else col0Y += 10;
+            }
+        }
+    }
+
+    /** Thin segmented bar: label left, bar centre, value right. Segment lines at 25/50/75%. */
+    private void statBar(GuiGraphicsExtractor g, int x, int y, int w, String label, float frac, String value, int color) {
+        g.text(font, label, x, y, DUTheme.TEXT_DIM, false);
+        int labelW = 80;
+        int valW = font.width(value) + 4;
+        int barW = Math.max(30, w - labelW - valW - 4);
+        int barX = x + labelW;
+        DUTheme.progress(g, barX, y, barW, 8, frac, color);
+        for (int i = 1; i < 4; i++) {
+            int sx = barX + 1 + (barW - 2) * i / 4;
+            g.fill(sx, y + 1, sx + 1, y + 7, 0x66000000);
+        }
+        g.text(font, value, barX + barW + 4, y, DUTheme.TEXT, false);
+    }
+
+    /** Horizontal battery bar: bump on left, interior fill left→right, 4 segment dividers. */
+    private void renderHorizBattery(GuiGraphicsExtractor g, int x, int y, int w, int h, float frac, int color) {
+        // Positive terminal bump on the left
+        int bumpH = 6, bumpW = 3;
+        int bumpY = y + (h - bumpH) / 2;
+        g.fill(x - bumpW, bumpY, x, bumpY + bumpH, DUTheme.PANEL_BORDER);
+        g.fill(x - bumpW + 1, bumpY + 1, x, bumpY + bumpH - 1, 0xFF1a221a);
+        // Container
+        g.fill(x, y, x + w, y + h, 0xFF070b08);
+        DUTheme.outline(g, x, y, w, h, DUTheme.PANEL_BORDER);
+        int inX = x + 1, inY = y + 1, inW = w - 2, inH = h - 2;
+        int fillW = Math.round(frac * inW);
+        if (fillW > 0) g.fill(inX, inY, inX + fillW, inY + inH, color);
+        // 4 dividers at 20/40/60/80%
+        for (int i = 1; i < 5; i++) {
+            int sx = inX + i * inW / 5;
+            g.fill(sx, inY, sx + 1, inY + inH, 0x55000000);
+        }
+    }
+
+    /** Small vertical battery icon for the capacity grid. Bump on top, fills from bottom, 2 segment lines. */
+    private void renderMiniVertBattery(GuiGraphicsExtractor g, int bx, int by, int bw, int bh, float frac, int color) {
+        // Positive terminal bump on top
+        int bumpW = Math.max(2, bw / 2), bumpH = 2;
+        int bumpX = bx + (bw - bumpW) / 2;
+        g.fill(bumpX, by - bumpH, bumpX + bumpW, by, DUTheme.PANEL_BORDER);
+        g.fill(bumpX + 1, by - bumpH + 1, bumpX + bumpW - 1, by, 0xFF1a221a);
+        // Container
+        DUTheme.box(g, bx, by, bw, bh, 0xFF070b08, DUTheme.PANEL_BORDER);
+        int inX = bx + 1, inY = by + 1, inW = bw - 2, inH = bh - 2;
+        int fillH = Math.round(frac * inH);
+        if (fillH > 0) g.fill(inX, inY + inH - fillH, inX + inW, inY + inH, color);
+        // 2 dividers at 33/66%
+        for (int i = 1; i < 3; i++) {
+            int sy = inY + i * inH / 3;
+            g.fill(inX, sy, inX + inW, sy + 1, 0x55000000);
+        }
+    }
+
+    /** Formats a raw-FE amount as megaFE/kiloFE with one decimal. */
+    private static String formatMfe(long fe) {
+        if (fe >= 1_000_000L) return String.format(java.util.Locale.ROOT, "%.1f MFE", fe / 1_000_000.0);
+        if (fe >= 1_000L) return String.format(java.util.Locale.ROOT, "%.1f kFE", fe / 1_000.0);
+        return fe + " FE";
     }
 
     private int stat(GuiGraphicsExtractor g, int x, int y, String key, String value) {
         g.text(font, key, x, y, DUTheme.TEXT_DIM, false);
-        g.text(font, value, x + 130, y, DUTheme.TEXT, false);
-        return y + 13;
+        g.text(font, value, x + 80, y, DUTheme.TEXT, false);
+        return y + 11;
+    }
+
+    /** Compact two-value row for the BREAKDOWN column: key left, value right-aligned within w. */
+    private int statSmall(GuiGraphicsExtractor g, int x, int y, int w, String key, String value) {
+        g.text(font, key, x, y, DUTheme.TEXT_DIM, false);
+        int vw = font.width(value);
+        g.text(font, value, x + w - vw, y, DUTheme.TEXT, false);
+        return y + 10;
     }
 
     private void renderPowerHistoryGraph(GuiGraphicsExtractor g, int x, int y, int w, int h) {
         DUTheme.box(g, x, y, w, h, DUTheme.PANEL_ALT, DUTheme.PANEL_BORDER);
-        g.text(font, "POWER HISTORY", x + 5, y + 5, DUTheme.TEXT_GREEN, false);
-        List<Integer> supply = ctx.powerSupplyHistory();
-        List<Integer> demand = ctx.powerDemandHistory();
+        g.text(font, "POWER HISTORY (" + STATS_SCALE_LABELS[statsTimeScale] + ")", x + 5, y + 5, DUTheme.TEXT_GREEN, false);
+        List<? extends Number> supply = statsSupplySeries();
+        List<? extends Number> demand = statsDemandSeries();
         int max = 1;
-        for (int value : supply) max = Math.max(max, value);
-        for (int value : demand) max = Math.max(max, value);
+        for (Number value : supply) max = Math.max(max, value.intValue());
+        for (Number value : demand) max = Math.max(max, value.intValue());
         int gx = x + 5;
         int gy = y + 18;
         int gw = w - 10;
@@ -790,8 +1086,24 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
             int ly = gy + i * gh / 4;
             g.fill(gx, ly, gx + gw, ly + 1, 0x332c3a2a);
         }
+        // For non-NOW scales, the accumulated series may not have enough samples yet.
+        int seriesMax = Math.max(supply == null ? 0 : supply.size(), demand == null ? 0 : demand.size());
+        if (statsTimeScale != 0 && seriesMax < 2) {
+            g.centeredText(font, "Accumulating data…", gx + gw / 2, gy + gh / 2 - 4, DUTheme.TEXT_DIM);
+            return;
+        }
+        // Clamp the scroll offset to the current series length so it can't run past the start.
+        int maxOffset = Math.max(0, seriesMax - 1);
+        if (statsGraphScrollOffset > maxOffset) statsGraphScrollOffset = maxOffset;
         drawPowerSeries(g, supply, gx, gy, gw, gh, max, DUTheme.OK);
         drawPowerSeries(g, demand, gx, gy, gw, gh, max, powerColor());
+        // Mini-arrow scroll hints at the graph edges.
+        if (statsGraphScrollOffset < maxOffset) {
+            g.text(font, "◀", gx + 1, gy + gh / 2 - 4, DUTheme.TEXT_DIM, false);
+        }
+        if (statsGraphScrollOffset > 0) {
+            g.text(font, "▶", gx + gw - 7, gy + gh / 2 - 4, DUTheme.TEXT_DIM, false);
+        }
         g.text(font, "Prod", x + 5, y + h - 8, DUTheme.OK, false);
         g.text(font, "Cons", x + 44, y + h - 8, powerColor(), false);
         String top = formatFe(max) + "/t";
@@ -802,16 +1114,16 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         return ctx.power().powered() ? DUTheme.PROGRESS_ORANGE : DUTheme.ERROR;
     }
 
-    private static void drawPowerSeries(GuiGraphicsExtractor g, List<Integer> values, int x, int y, int w, int h, int max, int color) {
+    private void drawPowerSeries(GuiGraphicsExtractor g, List<? extends Number> values, int x, int y, int w, int h, int max, int color) {
         if (values == null || values.size() < 2) return;
         int count = Math.min(values.size(), w);
-        int start = values.size() - count;
+        int start = Math.max(0, values.size() - count - statsGraphScrollOffset);
         int lastX = x;
-        int lastY = y + h - Math.round(values.get(start) / (float) max * h);
+        int lastY = y + h - Math.round(values.get(start).intValue() / (float) max * h);
         for (int i = 1; i < count; i++) {
             int index = start + i;
             int px = x + Math.round(i * (w - 1) / (float) Math.max(1, count - 1));
-            int py = y + h - Math.round(values.get(index) / (float) max * h);
+            int py = y + h - Math.round(values.get(index).intValue() / (float) max * h);
             DUTheme.line(g, lastX, lastY, px, py, color);
             lastX = px;
             lastY = py;
@@ -1446,6 +1758,92 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         g.fill(x + 3, y + 6, x + 5, y + 8, DUTheme.TEXT_DIM);
     }
 
+    // --- Shift-drag modal (copy / instance / cancel) ---
+
+    private static final int SM_W = 192, SM_H = 82;
+    private static final int SM_BTN_W = 56, SM_BTN_H = 14, SM_BTN_GAP = 4;
+
+    /** Returns the [x, y, w, h] of each button: [COPY, INSTANCE, CANCEL] in that order. */
+    private int[][] shiftModalButtons(int mx, int my) {
+        int bx = mx + 5;
+        int by = my + 46;
+        return new int[][]{
+                {bx, by, SM_BTN_W, SM_BTN_H},
+                {bx + SM_BTN_W + SM_BTN_GAP, by, SM_BTN_W, SM_BTN_H},
+                {bx + (SM_BTN_W + SM_BTN_GAP) * 2, by, SM_BTN_W, SM_BTN_H}
+        };
+    }
+
+    private void renderShiftModal(GuiGraphicsExtractor g, int mouseX, int mouseY) {
+        GraphNodeData node = ctx.graph().findNode(shiftModalNodeId);
+        if (node == null) { shiftModalNodeId = null; return; }
+        boolean canCopy = node.scannedBlockId() == null || node.scannedBlockId().isBlank();
+
+        // Position near click, clamped to GUI bounds.
+        int mx = (int) Math.min(shiftModalX, leftPos + guiW - SM_W - 6);
+        int my = (int) Math.min(shiftModalY, topPos + guiH - SM_H - 6);
+
+        // Background + title bar.
+        DUTheme.box(g, mx, my, SM_W, SM_H, 0xF2101510, DUTheme.SELECTED);
+        g.fill(mx + 1, my + 1, mx + SM_W - 1, my + 13, DUTheme.PANEL_HEADER);
+        DUTheme.glowText(g, font, "SHIFT DRAG — CHOOSE ACTION", mx + 5, my + 3, DUTheme.SELECTED);
+
+        // Node name sub-label.
+        g.text(font, trim(font, node.displayName(), SM_W - 10), mx + 5, my + 18, DUTheme.TEXT_DIM, false);
+
+        // Hint line.
+        String hint = canCopy ? "Copy: clones settings (routing nodes only)" : "Copy unavailable — block tied to world";
+        g.text(font, trim(font, hint, SM_W - 10), mx + 5, my + 30, canCopy ? DUTheme.TEXT_DIM : DUTheme.WARN, false);
+
+        // Three buttons.
+        int[][] btns = shiftModalButtons(mx, my);
+        String[] labels = {"COPY", "INSTANCE", "CANCEL"};
+        int[] colors = {DUTheme.TEXT_GREEN, DUTheme.SELECTED, DUTheme.ERROR};
+        for (int i = 0; i < 3; i++) {
+            int[] b = btns[i];
+            boolean disabled = (i == 0 && !canCopy);
+            boolean hovered = !disabled && mouseX >= b[0] && mouseX <= b[0] + b[2] && mouseY >= b[1] && mouseY <= b[1] + b[3];
+            int bg = disabled ? 0xFF0a0d09 : hovered ? 0xFF1a2e1a : DUTheme.PANEL_ALT;
+            int border = disabled ? DUTheme.PANEL_BORDER : hovered ? colors[i] : DUTheme.PANEL_BORDER;
+            DUTheme.box(g, b[0], b[1], b[2], b[3], bg, border);
+            g.centeredText(font, labels[i], b[0] + b[2] / 2, b[1] + 4, disabled ? DUTheme.TEXT_DIM : colors[i]);
+        }
+    }
+
+    private void handleShiftModalClick(double mx, double my) {
+        GraphNodeData node = ctx.graph().findNode(shiftModalNodeId);
+        if (node == null) { shiftModalNodeId = null; return; }
+        boolean canCopy = node.scannedBlockId() == null || node.scannedBlockId().isBlank();
+
+        int modalX = (int) Math.min(shiftModalX, leftPos + guiW - SM_W - 6);
+        int modalY = (int) Math.min(shiftModalY, topPos + guiH - SM_H - 6);
+        int[][] btns = shiftModalButtons(modalX, modalY);
+
+        // COPY (index 0)
+        if (canCopy && hit(mx, my, btns[0])) {
+            ctx.duplicateSelectedNodes();
+            draggingNodeId = ctx.selectedNodeId;
+            shiftModalNodeId = null;
+            return;
+        }
+        // INSTANCE (index 1)
+        if (hit(mx, my, btns[1])) {
+            ctx.instanceSelectedNodes();
+            draggingNodeId = ctx.selectedNodeId;
+            shiftModalNodeId = null;
+            return;
+        }
+        // CANCEL (index 2) or anywhere outside — dismiss, drag original.
+        if (hit(mx, my, btns[2]) || mx < modalX || mx > modalX + SM_W || my < modalY || my > modalY + SM_H) {
+            draggingNodeId = shiftModalNodeId;
+            shiftModalNodeId = null;
+        }
+    }
+
+    private static boolean hit(double mx, double my, int[] btn) {
+        return mx >= btn[0] && mx <= btn[0] + btn[2] && my >= btn[1] && my <= btn[1] + btn[3];
+    }
+
     private void renderMarquee(GuiGraphicsExtractor g) {
         int x1 = (int) Math.min(marqueeStartX, marqueeCurX);
         int y1 = (int) Math.min(marqueeStartY, marqueeCurY);
@@ -1458,12 +1856,47 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         DUTheme.outline(g, x1, y1, x2 - x1, y2 - y1, DUTheme.SELECTED);
     }
 
+    /** Draws a small two-line tooltip box for whichever tool-palette button is hovered. */
+    private void renderToolTooltips(GuiGraphicsExtractor g, int mouseX, int mouseY) {
+        for (ToolTip tip : toolButtons) {
+            TerminalButton b = tip.button();
+            if (!b.visible || !b.isMouseOver(mouseX, mouseY)) continue;
+            int tw = Math.max(font.width(tip.title()), font.width(tip.desc())) + 10;
+            int th = 22;
+            int tx = b.getX() + b.getWidth() + 4;
+            int ty = b.getY();
+            if (tx + tw > leftPos + guiW - 6) tx = b.getX() - tw - 4;
+            if (ty + th > topPos + guiH - 6) ty = topPos + guiH - 6 - th;
+            DUTheme.box(g, tx, ty, tw, th, 0xF0121712, DUTheme.SELECTED);
+            g.text(font, tip.title(), tx + 5, ty + 4, DUTheme.SELECTED, false);
+            g.text(font, tip.desc(), tx + 5, ty + 13, DUTheme.TEXT_DIM, false);
+            return;
+        }
+    }
+
     private void renderScannedDragPreview(GuiGraphicsExtractor g) {
+        int multi = listWidget.multiSelectedIds().size();
+        int border = canvasWidget.contains(scannedDragX, scannedDragY) ? DUTheme.SELECTED : DUTheme.PANEL_BORDER;
+        // With multiple rows selected, stack ghost icons, each offset 4px right/down from the previous.
+        if (multi > 1) {
+            int base = (int) scannedDragX + 8;
+            int baseY = (int) scannedDragY + 8;
+            int ghosts = Math.min(multi, 5);
+            for (int i = ghosts - 1; i >= 0; i--) {
+                int gx = base + i * 4;
+                int gy = baseY + i * 4;
+                DUTheme.box(g, gx, gy, 18, 18, 0xEE0a100d, i == 0 ? border : DUTheme.PANEL_BORDER);
+                g.fill(gx + 5, gy + 5, gx + 13, gy + 13, DUTheme.TEXT_GREEN);
+            }
+            String label = multi + " devices";
+            g.text(font, label, base + 22, baseY + 5, DUTheme.TEXT, false);
+            return;
+        }
         String label = draggingScannedName == null ? "Network Device" : draggingScannedName;
         int x = (int) scannedDragX + 8;
         int y = (int) scannedDragY + 8;
         int w = Math.min(130, Math.max(72, font.width(label) + 18));
-        DUTheme.box(g, x, y, w, 18, 0xEE0a100d, canvasWidget.contains(scannedDragX, scannedDragY) ? DUTheme.SELECTED : DUTheme.PANEL_BORDER);
+        DUTheme.box(g, x, y, w, 18, 0xEE0a100d, border);
         g.fill(x + 4, y + 5, x + 10, y + 11, DUTheme.TEXT_GREEN);
         g.text(font, label, x + 14, y + 5, DUTheme.TEXT, false);
     }
@@ -1517,7 +1950,6 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
     private void syncNameField() {
         if (editingGraphName) {
             nameField.setEditable(true);
-            linkButton.setToggled(ctx.linkMode);
             return;
         }
         var label = ctx.selectedText();
@@ -1529,7 +1961,6 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
                 lastSelectedNodeId = null;
             }
             nameField.setEditable(true);
-            linkButton.setToggled(ctx.linkMode);
             return;
         }
         lastSelectedTextId = null;
@@ -1542,7 +1973,6 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
                 lastSelectedNodeId = null;
             }
             nameField.setEditable(true);
-            linkButton.setToggled(ctx.linkMode);
             return;
         }
         lastSelectedFrameId = null;
@@ -1556,7 +1986,6 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
             lastSelectedNodeId = null;
         }
         nameField.setEditable(ctx.selectedNode() != null);
-        linkButton.setToggled(ctx.linkMode);
     }
 
     private static String tr(String key) {
@@ -1593,6 +2022,7 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         boolean right = event.button() == 1;
         boolean middle = event.button() == 2;
 
+        if (shiftModalNodeId != null) { handleShiftModalClick(mx, my); return true; }
         if (!right && handleFilterPickerClick(mx, my)) return true;
         if (filterPickerOpen) return true;
 
@@ -1639,6 +2069,18 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         ScannedBlockData row = listWidget.rowAt(mx, my);
         if (row != null && !right) {
             editingGraphName = false;
+            boolean ctrl = (event.modifiers() & MOD_CTRL) != 0;
+            boolean shift = (event.modifiers() & MOD_SHIFT) != 0;
+            // Ctrl/Shift toggle or range-select rows for a multi-drop drag, without starting a drag.
+            if (ctrl || shift) {
+                listWidget.handleModifierClick(mx, my, ctrl, shift);
+                ctx.selectedScannedId = row.id();
+                return true;
+            }
+            // Plain click: if the row is already in the multi-selection keep it; otherwise reset to this row.
+            if (!listWidget.multiSelectedIds().contains(row.id())) {
+                listWidget.handleModifierClick(mx, my, false, false);
+            }
             ctx.selectedScannedId = row.id();
             draggingScanned = true;
             draggingScannedName = row.blockName();
@@ -1705,20 +2147,16 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
             }
             if (node != null) {
                 editingGraphName = false;
-                if (ctx.linkMode) {
-                    if (ctx.linkSourceId == null) ctx.linkSourceId = node.nodeId();
-                    else ctx.tryLink(node.nodeId());
+                if (!ctx.selectedNodeIds.contains(node.nodeId())) ctx.selectSingleNode(node.nodeId());
+                else { ctx.selectedNodeId = node.nodeId(); ctx.selectedFrameId = null; }
+                ctx.selectedScannedId = node.scannedBlockId();
+                if ((event.modifiers() & MOD_SHIFT) != 0) {
+                    // Show modal: COPY (routing nodes only) / INSTANCE / CANCEL.
+                    shiftModalNodeId = node.nodeId();
+                    shiftModalX = mx;
+                    shiftModalY = my;
                 } else {
-                    if (!ctx.selectedNodeIds.contains(node.nodeId())) ctx.selectSingleNode(node.nodeId());
-                    else { ctx.selectedNodeId = node.nodeId(); ctx.selectedFrameId = null; }
-                    ctx.selectedScannedId = node.scannedBlockId();
-                    // Shift-drag duplicates the selection and drags the copies instead.
-                    if ((event.modifiers() & MOD_SHIFT) != 0) {
-                        ctx.duplicateSelectedNodes();
-                        draggingNodeId = ctx.selectedNodeId;
-                    } else {
-                        draggingNodeId = node.nodeId();
-                    }
+                    draggingNodeId = node.nodeId();
                 }
             } else if (frameTitle != null) {
                 editingGraphName = false;
@@ -1729,7 +2167,7 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
                 framedNodeIds = canvasWidget.nodeIdsInFrame(frameTitle);
             } else {
                 editingGraphName = false;
-                if (!ctx.linkMode) ctx.clearSelection();
+                ctx.clearSelection();
                 marqueeing = true;
                 marqueeStartX = marqueeCurX = mx;
                 marqueeStartY = marqueeCurY = my;
@@ -1832,6 +2270,19 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         MouseButtonEvent de = new MouseButtonEvent(mx, my, event.buttonInfo());
         if (page == PAGE_GRAPH) {
             if (draggingScanned) {
+                // Multi-drop: drop a node for every multi-selected row, laid out in a horizontal row.
+                if (canvasWidget.contains(mx, my) && listWidget.multiSelectedIds().size() > 1) {
+                    List<ScannedBlockData> scans = new ArrayList<>();
+                    for (String id : listWidget.multiSelectedIds()) {
+                        ScannedBlockData s = ctx.scanById().get(id);
+                        if (s != null) scans.add(s);
+                    }
+                    ctx.addNodesForScans(scans, snap((int) canvasWidget.toCanvasX(mx)), snap((int) canvasWidget.toCanvasY(my)));
+                    listWidget.clearMultiSelect();
+                    draggingScanned = false;
+                    draggingScannedName = null;
+                    return true;
+                }
                 if (canvasWidget.contains(mx, my)) {
                     GraphLinkData link = canvasWidget.linkAt(mx, my);
                     String scannedId = ctx.selectedScannedId;
@@ -1929,11 +2380,24 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
             scannedScroll = Math.max(0, scannedScroll - (int) Math.signum(sy));
             return true;
         }
+        if (page == PAGE_STATS) {
+            // Scroll the power-history graph horizontally through time when hovering the stats area.
+            int graphTop = statsGraphTop();
+            if (my >= graphTop && my <= graphTop + 70) {
+                List<? extends Number> supply = statsSupplySeries();
+                List<? extends Number> demand = statsDemandSeries();
+                int seriesMax = Math.max(supply == null ? 0 : supply.size(), demand == null ? 0 : demand.size());
+                int maxOffset = Math.max(0, seriesMax - 1);
+                statsGraphScrollOffset = Math.max(0, Math.min(maxOffset,
+                        statsGraphScrollOffset + (int) Math.signum(sy) * 3));
+                return true;
+            }
+        }
         if (page == PAGE_GRAPH) {
             if (listWidget.contains(mx, my)) { listWidget.scroll(sy, ctx.filteredScan().size()); return true; }
             if (canvasWidget.contains(mx, my)) {
                 float old = ctx.zoom;
-                ctx.zoom = Math.max(0.4f, Math.min(2.0f, ctx.zoom + (float) sy * 0.1f));
+                ctx.zoom = Math.max(0.1f, Math.min(2.0f, ctx.zoom + (float) sy * 0.1f));
                 ctx.panX -= (mx - canvasWidget.x - ctx.panX) * (ctx.zoom / old - 1f);
                 ctx.panY -= (my - canvasWidget.y - ctx.panY) * (ctx.zoom / old - 1f);
                 return true;
@@ -1947,6 +2411,7 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
     public boolean keyPressed(KeyEvent event) {
         if (handleFilterPickerKey(event)) return true;
         if (event.key() == KEY_ESCAPE) {
+            if (shiftModalNodeId != null) { shiftModalNodeId = null; return true; }
             if (inventoryPopup != null) { inventoryPopup = null; return true; }
             if (contextMenu != null) { contextMenu = null; return true; }
             return super.keyPressed(event);
@@ -1958,7 +2423,14 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         if (event.key() == KEY_LEFT) { cyclePage(-1); return true; }
         if (event.key() == KEY_RIGHT) { cyclePage(1); return true; }
         if ((event.modifiers() & MOD_SHIFT) != 0 && event.key() == KEY_D && page == PAGE_GRAPH) {
-            ctx.duplicateSelectedNodes();
+            GraphNodeData sel = ctx.selectedNode();
+            if (sel != null) {
+                shiftModalNodeId = sel.nodeId();
+                int nx = (int) (canvasWidget.x + (sel.x() + sel.width() / 2.0) * ctx.zoom + ctx.panX);
+                int ny = (int) (canvasWidget.y + (sel.y() + sel.height() / 2.0) * ctx.zoom + ctx.panY);
+                shiftModalX = nx;
+                shiftModalY = ny;
+            }
             return true;
         }
         if (isAlt(event) && event.key() == KEY_S) {

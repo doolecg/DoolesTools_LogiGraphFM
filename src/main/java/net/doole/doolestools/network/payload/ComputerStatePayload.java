@@ -12,6 +12,7 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 
 import java.util.List;
+import java.util.Map;
 
 /** S2C: full computer state for the open editor screen. */
 public record ComputerStatePayload(BlockPos pos,
@@ -26,7 +27,18 @@ public record ComputerStatePayload(BlockPos pos,
                                       List<String> editorWhitelist,
                                       boolean canEdit,
                                       List<Integer> powerSupplyHistory,
-                                      List<Integer> powerDemandHistory) implements CustomPacketPayload {
+                                      List<Integer> powerDemandHistory,
+                                      List<Short> supply30m,
+                                      List<Short> demand30m,
+                                      List<Short> supply1h,
+                                      List<Short> demand1h,
+                                      List<Short> supply12h,
+                                      List<Short> demand12h,
+                                       List<Short> supply1d,
+                                       List<Short> demand1d,
+                                       List<Short> supplyAllTime,
+                                       List<Short> demandAllTime,
+                                       Map<String, List<Integer>> linkThroughput) implements CustomPacketPayload {
     public static final Type<ComputerStatePayload> TYPE = new Type<>(DoolesTools.id("computer_state"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, ComputerStatePayload> STREAM_CODEC =
@@ -46,7 +58,18 @@ public record ComputerStatePayload(BlockPos pos,
                             ModStreamCodecs.STRING_LIST.decode(buf),
                             ByteBufCodecs.BOOL.decode(buf),
                             ModStreamCodecs.INT_LIST.decode(buf),
-                            ModStreamCodecs.INT_LIST.decode(buf));
+                            ModStreamCodecs.INT_LIST.decode(buf),
+                            ModStreamCodecs.SHORT_LIST.decode(buf),
+                            ModStreamCodecs.SHORT_LIST.decode(buf),
+                            ModStreamCodecs.SHORT_LIST.decode(buf),
+                            ModStreamCodecs.SHORT_LIST.decode(buf),
+                            ModStreamCodecs.SHORT_LIST.decode(buf),
+                            ModStreamCodecs.SHORT_LIST.decode(buf),
+                            ModStreamCodecs.SHORT_LIST.decode(buf),
+                            ModStreamCodecs.SHORT_LIST.decode(buf),
+                            ModStreamCodecs.SHORT_LIST.decode(buf),
+                            ModStreamCodecs.SHORT_LIST.decode(buf),
+                            ModStreamCodecs.LINK_THROUGHPUT_MAP.decode(buf));
                 }
 
                 @Override
@@ -64,6 +87,17 @@ public record ComputerStatePayload(BlockPos pos,
                     ByteBufCodecs.BOOL.encode(buf, payload.canEdit());
                     ModStreamCodecs.INT_LIST.encode(buf, payload.powerSupplyHistory());
                     ModStreamCodecs.INT_LIST.encode(buf, payload.powerDemandHistory());
+                    ModStreamCodecs.SHORT_LIST.encode(buf, payload.supply30m());
+                    ModStreamCodecs.SHORT_LIST.encode(buf, payload.demand30m());
+                    ModStreamCodecs.SHORT_LIST.encode(buf, payload.supply1h());
+                    ModStreamCodecs.SHORT_LIST.encode(buf, payload.demand1h());
+                    ModStreamCodecs.SHORT_LIST.encode(buf, payload.supply12h());
+                    ModStreamCodecs.SHORT_LIST.encode(buf, payload.demand12h());
+                    ModStreamCodecs.SHORT_LIST.encode(buf, payload.supply1d());
+                    ModStreamCodecs.SHORT_LIST.encode(buf, payload.demand1d());
+                    ModStreamCodecs.SHORT_LIST.encode(buf, payload.supplyAllTime());
+                    ModStreamCodecs.SHORT_LIST.encode(buf, payload.demandAllTime());
+                    ModStreamCodecs.LINK_THROUGHPUT_MAP.encode(buf, payload.linkThroughput());
                 }
             };
 

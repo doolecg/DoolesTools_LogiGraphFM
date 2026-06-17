@@ -2,11 +2,13 @@ package net.doole.doolestools.block;
 
 import com.mojang.serialization.MapCodec;
 import net.doole.doolestools.blockentity.LogisticsComputerBlockEntity;
+import net.doole.doolestools.config.ModServerConfig;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.context.BlockPlaceContext;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.EntityBlock;
@@ -63,6 +65,20 @@ public class LogisticsComputerBlock extends HorizontalDirectionalBlock implement
                 computer.serverTick(serverLevel);
             }
         };
+    }
+
+    @Override
+    public boolean isSignalSource(BlockState state) {
+        return ModServerConfig.REDSTONE_ALERT_ON_ERROR.get();
+    }
+
+    @Override
+    public int getSignal(BlockState state, BlockGetter level, BlockPos pos, Direction direction) {
+        if (!ModServerConfig.REDSTONE_ALERT_ON_ERROR.get()) return 0;
+        if (level.getBlockEntity(pos) instanceof LogisticsComputerBlockEntity be) {
+            return be.hasErrorWarnings() ? 15 : 0;
+        }
+        return 0;
     }
 
     @Override

@@ -223,9 +223,9 @@ public class GraphCanvasWidget {
     }
 
     private Map<String, GraphNodeData> nodeMap() {
-        Map<String, GraphNodeData> nodesById = new HashMap<>();
-        for (GraphNodeData node : ctx.graph().activeCanvas().nodes()) nodesById.put(node.nodeId(), node);
-        return nodesById;
+        // reuse the revision-gated cache instead of rebuilding on every hit-test call
+        ensureModel(ctx.graph().activeCanvas());
+        return cachedNodesById;
     }
 
     private static double distanceToCurveSquared(double px, double py, int x1, int y1, int x2, int y2) {
@@ -364,10 +364,15 @@ public class GraphCanvasWidget {
             if (sp != null) drawArrow(g, sp[0], sp[1], (int) toCanvasX(ctx.dragMouseX), (int) toCanvasY(ctx.dragMouseY), DUTheme.WARN, true, 12, false);
         }
 
-        // Nodes.
+        // Nodes. At far zoom-outs, fall back to compact status markers so big graphs stay legible/cheap.
+        boolean veryFar = ctx.zoom < 0.4f;
         for (GraphNodeData n : visibleNodes) {
             boolean selected = ctx.isNodeSelected(n.nodeId());
-            boolean linkSource = ctx.linkMode && n.nodeId().equals(ctx.linkSourceId);
+            boolean linkSource = false;
+            if (veryFar) {
+                renderNodeStatusMarker(g, font, n, selected);
+                continue;
+            }
             if (lowDetail) GraphNodeWidget.renderLite(g, font, n, selected, linkSource);
             else GraphNodeWidget.render(g, font, n, ctx.scannedFor(n), selected, linkSource);
             drawNodePowerBadge(g, font, n);
@@ -429,6 +434,55 @@ public class GraphCanvasWidget {
         g.fill(bx, by, bx + bw, by + 10, 0xE60a0d09);
         DUTheme.outline(g, bx, by, bw, 10, color);
         g.text(font, text, bx + 3, by + 1, color, false);
+    }
+
+    /**
+     * Far-zoom node rendering. Below 0.4 zoom we keep the node box but replace its contents with a large
+     * uppercase block name (e.g. "BLAST FURNACE", "CHEST"). Below 0.15 only a small dot is drawn.
+     */
+    private void renderNodeStatusMarker(GuiGraphicsExtractor g, Font font, GraphNodeData n, boolean selected) {
+        int cx = n.x() + n.width() / 2;
+        int cy = n.y() + n.height() / 2;
+        if (ctx.zoom < 0.15f) {
+            g.fill(cx - 2, cy - 2, cx + 2, cy + 2, nodeAccent(n));
+            return;
+        }
+        // Draw the node shell (box + border) without internal detail.
+        GraphNodeWidget.renderLite(g, font, n, selected, false);
+        // Large uppercase name centered inside the box.
+        String name = (n.displayName() == null ? "" : n.displayName()).toUpperCase(java.util.Locale.ROOT);
+        int tw = font.width(name);
+        int maxW = n.width() - 6;
+        while (tw > maxW && name.length() > 1) {
+            name = name.substring(0, name.length() - 1);
+            tw = font.width(name);
+        }
+        g.text(font, name, cx - tw / 2, cy - 3, DUTheme.TEXT, false);
+        if (nodeHasWarnings(n)) Glyphs.warning(g, cx - 2, n.y() + 2, DUTheme.WARN);
+    }
+
+    /** Accent colour for a node's type/category, used by far-zoom markers. */
+    private int nodeAccent(GraphNodeData n) {
+        switch (n.type()) {
+            case FILTER: return DUTheme.PROGRESS_BLUE;
+            case SPLITTER: return DUTheme.PROGRESS_ORANGE;
+            case COMBINE: return DUTheme.TEXT_GREEN;
+            case CHANNEL: return DUTheme.SELECTED;
+            default: break;
+        }
+        net.doole.doolestools.logistics.data.ScannedBlockData s = ctx.scannedFor(n);
+        if (s == null) return DUTheme.PANEL_BORDER;
+        return switch (s.type()) {
+            case STORAGE -> 0xFFb07a3a;
+            case MACHINE -> 0xFF8a8f96;
+            case TRANSPORT -> 0xFF6a7066;
+            default -> 0xFF55405a;
+        };
+    }
+
+    private boolean nodeHasWarnings(GraphNodeData n) {
+        net.doole.doolestools.logistics.data.ScannedBlockData s = ctx.scannedFor(n);
+        return s != null && s.hasWarnings();
     }
 
     private void ensureModel(net.doole.doolestools.logistics.data.GraphCanvasData canvas) {

@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "IRI",
+    "ECE",
+    "IRI"
+  ],
+  "key": {
+    "I": "minecraft:iron_ingot",
+    "R": "minecraft:redstone",
+    "E": "minecraft:ender_pearl",
+    "C": "minecraft:iron_nugget"
+  },
+  "result": {
+    "id": "doolestools:wireless_dongle",
+    "count": 2
+  }
+}

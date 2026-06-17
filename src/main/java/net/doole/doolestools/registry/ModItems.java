@@ -35,6 +35,9 @@ public final class ModItems {
     public static final DeferredItem<NetworkEndpointBlockItem> NETWORK_MODEM =
             ITEMS.registerItem("network_modem", props -> new NetworkEndpointBlockItem(ModBlocks.NETWORK_MODEM.get(), props, "modem"));
 
+    public static final DeferredItem<NetworkEndpointBlockItem> WIRELESS_DONGLE =
+            ITEMS.registerItem("wireless_dongle", props -> new NetworkEndpointBlockItem(ModBlocks.WIRELESS_DONGLE.get(), props, "dongle"));
+
     public static final DeferredItem<BlockItem> NETWORK_WIRE =
             ITEMS.registerSimpleBlockItem("network_wire", ModBlocks.NETWORK_WIRE);
 

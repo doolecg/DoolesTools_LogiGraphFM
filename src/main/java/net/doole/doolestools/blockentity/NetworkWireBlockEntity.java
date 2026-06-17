@@ -286,7 +286,7 @@ public class NetworkWireBlockEntity extends BlockEntity {
     }
 
     private String attachedBaseName() {
-        String kind = hasRouter() ? "Wireless Router" : "Network Modem";
+        String kind = hasRouter() ? "Wireless Router" : "Cable Socket";
         if (level == null) return kind;
         BlockState attachedState = level.getBlockState(attachedPos());
         if (attachedState.isAir()) return kind;

@@ -4,7 +4,6 @@ import net.doole.doolestools.client.gui.DUTheme;
 import net.doole.doolestools.logistics.LogisticsGraph;
 import net.doole.doolestools.logistics.LinkType;
 import net.doole.doolestools.logistics.PortDiscovery;
-import net.doole.doolestools.logistics.PortDirection;
 import net.doole.doolestools.logistics.data.GraphCanvasData;
 import net.doole.doolestools.logistics.data.GraphLinkData;
 import net.doole.doolestools.logistics.data.GraphNodeData;
@@ -47,6 +46,17 @@ public class EditorContext {
     private List<String> editorWhitelist = List.of();
     private List<Integer> powerSupplyHistory = List.of();
     private List<Integer> powerDemandHistory = List.of();
+    private List<Short> supply30m = List.of();
+    private List<Short> demand30m = List.of();
+    private List<Short> supply1h = List.of();
+    private List<Short> demand1h = List.of();
+    private List<Short> supply12h = List.of();
+    private List<Short> demand12h = List.of();
+    private List<Short> supply1d = List.of();
+    private List<Short> demand1d = List.of();
+    private List<Short> supplyAllTime = List.of();
+    private List<Short> demandAllTime = List.of();
+    private Map<String, List<Integer>> linkThroughput = Map.of();
     private boolean canEdit = true;
     private long lastScanTime = -1L;
 
@@ -164,6 +174,17 @@ public class EditorContext {
     public List<String> editorWhitelist() { return editorWhitelist; }
     public List<Integer> powerSupplyHistory() { return powerSupplyHistory; }
     public List<Integer> powerDemandHistory() { return powerDemandHistory; }
+    public List<Short> supply30m() { return supply30m; }
+    public List<Short> demand30m() { return demand30m; }
+    public List<Short> supply1h() { return supply1h; }
+    public List<Short> demand1h() { return demand1h; }
+    public List<Short> supply12h() { return supply12h; }
+    public List<Short> demand12h() { return demand12h; }
+    public List<Short> supply1d() { return supply1d; }
+    public List<Short> demand1d() { return demand1d; }
+    public List<Short> supplyAllTime() { return supplyAllTime; }
+    public List<Short> demandAllTime() { return demandAllTime; }
+    public Map<String, List<Integer>> linkThroughput() { return linkThroughput; }
     public boolean canEdit() { return canEdit; }
 
     public void setNetworkState(String networkId, String networkName, String accessMode, List<String> editorWhitelist, boolean canEdit) {
@@ -178,6 +199,51 @@ public class EditorContext {
     public void setPowerHistory(List<Integer> supply, List<Integer> demand) {
         this.powerSupplyHistory = supply == null ? List.of() : List.copyOf(supply);
         this.powerDemandHistory = demand == null ? List.of() : List.copyOf(demand);
+    }
+
+    public void setLinkThroughput(Map<String, List<Integer>> throughput) {
+        this.linkThroughput = throughput == null ? Map.of() : Map.copyOf(throughput);
+    }
+
+    public double linkAvgPerMinute(String linkId) {
+        List<Integer> history = linkThroughput.get(linkId);
+        if (history == null || history.isEmpty()) return -1.0;
+        long sum = 0;
+        for (int value : history) sum += value;
+        int interval = Math.max(1, net.doole.doolestools.config.ModServerConfig.EASY_FACTORY_TICK_INTERVAL.get());
+        double samplesPerMinute = 1200.0 / interval;
+        return (sum / (double) history.size()) * samplesPerMinute;
+    }
+
+    private static List<Short> safeShorts(List<Short> in) {
+        return in == null ? List.of() : List.copyOf(in);
+    }
+
+    // linked peer computers - positions and their network IDs, received from server
+    private List<net.minecraft.core.BlockPos> linkedPeerPositions = List.of();
+    private List<String> linkedPeerNetworkIds = List.of();
+
+    public void setLinkedPeers(List<net.minecraft.core.BlockPos> positions, List<String> ids) {
+        this.linkedPeerPositions = positions == null ? List.of() : List.copyOf(positions);
+        this.linkedPeerNetworkIds = ids == null ? List.of() : List.copyOf(ids);
+    }
+
+    public List<net.minecraft.core.BlockPos> linkedPeerPositions() { return linkedPeerPositions; }
+    public List<String> linkedPeerNetworkIds() { return linkedPeerNetworkIds; }
+
+    public void setTimescaleHistory(List<Short> s30, List<Short> d30, List<Short> s1h, List<Short> d1h,
+                                    List<Short> s12h, List<Short> d12h, List<Short> s1d, List<Short> d1d,
+                                    List<Short> sAll, List<Short> dAll) {
+        this.supply30m = safeShorts(s30);
+        this.demand30m = safeShorts(d30);
+        this.supply1h = safeShorts(s1h);
+        this.demand1h = safeShorts(d1h);
+        this.supply12h = safeShorts(s12h);
+        this.demand12h = safeShorts(d12h);
+        this.supply1d = safeShorts(s1d);
+        this.demand1d = safeShorts(d1d);
+        this.supplyAllTime = safeShorts(sAll);
+        this.demandAllTime = safeShorts(dAll);
     }
 
     public void setGraph(LogisticsGraphData newGraph) {
@@ -242,6 +308,31 @@ public class EditorContext {
         }
     }
 
+    /**
+     * Drops a node for each scanned block, laid out left-to-right starting at the drop point. Each node
+     * is offset by its width + 8px gap. The last successfully added node becomes the selection.
+     */
+    public void addNodesForScans(List<ScannedBlockData> scans, int canvasX, int canvasY) {
+        if (scans == null || scans.isEmpty()) return;
+        LogisticsGraphData updated = graph;
+        int cursorX = canvasX;
+        String lastId = null;
+        for (ScannedBlockData s : scans) {
+            if (s == null) continue;
+            LogisticsGraphData next = LogisticsGraph.addNode(updated, s, cursorX, canvasY);
+            if (next != updated) {
+                updated = next;
+                cursorX += GraphNodeData.DEFAULT_WIDTH + 8;
+            }
+            for (GraphNodeData n : updated.activeCanvas().nodes()) {
+                if (n.scannedBlockId().equals(s.id())) lastId = n.nodeId();
+            }
+        }
+        if (updated == graph) return;
+        setGraph(updated);
+        if (lastId != null) selectSingleNode(lastId);
+    }
+
     /** Filter: one input, two outputs — matched items out of "Out", the rest out of "Reject". */
     public void addFilterNode(int canvasX, int canvasY) {
         addRoutingNode(net.doole.doolestools.logistics.NodeType.FILTER, "Filter", "", canvasX, canvasY,
@@ -287,6 +378,31 @@ public class EditorContext {
                 canvasX, canvasY, GraphNodeData.DEFAULT_WIDTH, GraphNodeData.DEFAULT_HEIGHT, ports, false, notes);
         setGraph(LogisticsGraph.addRawNode(graph, node));
         selectSingleNode(id);
+    }
+
+    /**
+     * Creates an instanced copy of each selected node (tied to the same scanned block, marked instanced=true).
+     * Works for all node types. The new nodes are placed 18px offset from the originals and selected.
+     */
+    public void instanceSelectedNodes() {
+        java.util.Set<String> ids = new java.util.LinkedHashSet<>(selectedNodeIds);
+        if (ids.isEmpty() && selectedNodeId != null) ids.add(selectedNodeId);
+        if (ids.isEmpty()) return;
+        LogisticsGraphData g = graph;
+        List<String> newIds = new ArrayList<>();
+        for (String id : ids) {
+            GraphNodeData n = g.findNode(id);
+            if (n == null) continue;
+            String newId = LogisticsGraph.newNodeId();
+            g = LogisticsGraph.addRawNode(g, new GraphNodeData(newId, n.scannedBlockId(), n.displayName(), n.type(),
+                    n.x() + 18, n.y() + 18, n.width(), n.height(), n.ports(), n.collapsed(), n.notes(), true));
+            newIds.add(newId);
+        }
+        if (newIds.isEmpty()) return;
+        setGraph(g);
+        clearSelection();
+        selectedNodeIds.addAll(newIds);
+        selectedNodeId = newIds.get(newIds.size() - 1);
     }
 
     /** Duplicates the selected node(s), keeping all settings, and selects the copies. */
@@ -480,29 +596,11 @@ public class EditorContext {
     }
 
     private LogisticsGraphData addSelectedLinksToTarget(String targetNodeId, String targetPortId) {
-        GraphNodeData target = graph.findNode(targetNodeId);
-        GraphPortData targetPort = target == null ? null : target.findPort(targetPortId);
-        if (target == null || targetPort == null) return graph;
-        LogisticsGraphData updated = graph;
-        for (String sourceId : selectedNodeIds) {
-            if (sourceId.equals(targetNodeId)) continue;
-            GraphNodeData source = updated.findNode(sourceId);
-            if (source == null) continue;
-            GraphPortData sourcePort = source.findPort(draggingSourcePortId);
-            if (!PortDiscovery.compatible(sourcePort, targetPort)) {
-                sourcePort = firstCompatibleOut(source, targetPort);
-            }
-            if (sourcePort == null) continue;
-            updated = LogisticsGraph.addLink(updated, sourceId, sourcePort.portId(), targetNodeId, targetPortId);
-        }
-        return updated;
-    }
-
-    private static GraphPortData firstCompatibleOut(GraphNodeData source, GraphPortData targetPort) {
-        for (GraphPortData port : source.ports()) {
-            if (port.direction() == PortDirection.OUT && PortDiscovery.compatible(port, targetPort)) return port;
-        }
-        return null;
+        // Use the kind of the dragged source port to prefer like-kind ports on the other selected nodes.
+        GraphNodeData dragSource = graph.findNode(draggingSourceNodeId);
+        GraphPortData dragPort = dragSource == null ? null : dragSource.findPort(draggingSourcePortId);
+        net.doole.doolestools.logistics.PortKind kind = dragPort == null ? null : dragPort.kind();
+        return LogisticsGraph.addMultiLink(graph, new ArrayList<>(selectedNodeIds), kind, targetNodeId, targetPortId);
     }
 
     public void clearPortDrag() {

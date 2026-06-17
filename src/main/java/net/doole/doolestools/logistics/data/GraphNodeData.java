@@ -20,7 +20,8 @@ public record GraphNodeData(String nodeId,
                              int height,
                              List<GraphPortData> ports,
                              boolean collapsed,
-                             String notes) {
+                             String notes,
+                             boolean instanced) {
 
     public static final int DEFAULT_WIDTH = 132;
     public static final int DEFAULT_HEIGHT = 84;
@@ -36,32 +37,42 @@ public record GraphNodeData(String nodeId,
             Codec.INT.fieldOf("height").forGetter(GraphNodeData::height),
             GraphPortData.CODEC.listOf().optionalFieldOf("ports", List.of()).forGetter(GraphNodeData::ports),
             Codec.BOOL.fieldOf("collapsed").forGetter(GraphNodeData::collapsed),
-            Codec.STRING.fieldOf("notes").forGetter(GraphNodeData::notes)
+            Codec.STRING.fieldOf("notes").forGetter(GraphNodeData::notes),
+            Codec.BOOL.optionalFieldOf("instanced", false).forGetter(GraphNodeData::instanced)
     ).apply(inst, GraphNodeData::new));
 
     public GraphNodeData(String nodeId, String scannedBlockId, String displayName, NodeType type,
                          int x, int y, int width, int height, boolean collapsed, String notes) {
-        this(nodeId, scannedBlockId, displayName, type, x, y, width, height, List.of(), collapsed, notes);
+        this(nodeId, scannedBlockId, displayName, type, x, y, width, height, List.of(), collapsed, notes, false);
+    }
+
+    public GraphNodeData(String nodeId, String scannedBlockId, String displayName, NodeType type,
+                         int x, int y, int width, int height, List<GraphPortData> ports, boolean collapsed, String notes) {
+        this(nodeId, scannedBlockId, displayName, type, x, y, width, height, ports, collapsed, notes, false);
     }
 
     public GraphNodeData withPosition(int newX, int newY) {
-        return new GraphNodeData(nodeId, scannedBlockId, displayName, type, newX, newY, width, height, ports, collapsed, notes);
+        return new GraphNodeData(nodeId, scannedBlockId, displayName, type, newX, newY, width, height, ports, collapsed, notes, instanced);
     }
 
     public GraphNodeData withName(String newName) {
-        return new GraphNodeData(nodeId, scannedBlockId, newName, type, x, y, width, height, ports, collapsed, notes);
+        return new GraphNodeData(nodeId, scannedBlockId, newName, type, x, y, width, height, ports, collapsed, notes, instanced);
     }
 
     public GraphNodeData withType(NodeType newType) {
-        return new GraphNodeData(nodeId, scannedBlockId, displayName, newType, x, y, width, height, ports, collapsed, notes);
+        return new GraphNodeData(nodeId, scannedBlockId, displayName, newType, x, y, width, height, ports, collapsed, notes, instanced);
     }
 
     public GraphNodeData withNotes(String newNotes) {
-        return new GraphNodeData(nodeId, scannedBlockId, displayName, type, x, y, width, height, ports, collapsed, newNotes);
+        return new GraphNodeData(nodeId, scannedBlockId, displayName, type, x, y, width, height, ports, collapsed, newNotes, instanced);
     }
 
     public GraphNodeData withPorts(List<GraphPortData> newPorts) {
-        return new GraphNodeData(nodeId, scannedBlockId, displayName, type, x, y, width, height, List.copyOf(newPorts), collapsed, notes);
+        return new GraphNodeData(nodeId, scannedBlockId, displayName, type, x, y, width, height, List.copyOf(newPorts), collapsed, notes, instanced);
+    }
+
+    public GraphNodeData withInstanced(boolean value) {
+        return new GraphNodeData(nodeId, scannedBlockId, displayName, type, x, y, width, height, ports, collapsed, notes, value);
     }
 
     public GraphPortData findPort(String portId) {

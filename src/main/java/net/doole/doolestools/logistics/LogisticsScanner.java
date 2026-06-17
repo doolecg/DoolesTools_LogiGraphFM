@@ -3,11 +3,12 @@ package net.doole.doolestools.logistics;
 import net.doole.doolestools.DoolesTools;
 import net.doole.doolestools.block.ScannerHiddenBlock;
 import net.doole.doolestools.blockentity.LogisticsComputerBlockEntity;
+import net.doole.doolestools.integration.ModProviderRegistry;
+import net.doole.doolestools.integration.ModStorageProvider;
 import net.doole.doolestools.blockentity.NetworkEndpointBlockEntity;
 import net.doole.doolestools.blockentity.NetworkModemBlockEntity;
 import net.doole.doolestools.blockentity.NetworkRelayBlockEntity;
 import net.doole.doolestools.blockentity.NetworkWireBlockEntity;
-import net.doole.doolestools.blockentity.WirelessRouterBlockEntity;
 import net.doole.doolestools.config.ModServerConfig;
 import net.doole.doolestools.logistics.data.EnergySummary;
 import net.doole.doolestools.logistics.data.FluidEntry;
@@ -215,6 +216,26 @@ public final class LogisticsScanner {
             }
         }
 
+        // Ask mod-aware providers for extra data (AE2 cells, Mekanism chemicals, Create basins).
+        // Only merge fields the standard read left empty - dont replace good capability data with provider data.
+        ModStorageProvider.ModStorageResult providerResult = ModProviderRegistry.tryRead(level, be);
+        if (providerResult != null) {
+            if (providerResult.inventory() != null && providerResult.inventory().hasData() && !inventory.hasData()) {
+                inventory = providerResult.inventory();
+            }
+            if (providerResult.fluids() != null && providerResult.fluids().hasData() && !fluids.hasData()) {
+                fluids = providerResult.fluids();
+            }
+            if (providerResult.energy() != null && providerResult.energy().hasData() && !energy.hasData()) {
+                energy = providerResult.energy();
+            }
+            // let the provider upgrade an UNKNOWN_MACHINE classification if it knows the block better
+            if (providerResult.typeOverride() != null && providerResult.typeOverride() != ScannedType.UNKNOWN
+                    && type == ScannedType.UNKNOWN_MACHINE) {
+                type = providerResult.typeOverride();
+            }
+        }
+
         List<WarningData> warnings = WarningGenerator.forScannedBlock(type, inventory, furnace);
 
         ScannedBlockData snapshot = new ScannedBlockData(id, displayPos, dimension, blockName, registryId, type, distance,
@@ -237,7 +258,7 @@ public final class LogisticsScanner {
     private static ScannedBlockData readNetworkEndpoint(ServerLevel level, BlockPos center, NetworkEndpointBlockEntity endpoint,
                                                         long gameTime, BlockLabelSavedData labels, List<RelayNode> relays) {
         if (endpoint instanceof NetworkModemBlockEntity modem && !isWiredModemOnline(level, modem)) return null;
-        if (endpoint instanceof WirelessRouterBlockEntity && !wirelessReachable(center, endpoint.getBlockPos(), endpoint.upgradeCount("range"), relays)) return null;
+        if (!(endpoint instanceof NetworkModemBlockEntity) && !wirelessReachable(center, endpoint.getBlockPos(), endpoint.upgradeCount("range"), relays)) return null;
         BlockPos attached = endpoint.attachedPos();
         if (!level.hasChunkAt(attached)) return null;
         BlockEntity attachedBe = level.getBlockEntity(attached);

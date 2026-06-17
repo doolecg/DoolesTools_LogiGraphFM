@@ -1,6 +1,7 @@
 package net.doole.doolestools;
 
 import com.mojang.logging.LogUtils;
+import net.doole.doolestools.config.ModClientConfig;
 import net.doole.doolestools.config.ModServerConfig;
 import net.doole.doolestools.integration.IntegrationHooks;
 import net.doole.doolestools.network.ModNetworking;
@@ -34,6 +35,7 @@ public final class DoolesTools {
 
     public DoolesTools(IEventBus modBus, ModContainer modContainer) {
         modContainer.registerConfig(ModConfig.Type.SERVER, ModServerConfig.SPEC);
+        modContainer.registerConfig(ModConfig.Type.CLIENT, ModClientConfig.SPEC);
 
         ModBlocks.BLOCKS.register(modBus);
         ModItems.ITEMS.register(modBus);

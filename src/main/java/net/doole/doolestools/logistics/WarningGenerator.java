@@ -31,12 +31,25 @@ public final class WarningGenerator {
         boolean isFurnace = furnace != null && furnace.hasData();
         if (!isFurnace && inv != null && inv.hasData()) {
             int pct = inv.fillPercent();
+            boolean isTransportOrMachine = type == ScannedType.TRANSPORT
+                    || type == ScannedType.MACHINE || type == ScannedType.UNKNOWN_MACHINE;
+            boolean isStorage = type == ScannedType.STORAGE || type == ScannedType.UNKNOWN_STORAGE;
             if (inv.usedSlots() == 0) {
                 out.add(WarningData.info("Empty"));
             } else if (inv.usedSlots() >= inv.totalSlots()) {
-                out.add(WarningData.error("Full"));
+                // Transport and machine-type blocks full is advisory — expected during normal operation.
+                // Storage full is actionable (WARNING); escalation to ERROR is done in forGraph().
+                if (isTransportOrMachine) {
+                    out.add(WarningData.info("Full"));
+                } else {
+                    out.add(WarningData.warning("Full"));
+                }
             } else if (pct >= NEARLY_FULL_PERCENT) {
-                out.add(WarningData.warning("Nearly full (" + pct + "%)"));
+                if (isStorage) {
+                    out.add(WarningData.warning("Nearly full (" + pct + "%)"));
+                } else {
+                    out.add(WarningData.info("Nearly full (" + pct + "%)"));
+                }
             }
         }
         if (furnace != null && furnace.hasData()) {
@@ -82,13 +95,17 @@ public final class WarningGenerator {
                 default -> { /* no structural rule */ }
             }
 
-            // Target-storage-nearly-full: if this node is a link target and its scanned storage is high.
+            // Target-storage checks: escalate end-of-flow full storage to ERROR.
             ScannedBlockData scanned = scanById.get(node.scannedBlockId());
-            if (scanned != null && scanned.inventory().hasData()
-                    && hasIncoming.contains(node.nodeId())
-                    && scanned.inventory().fillPercent() >= NEARLY_FULL_PERCENT) {
-                out.add(WarningData.warning(node.displayName() + " nearly full ("
-                        + scanned.inventory().fillPercent() + "%)"));
+            if (scanned != null && scanned.inventory().hasData() && hasIncoming.contains(node.nodeId())) {
+                boolean isEndOfFlow = !hasOutgoing.contains(node.nodeId());
+                boolean isFull = scanned.inventory().usedSlots() >= scanned.inventory().totalSlots();
+                int pct = scanned.inventory().fillPercent();
+                if (isFull && isEndOfFlow && scanned.isStorageLike()) {
+                    out.add(WarningData.error(node.displayName() + ": end-of-flow storage full"));
+                } else if (pct >= NEARLY_FULL_PERCENT) {
+                    out.add(WarningData.warning(node.displayName() + " nearly full (" + pct + "%)"));
+                }
             }
         }
         return out;

@@ -71,7 +71,9 @@ public final class NetworkPlacementPreviewEvents {
     }
 
     private static boolean isEndpoint(ItemStack stack) {
-        return stack.getItem() == ModItems.WIRELESS_ROUTER.get() || stack.getItem() == ModItems.NETWORK_MODEM.get();
+        return stack.getItem() == ModItems.WIRELESS_ROUTER.get()
+                || stack.getItem() == ModItems.WIRELESS_DONGLE.get()
+                || stack.getItem() == ModItems.NETWORK_MODEM.get();
     }
 
     private static VoxelShape endpointShape(Direction face) {

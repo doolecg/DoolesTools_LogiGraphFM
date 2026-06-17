@@ -9,6 +9,7 @@ import net.doole.doolestools.block.NetworkModemBlock;
 import net.doole.doolestools.block.NetworkGeneratorBlock;
 import net.doole.doolestools.block.NetworkRelayBlock;
 import net.doole.doolestools.block.NetworkWireBlock;
+import net.doole.doolestools.block.WirelessDongleBlock;
 import net.doole.doolestools.block.WirelessRouterBlock;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
@@ -50,6 +51,14 @@ public final class ModBlocks {
     public static final DeferredBlock<WirelessRouterBlock> WIRELESS_ROUTER = BLOCKS.registerBlock(
             "wireless_router",
             WirelessRouterBlock::new,
+            () -> BlockBehaviour.Properties.of()
+                    .strength(0.8F, 2.0F)
+                    .sound(SoundType.METAL)
+    );
+
+    public static final DeferredBlock<WirelessDongleBlock> WIRELESS_DONGLE = BLOCKS.registerBlock(
+            "wireless_dongle",
+            WirelessDongleBlock::new,
             () -> BlockBehaviour.Properties.of()
                     .strength(0.8F, 2.0F)
                     .sound(SoundType.METAL)

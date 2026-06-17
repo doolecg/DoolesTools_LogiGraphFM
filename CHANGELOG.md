@@ -7,7 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- **Scheduled auto-scan** — Logistics Computers can rescan on `scan.autoScanIntervalTicks` without a
+  player opening the GUI.
+- **Redstone alerts** — Logistics Computers emit redstone when `scan.redstoneAlertOnError` is enabled
+  and any ERROR-level warning is active.
+- **Per-link throughput stats** — Easy Factory returns server-owned moved counts per link; the computer
+  syncs rolling samples to node details and the stats page.
+- **Configurable wire traversal depth** — `scan.maxWireTraversalSteps` replaces the fixed wired traversal
+  cap for large grids.
+- **Shareable graph blueprints** — graph import/export uses compact base64 graph JSON on the clipboard,
+  still validated by the server on save.
+- **Filter item picker** — filter nodes expose a searchable 3x3 ghost item grid with recents while keeping
+  JEI/REI/EMI panels off the modal.
+- **Mod-aware scan providers** — optional AE2, Mekanism, and Create readers augment standard capability
+  scans when those mods are present.
+- **CC:Tweaked peripheral** — Logistics Computers expose scan, warning, storage, power, and network data
+  through optional reflection-based peripheral hooks.
+- **Multi-computer mesh** — computers can link peers and merge saved peer scan snapshots read-only.
+- **Throughput planner** — pure stats-page analysis estimates bottlenecks/starvation from route capacity
+  and machine progress snapshots.
+
+### Fixed / Optimised
+
+- **GraphCanvasWidget.nodeMap()** was rebuilding a `HashMap` on every hit-test call (link click,
+  port hover, etc.), ignoring the existing revision-gated cache. Now returns `cachedNodesById`
+  directly after calling `ensureModel()` — zero extra allocations on frames where the graph hasn't changed.
+- **EasyFactoryManager DFS** — `outboundLinks()` previously scanned the entire link list for every
+  routing node visited during a route-through pass (O(links * nodes) per tick). Now builds one
+  `Map<nodeId, List<links>>` index at the start of each tick and reuses it for all DFS calls.
+- **EasyFactoryManager dead code** — removed `singleAcceptingSlot` and `isInputLikeInsertionSlot`,
+  neither of which was called anywhere in the codebase.
+- **NetworkPowerCalculator** — logs a `debug` line when the wired traversal hits `MAX_COMPONENT_STEPS`
+  so large wire grids are visible in logs without flooding them at normal scale.
 
 ## [0.5.0] — 2026-06-16
 

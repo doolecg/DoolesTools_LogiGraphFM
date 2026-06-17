@@ -9,6 +9,7 @@ import net.doole.doolestools.blockentity.NetworkModemBlockEntity;
 import net.doole.doolestools.blockentity.NetworkGeneratorBlockEntity;
 import net.doole.doolestools.blockentity.NetworkRelayBlockEntity;
 import net.doole.doolestools.blockentity.NetworkWireBlockEntity;
+import net.doole.doolestools.blockentity.WirelessDongleBlockEntity;
 import net.doole.doolestools.blockentity.WirelessRouterBlockEntity;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.level.block.entity.BlockEntityType;
@@ -38,6 +39,10 @@ public final class ModBlockEntities {
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<WirelessRouterBlockEntity>> WIRELESS_ROUTER =
             BLOCK_ENTITY_TYPES.register("wireless_router", () ->
                     new BlockEntityType<>(WirelessRouterBlockEntity::new, Set.of(ModBlocks.WIRELESS_ROUTER.get())));
+
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<WirelessDongleBlockEntity>> WIRELESS_DONGLE =
+            BLOCK_ENTITY_TYPES.register("wireless_dongle", () ->
+                    new BlockEntityType<>(WirelessDongleBlockEntity::new, Set.of(ModBlocks.WIRELESS_DONGLE.get())));
 
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<NetworkModemBlockEntity>> NETWORK_MODEM =
             BLOCK_ENTITY_TYPES.register("network_modem", () ->

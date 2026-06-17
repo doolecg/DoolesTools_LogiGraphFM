@@ -4,6 +4,7 @@ import net.doole.doolestools.client.screen.LogisticsComputerScreen;
 import net.doole.doolestools.client.screen.LogisticsMonitorScreen;
 import net.doole.doolestools.network.payload.ComputerStatePayload;
 import net.doole.doolestools.network.payload.KnownNetworksPayload;
+import net.doole.doolestools.network.payload.LinkedComputersPayload;
 import net.doole.doolestools.network.payload.MonitorStatePayload;
 import net.doole.doolestools.network.payload.NearbyLabelsPayload;
 import net.minecraft.client.Minecraft;
@@ -24,6 +25,10 @@ public final class ClientPayloadHandlers {
                 screen.context().setActiveRouteIds(payload.activeRouteIds());
                 screen.context().setNetworkState(payload.networkId(), payload.networkName(), payload.accessMode(), payload.editorWhitelist(), payload.canEdit());
                 screen.context().setPowerHistory(payload.powerSupplyHistory(), payload.powerDemandHistory());
+                screen.context().setTimescaleHistory(payload.supply30m(), payload.demand30m(),
+                        payload.supply1h(), payload.demand1h(), payload.supply12h(), payload.demand12h(),
+                        payload.supply1d(), payload.demand1d(), payload.supplyAllTime(), payload.demandAllTime());
+                screen.context().setLinkThroughput(payload.linkThroughput());
             }
         });
     }
@@ -37,6 +42,15 @@ public final class ClientPayloadHandlers {
             ClientKnownNetworks.replaceAll(payload.ids(), payload.names(), payload.editable());
             if (Minecraft.getInstance().screen instanceof net.doole.doolestools.client.screen.NetworkEndpointNameScreen screen) {
                 screen.onKnownNetworksUpdated();
+            }
+        });
+    }
+
+    public static void handleLinkedComputers(LinkedComputersPayload payload, IPayloadContext ctx) {
+        ctx.enqueueWork(() -> {
+            if (Minecraft.getInstance().screen instanceof LogisticsComputerScreen screen
+                    && screen.context().pos().equals(payload.pos())) {
+                screen.context().setLinkedPeers(payload.peerPositions(), payload.peerNetworkIds());
             }
         });
     }

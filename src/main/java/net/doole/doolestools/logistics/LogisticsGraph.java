@@ -40,16 +40,16 @@ public final class LogisticsGraph {
 
     /** Adds a node for a scanned block. If one already exists for that block, returns the graph unchanged. */
     public static LogisticsGraphData addNode(LogisticsGraphData graph, ScannedBlockData scanned, int x, int y) {
+        boolean alreadyPresent = false;
         for (GraphNodeData n : graph.activeCanvas().nodes()) {
-            if (n.scannedBlockId().equals(scanned.id())) {
-                return graph;
-            }
+            if (n.scannedBlockId().equals(scanned.id())) { alreadyPresent = true; break; }
         }
         List<GraphNodeData> nodes = new ArrayList<>(graph.activeCanvas().nodes());
-        nodes.add(new GraphNodeData(
+        GraphNodeData newNode = new GraphNodeData(
                 newNodeId(), scanned.id(), shortName(scanned.blockName()),
                 scanned.type().toDefaultNodeType(), x, y,
-                GraphNodeData.DEFAULT_WIDTH, GraphNodeData.DEFAULT_HEIGHT, PortDiscovery.discover(scanned), false, ""));
+                GraphNodeData.DEFAULT_WIDTH, GraphNodeData.DEFAULT_HEIGHT, PortDiscovery.discover(scanned), false, "");
+        nodes.add(alreadyPresent ? newNode.withInstanced(true) : newNode);
         return withNodes(graph, nodes);
     }
 
@@ -163,6 +163,40 @@ public final class LogisticsGraph {
         List<GraphLinkData> links = new ArrayList<>(graph.activeCanvas().links());
         links.add(new GraphLinkData(newLinkId(), sourceId, sourcePortId, targetId, targetPortId, "", PortDiscovery.linkType(sourcePort)));
         return withLinks(graph, links);
+    }
+
+    /**
+     * Links every source node onto a single target port at once. For each source, picks its first OUT
+     * port matching {@code kind} (or a GENERIC-compatible one) and links it to the target port. Sources
+     * with no compatible port, or that resolve to the target itself, are skipped silently.
+     */
+    public static LogisticsGraphData addMultiLink(LogisticsGraphData graph, List<String> sourceNodeIds,
+                                                  PortKind kind, String targetNodeId, String targetPortId) {
+        GraphNodeData target = graph.findNode(targetNodeId);
+        GraphPortData targetPort = target == null ? null : target.findPort(targetPortId);
+        if (target == null || targetPort == null || sourceNodeIds == null) return graph;
+        LogisticsGraphData updated = graph;
+        for (String sourceId : sourceNodeIds) {
+            if (sourceId == null || sourceId.equals(targetNodeId)) continue;
+            GraphNodeData source = updated.findNode(sourceId);
+            if (source == null) continue;
+            GraphPortData sourcePort = matchingOutPort(source, kind, targetPort);
+            if (sourcePort == null) continue;
+            updated = addLink(updated, sourceId, sourcePort.portId(), targetNodeId, targetPortId);
+        }
+        return updated;
+    }
+
+    /** First OUT port whose kind matches and is compatible with the target port. */
+    private static GraphPortData matchingOutPort(GraphNodeData source, PortKind kind, GraphPortData targetPort) {
+        GraphPortData fallback = null;
+        for (GraphPortData port : source.ports()) {
+            if (port.direction() != PortDirection.OUT) continue;
+            if (!PortDiscovery.compatible(port, targetPort)) continue;
+            if (kind != null && port.kind() == kind) return port;
+            if (fallback == null) fallback = port;
+        }
+        return fallback;
     }
 
     public static LogisticsGraphData removeLink(LogisticsGraphData graph, String linkId) {

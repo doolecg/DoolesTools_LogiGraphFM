@@ -1,6 +1,12 @@
 package net.doole.doolestools.client;
 
-/** Client-only display preferences, toggled from the Settings page. Not persisted server-side. */
+import net.doole.doolestools.config.ModClientConfig;
+
+/**
+ * Client-only display preferences, toggled from the Settings page.
+ * Values are backed by {@link ModClientConfig} and persist across sessions.
+ * Call {@link #load()} after the client config loads; call {@link #save()} after any change.
+ */
 public final class ClientPrefs {
     private ClientPrefs() {}
 
@@ -15,6 +21,25 @@ public final class ClientPrefs {
     /** Most-recently used Label Gun names (newest first), for quick re-use. Client-local, session only. */
     public static final java.util.List<String> recentLabels = new java.util.ArrayList<>();
     public static final int MAX_RECENT_LABELS = 10;
+
+    /** Populate in-memory fields from the persisted client config. Called on config load. */
+    public static void load() {
+        showGrid = ModClientConfig.SHOW_GRID.get();
+        animate = ModClientConfig.ANIMATE.get();
+        autoRefresh = ModClientConfig.AUTO_REFRESH.get();
+        showItemIcons = ModClientConfig.SHOW_ITEM_ICONS.get();
+        uiScale = (float) (double) ModClientConfig.UI_SCALE.get();
+    }
+
+    /** Write current in-memory fields back to the persisted client config. */
+    public static void save() {
+        ModClientConfig.SHOW_GRID.set(showGrid);
+        ModClientConfig.ANIMATE.set(animate);
+        ModClientConfig.AUTO_REFRESH.set(autoRefresh);
+        ModClientConfig.SHOW_ITEM_ICONS.set(showItemIcons);
+        ModClientConfig.UI_SCALE.set((double) uiScale);
+        ModClientConfig.SPEC.save();
+    }
 
     public static void addRecentLabel(String label) {
         if (label == null || label.isBlank()) return;

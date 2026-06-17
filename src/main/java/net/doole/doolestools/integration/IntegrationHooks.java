@@ -1,7 +1,10 @@
 package net.doole.doolestools.integration;
 
 import net.doole.doolestools.DoolesTools;
+import net.doole.doolestools.integration.ae2.AE2StorageProvider;
 import net.doole.doolestools.integration.computercraft.ComputerCraftIntegration;
+import net.doole.doolestools.integration.create.CreateStorageProvider;
+import net.doole.doolestools.integration.mekanism.MekanismStorageProvider;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModList;
 
@@ -21,10 +24,16 @@ public final class IntegrationHooks {
                 DoolesTools.LOGGER.warn("Optional integration init failed, continuing without it: {}", t.toString());
             }
         }
-        // Optional compatibility stays silent by design: the scanner reads any mod's blocks through
-        // vanilla Container / NeoForge capabilities, so no per-mod code is needed to see them, and we
-        // never surface other mod names in LogiGraph. Mods that want their pipes/cables hidden from
-        // scans opt out via the doolestools:scanner_blacklist tag or the ScannerHiddenBlock interface.
+        // Register mod-specific storage providers. These run after the standard capability read and
+        // fill in data that the NeoForge capability API doesn't cover (AE2 cells, Mekanism chemicals,
+        // Create basins). Each provider guards itself with isLoaded() so these are all safe no-ops
+        // when the target mod isn't installed.
+        try { ModProviderRegistry.register(new AE2StorageProvider()); }
+        catch (Throwable t) { DoolesTools.LOGGER.warn("AE2 provider registration failed: {}", t.toString()); }
+        try { ModProviderRegistry.register(new MekanismStorageProvider()); }
+        catch (Throwable t) { DoolesTools.LOGGER.warn("Mekanism provider registration failed: {}", t.toString()); }
+        try { ModProviderRegistry.register(new CreateStorageProvider()); }
+        catch (Throwable t) { DoolesTools.LOGGER.warn("Create provider registration failed: {}", t.toString()); }
     }
 
     public static boolean isLoaded(String modId) {

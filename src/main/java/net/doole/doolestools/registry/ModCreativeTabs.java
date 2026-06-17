@@ -26,6 +26,7 @@ public final class ModCreativeTabs {
                         output.accept(ModItems.NETWORK_SCREWDRIVER.get());
                         output.accept(ModItems.LOGIGRAPH_WALL_MONITOR.get());
                         output.accept(ModItems.WIRELESS_ROUTER.get());
+                        output.accept(ModItems.WIRELESS_DONGLE.get());
                         output.accept(ModItems.NETWORK_MODEM.get());
                         output.accept(ModItems.NETWORK_WIRE.get());
                         output.accept(ModItems.NETWORK_RELAY.get());

@@ -1,7 +1,7 @@
 package net.doole.doolestools.logistics.network;
 
+import net.doole.doolestools.blockentity.NetworkEndpointBlockEntity;
 import net.doole.doolestools.blockentity.NetworkRelayBlockEntity;
-import net.doole.doolestools.blockentity.WirelessRouterBlockEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
@@ -27,7 +27,7 @@ public final class NetworkNodeIndex {
     private static final Map<ResourceKey<Level>, NetworkNodeIndex> INDEXES = new ConcurrentHashMap<>();
 
     private final Map<BlockPos, NetworkRelayBlockEntity> relays = new ConcurrentHashMap<>();
-    private final Map<BlockPos, WirelessRouterBlockEntity> routers = new ConcurrentHashMap<>();
+    private final Map<BlockPos, NetworkEndpointBlockEntity> routers = new ConcurrentHashMap<>();
 
     private NetworkNodeIndex() {}
 
@@ -43,7 +43,7 @@ public final class NetworkNodeIndex {
         get(level).relays.remove(pos);
     }
 
-    public static void addRouter(ServerLevel level, WirelessRouterBlockEntity router) {
+    public static void addRouter(ServerLevel level, NetworkEndpointBlockEntity router) {
         get(level).routers.put(router.getBlockPos().immutable(), router);
     }
 
@@ -58,8 +58,8 @@ public final class NetworkNodeIndex {
         });
     }
 
-    /** Visit every live standalone wireless router in the dimension. */
-    public static void forEachRouter(ServerLevel level, Consumer<WirelessRouterBlockEntity> consumer) {
+    /** Visit every live standalone wireless router or dongle in the dimension. */
+    public static void forEachRouter(ServerLevel level, Consumer<NetworkEndpointBlockEntity> consumer) {
         get(level).routers.values().forEach(router -> {
             if (!router.isRemoved()) consumer.accept(router);
         });

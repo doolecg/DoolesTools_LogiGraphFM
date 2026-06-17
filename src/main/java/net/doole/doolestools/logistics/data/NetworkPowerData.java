@@ -13,8 +13,13 @@ public record NetworkPowerData(int supplyCentiFe,
                                int endpointCount,
                                int wireCount,
                                int deviceCount,
-                               int routeCount) {
-    public static final NetworkPowerData EMPTY = new NetworkPowerData(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+                               int routeCount,
+                               int batteryCentiFe,
+                               long batteryStored,
+                               long batteryCapacity,
+                               int batteryCount,
+                               int generatorCount) {
+    public static final NetworkPowerData EMPTY = new NetworkPowerData(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0L, 0L, 0, 0);
 
     public static final Codec<NetworkPowerData> CODEC = RecordCodecBuilder.create(inst -> inst.group(
             Codec.INT.fieldOf("supplyCentiFe").forGetter(NetworkPowerData::supplyCentiFe),
@@ -27,7 +32,12 @@ public record NetworkPowerData(int supplyCentiFe,
             Codec.INT.fieldOf("endpointCount").forGetter(NetworkPowerData::endpointCount),
             Codec.INT.fieldOf("wireCount").forGetter(NetworkPowerData::wireCount),
             Codec.INT.fieldOf("deviceCount").forGetter(NetworkPowerData::deviceCount),
-            Codec.INT.fieldOf("routeCount").forGetter(NetworkPowerData::routeCount)
+            Codec.INT.fieldOf("routeCount").forGetter(NetworkPowerData::routeCount),
+            Codec.INT.optionalFieldOf("batteryCentiFe", 0).forGetter(NetworkPowerData::batteryCentiFe),
+            Codec.LONG.optionalFieldOf("batteryStored", 0L).forGetter(NetworkPowerData::batteryStored),
+            Codec.LONG.optionalFieldOf("batteryCapacity", 0L).forGetter(NetworkPowerData::batteryCapacity),
+            Codec.INT.optionalFieldOf("batteryCount", 0).forGetter(NetworkPowerData::batteryCount),
+            Codec.INT.optionalFieldOf("generatorCount", 0).forGetter(NetworkPowerData::generatorCount)
     ).apply(inst, NetworkPowerData::new));
 
     public boolean powered() {

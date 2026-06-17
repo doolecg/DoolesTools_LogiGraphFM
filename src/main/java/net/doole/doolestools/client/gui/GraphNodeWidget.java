@@ -141,6 +141,7 @@ public final class GraphNodeWidget {
             brackets(g, x, y, w, h, pulse(DUTheme.PROGRESS_ORANGE));
         }
 
+        if (node.instanced()) instanceBadge(g, x + w - 12, y + 3);
         renderPorts(g, font, node, selected || isLinkSource);
     }
 
@@ -155,7 +156,21 @@ public final class GraphNodeWidget {
         g.text(font, trim(font, node.displayName(), w - 16), x + 5, y + 3, selected ? DUTheme.SELECTED : DUTheme.TEXT, false);
         g.text(font, node.type().name(), x + 5, y + 18, DUTheme.TEXT_DIM, false);
         if (node.type() == NodeType.FILTER) renderFilterSummary(g, font, node);
+        if (node.instanced()) instanceBadge(g, x + w - 12, y + 3);
         renderPortDots(g, node, selected || isLinkSource);
+    }
+
+    /** Two dots joined by a line — marks a node that is an instance of an already-placed block. */
+    private static void instanceBadge(GuiGraphicsExtractor g, int x, int y) {
+        int color = 0xFF7a9aaf;
+        // Left dot
+        g.fill(x, y + 1, x + 2, y + 5, color);
+        g.fill(x - 1, y + 2, x + 3, y + 4, color);
+        // Connecting line
+        g.fill(x + 2, y + 3, x + 7, y + 4, color);
+        // Right dot
+        g.fill(x + 7, y + 1, x + 9, y + 5, color);
+        g.fill(x + 6, y + 2, x + 10, y + 4, color);
     }
 
     private static void renderFilterSummary(GuiGraphicsExtractor g, Font font, GraphNodeData node) {

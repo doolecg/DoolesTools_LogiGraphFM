@@ -10,8 +10,8 @@ import net.doole.doolestools.logistics.data.GraphNodeData;
 import net.doole.doolestools.logistics.data.LogisticsGraphData;
 import net.doole.doolestools.logistics.data.ScannedBlockData;
 import net.doole.doolestools.blockentity.NetworkEndpointBlockEntity;
+import net.doole.doolestools.blockentity.NetworkModemBlockEntity;
 import net.doole.doolestools.blockentity.NetworkWireBlockEntity;
-import net.doole.doolestools.blockentity.WirelessRouterBlockEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
@@ -38,17 +38,26 @@ public final class EasyFactoryManager {
         return tick(graph, level, scan, 1f);
     }
 
+    public static java.util.Set<String> tick(LogisticsGraphData graph, ServerLevel level, java.util.List<ScannedBlockData> scan, float satisfaction) {
+        return tickWithCounts(graph, level, scan, satisfaction).keySet();
+    }
+
     /**
      * @param satisfaction power satisfaction in [0,1]; under 1 the per-tick route budget is scaled
      *                     down so an underpowered network visibly transports slower (brownout).
+     *
+     * NOTE: this runs every computer tick on the server. keep it lean - getBlockEntity calls add up fast
+     * on big servers with lots of computers. the outbound index below is the main thing keeping this cheap.
      */
-    public static java.util.Set<String> tick(LogisticsGraphData graph, ServerLevel level, java.util.List<ScannedBlockData> scan, float satisfaction) {
-        java.util.Set<String> activeLinks = new java.util.LinkedHashSet<>();
-        if (!ModServerConfig.ENABLE_EASY_FACTORY_TRANSPORT.get() || graph.isEmpty()) return activeLinks;
+    public static java.util.Map<String, Integer> tickWithCounts(LogisticsGraphData graph, ServerLevel level, java.util.List<ScannedBlockData> scan, float satisfaction) {
+        java.util.Map<String, Integer> movedByLink = new java.util.LinkedHashMap<>();
+        if (!ModServerConfig.ENABLE_EASY_FACTORY_TRANSPORT.get() || graph.isEmpty()) return movedByLink;
         java.util.Map<String, BlockPos> positions = scannedPositions(scan);
         int processed = 0;
         int routeBudget = routeBudget(level, graph, positions);
         if (satisfaction < 1f) routeBudget = Math.max(1, Math.round(routeBudget * Math.max(0f, satisfaction)));
+        // build the outbound index once so DFS routes dont scan all links on every node visit
+        java.util.Map<String, java.util.List<GraphLinkData>> outboundIndex = buildOutboundIndex(graph);
         java.util.List<GraphLinkData> orderedLinks = new java.util.ArrayList<>(graph.activeCanvas().links());
         orderedLinks.sort((a, b) -> Integer.compare(filterPriority(graph, a), filterPriority(graph, b)));
         for (GraphLinkData link : orderedLinks) {
@@ -59,17 +68,18 @@ public final class EasyFactoryManager {
             BlockPos targetPos = targetPosOf(targetNode, positions);
             if (sourcePos != null && targetNode != null && isRoutingNode(targetNode.type())) {
                 if (!level.hasChunkAt(sourcePos)) continue;
-                if (routeThroughNodes(graph, level, link, sourceNode, sourcePos, positions, activeLinks)) processed++;
+                if (routeThroughNodesCount(graph, level, link, sourceNode, sourcePos, positions, movedByLink, outboundIndex) > 0) processed++;
                 continue;
             }
             if (sourcePos == null || targetPos == null) continue;
             if (!level.hasChunkAt(sourcePos) || !level.hasChunkAt(targetPos)) continue;
-            if (transfer(link, level, sourceNode, targetNode, sourcePos, targetPos)) {
-                activeLinks.add(link.linkId());
+            int moved = transferCount(link, level, sourceNode, targetNode, sourcePos, targetPos);
+            if (moved > 0) {
+                movedByLink.merge(link.linkId(), moved, Integer::sum);
                 processed++;
             }
         }
-        return activeLinks;
+        return movedByLink;
     }
 
     private static java.util.Map<String, BlockPos> scannedPositions(java.util.List<ScannedBlockData> scan) {
@@ -94,11 +104,15 @@ public final class EasyFactoryManager {
     }
 
     private static boolean transfer(GraphLinkData link, ServerLevel level, GraphNodeData sourceNode, GraphNodeData targetNode, BlockPos sourcePos, BlockPos targetPos) {
+        return transferCount(link, level, sourceNode, targetNode, sourcePos, targetPos) > 0;
+    }
+
+    private static int transferCount(GraphLinkData link, ServerLevel level, GraphNodeData sourceNode, GraphNodeData targetNode, BlockPos sourcePos, BlockPos targetPos) {
         return switch (link.type()) {
-            case ITEMS -> ModServerConfig.ENABLE_ITEM_ROUTES.get() && transferItems(level, link, sourceNode, targetNode, sourcePos, targetPos, r -> true, Integer.MAX_VALUE);
-            case FLUIDS -> ModServerConfig.ENABLE_FLUID_ROUTES.get() && transferFluids(level, sourcePos, targetPos);
-            case ENERGY -> ModServerConfig.ENABLE_ENERGY_ROUTES.get() && transferEnergy(level, sourcePos, targetPos);
-            case MANUAL -> false;
+            case ITEMS -> ModServerConfig.ENABLE_ITEM_ROUTES.get() ? transferItemsCount(level, link, sourceNode, targetNode, sourcePos, targetPos, r -> true, Integer.MAX_VALUE) : 0;
+            case FLUIDS -> ModServerConfig.ENABLE_FLUID_ROUTES.get() ? transferFluidsCount(level, sourcePos, targetPos) : 0;
+            case ENERGY -> ModServerConfig.ENABLE_ENERGY_ROUTES.get() ? transferEnergyCount(level, sourcePos, targetPos) : 0;
+            case MANUAL -> 0;
         };
     }
 
@@ -120,42 +134,51 @@ public final class EasyFactoryManager {
                                  java.util.List<Gate> gates, java.util.List<String> linkPath) {}
 
     private static boolean routeThroughNodes(LogisticsGraphData graph, ServerLevel level, GraphLinkData inbound,
-            GraphNodeData sourceNode, BlockPos sourcePos, java.util.Map<String, BlockPos> positions, java.util.Set<String> activeLinks) {
-        if (inbound.type() != LinkType.ITEMS) return false;
+            GraphNodeData sourceNode, BlockPos sourcePos, java.util.Map<String, BlockPos> positions,
+            java.util.Map<String, Integer> movedByLink, java.util.Map<String, java.util.List<GraphLinkData>> outboundIndex) {
+        return routeThroughNodesCount(graph, level, inbound, sourceNode, sourcePos, positions, movedByLink, outboundIndex) > 0;
+    }
+
+    private static int routeThroughNodesCount(LogisticsGraphData graph, ServerLevel level, GraphLinkData inbound,
+            GraphNodeData sourceNode, BlockPos sourcePos, java.util.Map<String, BlockPos> positions,
+            java.util.Map<String, Integer> movedByLink, java.util.Map<String, java.util.List<GraphLinkData>> outboundIndex) {
+        if (inbound.type() != LinkType.ITEMS) return 0;
         GraphNodeData first = graph.findNode(inbound.targetNodeId());
-        if (first == null || !isRoutingNode(first.type())) return false;
+        if (first == null || !isRoutingNode(first.type())) return 0;
         java.util.List<ResolvedRoute> routes = new java.util.ArrayList<>();
         java.util.List<String> path = new java.util.ArrayList<>();
         path.add(inbound.linkId());
-        enterNode(graph, first, "none", java.util.List.of(), path, positions, routes, new java.util.HashSet<>());
-        if (routes.isEmpty()) return false;
-        // Rotate by game time so no single destination monopolises the per-tick budget (fair splitting).
+        enterNode(graph, first, "none", java.util.List.of(), path, positions, routes, new java.util.HashSet<>(), outboundIndex);
+        if (routes.isEmpty()) return 0;
+        // rotate by game time so no single destination hogs the per-tick budget
         java.util.Collections.rotate(routes, (int) Math.floorMod(level.getGameTime(), routes.size()));
-        boolean moved = false;
+        int movedTotal = 0;
         for (ResolvedRoute r : routes) {
             if (!level.hasChunkAt(r.targetPos())) continue;
             GraphLinkData route = new GraphLinkData(inbound.linkId(), inbound.sourceNodeId(), inbound.sourcePortId(),
                     r.finalLink().targetNodeId(), r.finalLink().targetPortId(), r.finalLink().label(),
                     LinkType.ITEMS, r.finalLink().sideOverride());
             java.util.List<Gate> gates = r.gates();
-            if (transferItems(level, route, sourceNode, r.targetNode(), sourcePos, r.targetPos(),
-                    resource -> gatesAllow(gates, resource), gateLimit(gates))) {
-                activeLinks.addAll(r.linkPath());
-                moved = true;
+            int moved = transferItemsCount(level, route, sourceNode, r.targetNode(), sourcePos, r.targetPos(),
+                    resource -> gatesAllow(gates, resource), gateLimit(gates));
+            if (moved > 0) {
+                for (String linkId : r.linkPath()) movedByLink.merge(linkId, moved, Integer::sum);
+                movedTotal += moved;
             }
         }
-        return moved;
+        return movedTotal;
     }
 
     /** Walk a routing node's outputs, updating the channel (Channel) and branching matched/reject (Filter). */
     private static void enterNode(LogisticsGraphData graph, GraphNodeData node, String channel, java.util.List<Gate> gates,
             java.util.List<String> path, java.util.Map<String, BlockPos> positions,
-            java.util.List<ResolvedRoute> routes, java.util.Set<String> visiting) {
+            java.util.List<ResolvedRoute> routes, java.util.Set<String> visiting,
+            java.util.Map<String, java.util.List<GraphLinkData>> outboundIndex) {
         if (routes.size() > 256 || !visiting.add(node.nodeId())) return;
         if (node.type() == NodeType.FILTER) {
             FilterSettings fs = FilterSettings.parse(node.notes());
             boolean channelMatch = fs.channel().equals("none") || fs.channel().equals(channel);
-            for (GraphLinkData out : outboundLinks(graph, node)) {
+            for (GraphLinkData out : outboundIndex.getOrDefault(node.nodeId(), java.util.List.of())) {
                 boolean reject = "reject".equals(out.sourcePortId());
                 java.util.List<Gate> branch;
                 if (reject) {
@@ -164,12 +187,12 @@ public final class EasyFactoryManager {
                     if (!channelMatch) continue;
                     branch = append(gates, new Gate(fs, false));
                 }
-                descend(graph, out, channel, branch, path, positions, routes, visiting);
+                descend(graph, out, channel, branch, path, positions, routes, visiting, outboundIndex);
             }
         } else {
             String nextChannel = node.type() == NodeType.CHANNEL ? FilterSettings.parse(node.notes()).channel() : channel;
-            for (GraphLinkData out : outboundLinks(graph, node)) {
-                descend(graph, out, nextChannel, gates, path, positions, routes, visiting);
+            for (GraphLinkData out : outboundIndex.getOrDefault(node.nodeId(), java.util.List.of())) {
+                descend(graph, out, nextChannel, gates, path, positions, routes, visiting, outboundIndex);
             }
         }
         visiting.remove(node.nodeId());
@@ -177,7 +200,8 @@ public final class EasyFactoryManager {
 
     private static void descend(LogisticsGraphData graph, GraphLinkData link, String channel, java.util.List<Gate> gates,
             java.util.List<String> path, java.util.Map<String, BlockPos> positions,
-            java.util.List<ResolvedRoute> routes, java.util.Set<String> visiting) {
+            java.util.List<ResolvedRoute> routes, java.util.Set<String> visiting,
+            java.util.Map<String, java.util.List<GraphLinkData>> outboundIndex) {
         if (link.type() != LinkType.ITEMS) return;
         GraphNodeData target = graph.findNode(link.targetNodeId());
         if (target == null) return;
@@ -188,16 +212,18 @@ public final class EasyFactoryManager {
             return;
         }
         if (isRoutingNode(target.type())) {
-            enterNode(graph, target, channel, gates, newPath, positions, routes, visiting);
+            enterNode(graph, target, channel, gates, newPath, positions, routes, visiting, outboundIndex);
         }
     }
 
-    private static java.util.List<GraphLinkData> outboundLinks(LogisticsGraphData graph, GraphNodeData node) {
-        java.util.List<GraphLinkData> out = new java.util.ArrayList<>();
+    // build once per tick so the DFS never scans the full link list repeatedly
+    private static java.util.Map<String, java.util.List<GraphLinkData>> buildOutboundIndex(LogisticsGraphData graph) {
+        java.util.Map<String, java.util.List<GraphLinkData>> index = new java.util.HashMap<>();
         for (GraphLinkData link : graph.activeCanvas().links()) {
-            if (link.sourceNodeId().equals(node.nodeId()) && link.type() == LinkType.ITEMS) out.add(link);
+            if (link.type() != LinkType.ITEMS) continue;
+            index.computeIfAbsent(link.sourceNodeId(), k -> new java.util.ArrayList<>()).add(link);
         }
-        return out;
+        return index;
     }
 
     private static <T> java.util.List<T> append(java.util.List<T> base, T value) {
@@ -259,6 +285,11 @@ public final class EasyFactoryManager {
 
     private static boolean transferItems(ServerLevel level, GraphLinkData link, GraphNodeData sourceNode, GraphNodeData targetNode, BlockPos sourcePos, BlockPos targetPos,
                                          java.util.function.Predicate<ItemResource> allow, int filterLimit) {
+        return transferItemsCount(level, link, sourceNode, targetNode, sourcePos, targetPos, allow, filterLimit) > 0;
+    }
+
+    private static int transferItemsCount(ServerLevel level, GraphLinkData link, GraphNodeData sourceNode, GraphNodeData targetNode, BlockPos sourcePos, BlockPos targetPos,
+                                         java.util.function.Predicate<ItemResource> allow, int filterLimit) {
         Direction physicalSourceSide = sideFrom(sourcePos, targetPos);
         Direction physicalTargetSide = physicalSourceSide == null ? null : physicalSourceSide.getOpposite();
         Direction overrideSide = sideOverride(link.sideOverride());
@@ -278,7 +309,7 @@ public final class EasyFactoryManager {
             targetSide = physicalTargetSide;
             target = itemHandler(level, targetPos, targetSide);
         }
-        if (source == null || target == null) return false;
+        if (source == null || target == null) return 0;
 
         int max = Math.min(itemLimit(level, sourcePos, targetPos), filterLimit);
         for (int slot = 0; slot < source.size(); slot++) {
@@ -297,12 +328,12 @@ public final class EasyFactoryManager {
                         if (inserted <= 0) continue;
                         if (inserted < extracted) continue;
                         tx.commit();
-                        return true;
+                        return (int) Math.min(Integer.MAX_VALUE, inserted);
                     }
                 }
             }
         }
-        return false;
+        return 0;
     }
 
     private static boolean canExtractItemFromSlot(ServerLevel level, GraphLinkData link, GraphNodeData sourceNode, BlockPos pos, Direction side, ResourceHandler<ItemResource> source, int handlerSlot, ItemResource resource) {
@@ -472,7 +503,7 @@ public final class EasyFactoryManager {
         for (Direction direction : Direction.values()) {
             BlockPos neighbor = attachedPos.relative(direction);
             BlockEntity be = level.getBlockEntity(neighbor);
-            if (be instanceof WirelessRouterBlockEntity router && router.attachedPos().equals(attachedPos)) return true;
+            if (be instanceof NetworkEndpointBlockEntity ep && !(ep instanceof NetworkModemBlockEntity) && ep.attachedPos().equals(attachedPos)) return true;
             if (be instanceof NetworkWireBlockEntity wire && wire.hasRouter() && wire.attachedPos().equals(attachedPos)) return true;
         }
         return false;
@@ -523,33 +554,18 @@ public final class EasyFactoryManager {
         return resource != null && !resource.isEmpty() && level.fuelValues().isFuel(resource.toStack());
     }
 
-    private static int singleAcceptingSlot(WorldlyContainer container, ItemResource resource) {
-        int found = -1;
-        for (int slot = 0; slot < container.getContainerSize(); slot++) {
-            if (!container.canPlaceItem(slot, resource.toStack())) continue;
-            if (found >= 0) return -1;
-            found = slot;
-        }
-        return found;
-    }
-
-    private static boolean isInputLikeInsertionSlot(WorldlyContainer container, int slot, ItemResource resource) {
-        if (slot < 0 || slot >= container.getContainerSize()) return false;
-        if (!container.canPlaceItem(slot, resource.toStack())) return false;
-        for (Direction face : Direction.values()) {
-            if (container.canPlaceItemThroughFace(slot, resource.toStack(), face)) return true;
-        }
-        return false;
-    }
-
     private static boolean transferFluids(ServerLevel level, BlockPos sourcePos, BlockPos targetPos) {
+        return transferFluidsCount(level, sourcePos, targetPos) > 0;
+    }
+
+    private static int transferFluidsCount(ServerLevel level, BlockPos sourcePos, BlockPos targetPos) {
         Direction sourceSide = sideFrom(sourcePos, targetPos);
         Direction targetSide = sourceSide == null ? null : sourceSide.getOpposite();
         ResourceHandler<FluidResource> source = fluidHandler(level, sourcePos, sourceSide);
         ResourceHandler<FluidResource> target = fluidHandler(level, targetPos, targetSide);
         if (source == null) source = fluidHandler(level, sourcePos, null);
         if (target == null) target = fluidHandler(level, targetPos, null);
-        if (source == null || target == null) return false;
+        if (source == null || target == null) return 0;
 
         long max = ModServerConfig.MAX_FLUID_MOVED_PER_ROUTE.get();
         for (int tank = 0; tank < source.size(); tank++) {
@@ -564,31 +580,35 @@ public final class EasyFactoryManager {
                 if (inserted <= 0) continue;
                 if (inserted < extracted) continue;
                 tx.commit();
-                return true;
+                return (int) Math.min(Integer.MAX_VALUE, inserted);
             }
         }
-        return false;
+        return 0;
     }
 
     private static boolean transferEnergy(ServerLevel level, BlockPos sourcePos, BlockPos targetPos) {
+        return transferEnergyCount(level, sourcePos, targetPos) > 0;
+    }
+
+    private static int transferEnergyCount(ServerLevel level, BlockPos sourcePos, BlockPos targetPos) {
         Direction sourceSide = sideFrom(sourcePos, targetPos);
         Direction targetSide = sourceSide == null ? null : sourceSide.getOpposite();
         EnergyHandler source = energyHandler(level, sourcePos, sourceSide);
         EnergyHandler target = energyHandler(level, targetPos, targetSide);
         if (source == null) source = energyHandler(level, sourcePos, null);
         if (target == null) target = energyHandler(level, targetPos, null);
-        if (source == null || target == null) return false;
+        if (source == null || target == null) return 0;
 
         int amount = (int) Math.min(Integer.MAX_VALUE, Math.min(ModServerConfig.MAX_ENERGY_MOVED_PER_ROUTE.get(), source.getAmountAsLong()));
-        if (amount <= 0) return false;
+        if (amount <= 0) return 0;
         try (Transaction tx = Transaction.openRoot()) {
             long extracted = source.extract(amount, tx);
-            if (extracted <= 0) return false;
+            if (extracted <= 0) return 0;
             long inserted = target.insert((int) extracted, tx);
-            if (inserted <= 0) return false;
-            if (inserted < extracted) return false;
+            if (inserted <= 0) return 0;
+            if (inserted < extracted) return 0;
             tx.commit();
-            return true;
+            return (int) Math.min(Integer.MAX_VALUE, inserted);
         }
     }
 }

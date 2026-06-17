@@ -30,6 +30,12 @@ public final class ModServerConfig {
     public static final ModConfigSpec.IntValue NETWORK_RELAY_POWER_COST;
     public static final ModConfigSpec.IntValue MAX_RELAY_TRAVERSAL;
     public static final ModConfigSpec.IntValue GENERATOR_FE_PER_BURN_TICK;
+    public static final ModConfigSpec.IntValue BATTERY_POWER_COST;
+    public static final ModConfigSpec.IntValue BATTERY_MAX_IO;
+    public static final ModConfigSpec.IntValue SCAN_RADIUS;
+    public static final ModConfigSpec.IntValue MAX_WIRE_TRAVERSAL_STEPS;
+    public static final ModConfigSpec.IntValue AUTO_SCAN_INTERVAL_TICKS;
+    public static final ModConfigSpec.BooleanValue REDSTONE_ALERT_ON_ERROR;
 
     static {
         ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
@@ -62,6 +68,16 @@ public final class ModServerConfig {
         NETWORK_RELAY_POWER_COST = builder.defineInRange("networkRelayPowerCostCentiFe", 300, 0, Integer.MAX_VALUE);
         MAX_RELAY_TRAVERSAL = builder.defineInRange("maxRelayTraversal", 128, 1, 1024);
         GENERATOR_FE_PER_BURN_TICK = builder.defineInRange("generatorFePerBurnTick", 40, 1, Integer.MAX_VALUE);
+        BATTERY_POWER_COST = builder.defineInRange("batteryPowerCostCentiFe", 25, 0, Integer.MAX_VALUE);
+        BATTERY_MAX_IO = builder.defineInRange("batteryMaxIoPerTick", 20000, 1, Integer.MAX_VALUE);
+        builder.pop();
+
+        builder.push("scan");
+        SCAN_RADIUS = builder.defineInRange("scanRadius", 16, 4, 64);
+        // raise this if you have a massive wired network and the traversal cap keeps firing
+        MAX_WIRE_TRAVERSAL_STEPS = builder.defineInRange("maxWireTraversalSteps", 256, 64, 4096);
+        AUTO_SCAN_INTERVAL_TICKS = builder.defineInRange("autoScanIntervalTicks", 0, 0, Integer.MAX_VALUE);
+        REDSTONE_ALERT_ON_ERROR = builder.define("redstoneAlertOnError", true);
         builder.pop();
 
         SPEC = builder.build();

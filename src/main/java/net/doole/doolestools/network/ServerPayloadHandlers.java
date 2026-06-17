@@ -132,7 +132,10 @@ public final class ServerPayloadHandlers {
         PacketDistributor.sendToPlayer(player,
                 new ComputerStatePayload(pos, be.getLastScan(), be.getGraph(), be.getLastScanTime(), be.getNetworkPower(), be.getActiveRouteIds(),
                         be.networkId(), be.networkName(), be.accessMode(), be.editorWhitelist(), be.canEdit(player),
-                        be.getPowerSupplyHistory(), be.getPowerDemandHistory()));
+                        be.getPowerSupplyHistory(), be.getPowerDemandHistory(),
+                        be.getSupply30m(), be.getDemand30m(), be.getSupply1h(), be.getDemand1h(),
+                        be.getSupply12h(), be.getDemand12h(), be.getSupply1d(), be.getDemand1d(),
+                        be.getSupplyAllTime(), be.getDemandAllTime(), be.getLinkThroughputHistory()));
         sendKnownNetworks(player);
     }
 
@@ -433,5 +436,67 @@ public final class ServerPayloadHandlers {
             if (node.nodeId().equals(nodeId)) return node;
         }
         return null;
+    }
+
+    // --- Multi-computer mesh ---
+
+    public static void handleLinkComputer(net.doole.doolestools.network.payload.LinkComputerPayload payload, IPayloadContext ctx) {
+        ctx.enqueueWork(() -> withComputer(ctx, payload.pos(), (player, be) -> {
+            if (!be.canEdit(player)) return;
+            if (!(player.level() instanceof ServerLevel level)) return;
+            String targetId = payload.targetNetworkId().trim();
+            BlockPos found = null;
+            // scan loaded chunks around the player to find the target computer by networkId
+            // not indexed so this is O(loaded block entities) - fine since linking is rare
+            outer:
+            for (int cx = (player.getBlockX() - 192) >> 4; cx <= (player.getBlockX() + 192) >> 4; cx++) {
+                for (int cz = (player.getBlockZ() - 192) >> 4; cz <= (player.getBlockZ() + 192) >> 4; cz++) {
+                    if (!(level.getChunk(cx, cz, net.minecraft.world.level.chunk.status.ChunkStatus.FULL, false)
+                            instanceof net.minecraft.world.level.chunk.LevelChunk chunk)) continue;
+                    for (BlockEntity blockEntity : chunk.getBlockEntities().values()) {
+                        if (blockEntity instanceof LogisticsComputerBlockEntity peer && !peer.getBlockPos().equals(payload.pos())) {
+                            if (peer.networkId().equals(targetId) || peer.formattedNetworkNumber().equals(targetId)) {
+                                found = peer.getBlockPos().immutable();
+                                break outer;
+                            }
+                        }
+                    }
+                }
+            }
+            if (found == null) {
+                player.sendSystemMessage(net.minecraft.network.chat.Component.literal("[LogiGraph] Network not found or not loaded: " + targetId));
+                return;
+            }
+            if (be.linkPeer(found, level)) {
+                sendLinkedComputers(player, payload.pos(), be);
+                sendComputerState(player, payload.pos(), be);
+            } else {
+                player.sendSystemMessage(net.minecraft.network.chat.Component.literal("[LogiGraph] Link failed (already linked, at limit, or same computer)"));
+            }
+        }));
+    }
+
+    public static void handleUnlinkComputer(net.doole.doolestools.network.payload.UnlinkComputerPayload payload, IPayloadContext ctx) {
+        ctx.enqueueWork(() -> withComputer(ctx, payload.pos(), (player, be) -> {
+            if (!be.canEdit(player)) return;
+            be.unlinkPeer(payload.peerPos());
+            sendLinkedComputers(player, payload.pos(), be);
+            sendComputerState(player, payload.pos(), be);
+        }));
+    }
+
+    private static void sendLinkedComputers(ServerPlayer player, BlockPos pos, LogisticsComputerBlockEntity be) {
+        List<BlockPos> peers = be.getLinkedPeerPositions();
+        List<String> ids = new ArrayList<>(peers.size());
+        if (player.level() instanceof ServerLevel level) {
+            for (BlockPos peerPos : peers) {
+                String id = "";
+                if (level.hasChunkAt(peerPos) && level.getBlockEntity(peerPos) instanceof LogisticsComputerBlockEntity peer) {
+                    id = peer.networkId();
+                }
+                ids.add(id);
+            }
+        }
+        PacketDistributor.sendToPlayer(player, new net.doole.doolestools.network.payload.LinkedComputersPayload(pos, peers, ids));
     }
 }

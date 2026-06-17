@@ -1,8 +1,10 @@
 package net.doole.doolestools.logistics;
 
+import net.doole.doolestools.blockentity.NetworkBatteryBlockEntity;
+import net.doole.doolestools.blockentity.NetworkGeneratorBlockEntity;
 import net.doole.doolestools.blockentity.NetworkModemBlockEntity;
 import net.doole.doolestools.blockentity.NetworkWireBlockEntity;
-import net.doole.doolestools.blockentity.WirelessRouterBlockEntity;
+import net.doole.doolestools.blockentity.NetworkEndpointBlockEntity;
 import net.doole.doolestools.config.ModServerConfig;
 import net.doole.doolestools.logistics.network.NetworkNodeIndex;
 import net.doole.doolestools.logistics.data.GraphLinkData;
@@ -27,11 +29,23 @@ import java.util.Map;
 import java.util.Set;
 
 public final class NetworkPowerCalculator {
-    private static final int MAX_COMPONENT_STEPS = 256;
+    // fallback if the config isnt loaded yet (shouldnt happen in normal play)
+    private static final int MAX_COMPONENT_STEPS_FALLBACK = 256;
+
+    private static int maxSteps() {
+        return ModServerConfig.MAX_WIRE_TRAVERSAL_STEPS.get();
+    }
 
     private NetworkPowerCalculator() {}
 
+    /** Power snapshot plus the wired batteries the caller (server tick) may charge/discharge. */
+    public record Result(NetworkPowerData data, List<NetworkBatteryBlockEntity> batteries) {}
+
     public static NetworkPowerData calculate(ServerLevel level, BlockPos computerPos, List<ScannedBlockData> scan, LogisticsGraphData graph, String networkId) {
+        return calculateResult(level, computerPos, scan, graph, networkId).data();
+    }
+
+    public static Result calculateResult(ServerLevel level, BlockPos computerPos, List<ScannedBlockData> scan, LogisticsGraphData graph, String networkId) {
         Counts counts = countWiredComponents(level, computerPos);
         List<RelayNode> relays = discoverReachableRelays(level, computerPos, networkId);
         int wirelessRouters = countStandaloneWirelessRouters(level, computerPos, relays);
@@ -50,19 +64,30 @@ public final class NetworkPowerCalculator {
             }
         }
 
+        int batteryCount = counts.batteries.size();
+        int batteryCost = batteryCount * ModServerConfig.BATTERY_POWER_COST.get();
+        long batteryStored = 0L, batteryCapacity = 0L;
+        for (NetworkBatteryBlockEntity battery : counts.batteries) {
+            batteryStored += battery.energy();
+            batteryCapacity += battery.capacity();
+        }
+
         int computerCost = ModServerConfig.COMPUTER_POWER_COST.get();
         int endpointCost = counts.routerEndpoints * ModServerConfig.WIRELESS_ROUTER_POWER_COST.get()
                 + counts.modemEndpoints * ModServerConfig.MODEM_POWER_COST.get()
                 + relayPowerCost(relays);
         int wireCost = counts.wires * ModServerConfig.WIRE_SEGMENT_POWER_COST.get();
         int deviceCost = deviceCount * ModServerConfig.VISIBLE_DEVICE_POWER_COST.get();
-        int demand = computerCost + endpointCost + wireCost + deviceCost + routeCost;
+        int demand = computerCost + endpointCost + wireCost + deviceCost + routeCost + batteryCost;
         // Power comes ONLY from real FE sources (Network Generator, battery, other mods' energy).
-        // There is no virtual/demo supply: no source means 0 FE/t and automation stops.
-        int supply = realSupplyCentiFe(level, computerPos);
-        return new NetworkPowerData(supply, demand,
+        // There is no virtual/demo supply: no source means 0 FE/t and automation stops. All generators
+        // discovered on the wired network are summed, plus anything directly adjacent to the computer.
+        int supply = realSupplyCentiFe(level, computerPos, counts.generators);
+        NetworkPowerData data = new NetworkPowerData(supply, demand,
                 computerCost, endpointCost, wireCost, deviceCost, routeCost,
-                counts.endpoints, counts.wires, deviceCount, routeCount);
+                counts.endpoints, counts.wires, deviceCount, routeCount,
+                batteryCost, batteryStored, batteryCapacity, batteryCount, counts.generators.size());
+        return new Result(data, List.copyOf(counts.batteries));
     }
 
     /**
@@ -92,14 +117,23 @@ public final class NetworkPowerCalculator {
         return Math.min(1f, pulled / (float) needed);
     }
 
-    private static int realSupplyCentiFe(ServerLevel level, BlockPos computerPos) {
+    private static int realSupplyCentiFe(ServerLevel level, BlockPos computerPos, List<NetworkGeneratorBlockEntity> wiredGenerators) {
         int interval = Math.max(1, ModServerConfig.EASY_FACTORY_TICK_INTERVAL.get());
         long extractable = 0L;
+        // Sources directly adjacent to the computer (any energy provider, incl. other mods).
         for (Direction direction : Direction.values()) {
             EnergyHandler handler = energyHandler(level, computerPos.relative(direction), direction.getOpposite());
             if (handler == null) continue;
             try (Transaction tx = Transaction.openRoot()) {
                 extractable += Math.max(0, handler.extract(Integer.MAX_VALUE, tx));
+            } catch (RuntimeException ignored) {
+            }
+            if (extractable > Integer.MAX_VALUE / 100L) break;
+        }
+        // All Network Generators reachable over the wired network are summed in.
+        for (NetworkGeneratorBlockEntity generator : wiredGenerators) {
+            try (Transaction tx = Transaction.openRoot()) {
+                extractable += Math.max(0, generator.energyHandler().extract(Integer.MAX_VALUE, tx));
             } catch (RuntimeException ignored) {
             }
             if (extractable > Integer.MAX_VALUE / 100L) break;
@@ -172,6 +206,10 @@ public final class NetworkPowerCalculator {
         Counts counts = new Counts();
         ArrayDeque<BlockPos> queue = new ArrayDeque<>();
         Set<BlockPos> seen = new HashSet<>();
+        Set<BlockPos> sources = new HashSet<>();
+        // generators and batteries can sit directly against the computer, not just behind a modem
+        // i'll add a config to raise MAX_COMPONENT_STEPS later if servers complain about huge wire grids
+        collectSources(level, computerPos, counts, sources);
         for (Direction direction : Direction.values()) {
             BlockPos pos = computerPos.relative(direction);
             BlockEntity be = level.getBlockEntity(pos);
@@ -182,7 +220,8 @@ public final class NetworkPowerCalculator {
             }
         }
 
-        while (!queue.isEmpty() && seen.size() < MAX_COMPONENT_STEPS) {
+        int limit = maxSteps();
+        while (!queue.isEmpty() && seen.size() < limit) {
             BlockPos pos = queue.removeFirst();
             if (!seen.add(pos)) continue;
             BlockEntity be = level.getBlockEntity(pos);
@@ -192,14 +231,35 @@ public final class NetworkPowerCalculator {
                     counts.endpoints++;
                     if (wire.hasRouter()) counts.routerEndpoints++; else counts.modemEndpoints++;
                 }
+                collectSources(level, pos, counts, sources);
                 for (Direction direction : Direction.values()) queue.add(pos.relative(direction));
             } else if (be instanceof NetworkModemBlockEntity) {
                 counts.endpoints++;
                 counts.modemEndpoints++;
+                collectSources(level, pos, counts, sources);
                 for (Direction direction : Direction.values()) queue.add(pos.relative(direction));
             }
         }
+        // warn once if we bailed early - raise maxWireTraversalSteps in server config if this fires often
+        if (!queue.isEmpty()) {
+            net.doole.doolestools.DoolesTools.LOGGER.debug(
+                "wire traversal capped at {} steps near {} - raise maxWireTraversalSteps in config if you see this a lot", limit, computerPos);
+        }
         return counts;
+    }
+
+    /** Records any Network Generators / Batteries adjacent to {@code center}, deduped by position. */
+    private static void collectSources(ServerLevel level, BlockPos center, Counts counts, Set<BlockPos> sources) {
+        for (Direction direction : Direction.values()) {
+            BlockPos pos = center.relative(direction);
+            if (!sources.add(pos)) continue;
+            BlockEntity be = level.getBlockEntity(pos);
+            if (be instanceof NetworkGeneratorBlockEntity generator) {
+                counts.generators.add(generator);
+            } else if (be instanceof NetworkBatteryBlockEntity battery) {
+                counts.batteries.add(battery);
+            }
+        }
     }
 
     private static int countStandaloneWirelessRouters(ServerLevel level, BlockPos computerPos, List<RelayNode> relays) {
@@ -278,7 +338,7 @@ public final class NetworkPowerCalculator {
         for (Direction direction : Direction.values()) {
             BlockPos neighbor = attachedPos.relative(direction);
             BlockEntity be = level.getBlockEntity(neighbor);
-            if (be instanceof WirelessRouterBlockEntity router && router.attachedPos().equals(attachedPos)) return true;
+            if (be instanceof NetworkEndpointBlockEntity router && router.attachedPos().equals(attachedPos)) return true;
             if (be instanceof NetworkWireBlockEntity wire && wire.hasRouter() && wire.attachedPos().equals(attachedPos)) return true;
         }
         return false;
@@ -290,7 +350,7 @@ public final class NetworkPowerCalculator {
         for (Direction direction : Direction.values()) {
             BlockPos neighbor = attachedPos.relative(direction);
             BlockEntity be = level.getBlockEntity(neighbor);
-            if (be instanceof WirelessRouterBlockEntity router && router.attachedPos().equals(attachedPos)) {
+            if (be instanceof NetworkEndpointBlockEntity router && router.attachedPos().equals(attachedPos)) {
                 total += router.upgradeCount(type);
             } else if (be instanceof NetworkWireBlockEntity wire && wire.hasEndpoint() && wire.attachedPos().equals(attachedPos)) {
                 total += wire.upgradeCount(type);
@@ -323,5 +383,7 @@ public final class NetworkPowerCalculator {
         int routerEndpoints;
         int modemEndpoints;
         int relayEndpoints;
+        final List<NetworkGeneratorBlockEntity> generators = new java.util.ArrayList<>();
+        final List<NetworkBatteryBlockEntity> batteries = new java.util.ArrayList<>();
     }
 }

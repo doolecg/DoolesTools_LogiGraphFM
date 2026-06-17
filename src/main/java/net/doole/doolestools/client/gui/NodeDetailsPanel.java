@@ -197,6 +197,17 @@ public class NodeDetailsPanel {
             if (other != null) {
                 g.text(font, trim(font, other, w), x, cy, DUTheme.TEXT, false);
                 cy += 10;
+                double avg = ctx.linkAvgPerMinute(l.linkId());
+                if (avg >= 0.0) {
+                    String unit = switch (l.type()) {
+                        case ITEMS -> "items/min";
+                        case FLUIDS -> "mB/min";
+                        case ENERGY -> "FE/min";
+                        case MANUAL -> "moves/min";
+                    };
+                    g.text(font, trim(font, String.format(java.util.Locale.ROOT, "%.1f %s", avg, unit), w - 4), x + 4, cy, DUTheme.TEXT_DIM, false);
+                    cy += 10;
+                }
                 any = true;
             }
         }

@@ -11,6 +11,6 @@ public class NetworkModemBlockEntity extends NetworkEndpointBlockEntity {
 
     @Override
     public String deviceKind() {
-        return "Network Modem";
+        return "Cable Socket";
     }
 }

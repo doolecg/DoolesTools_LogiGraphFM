@@ -5,7 +5,9 @@ import net.doole.doolestools.logistics.data.ScannedBlockData;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 /** Left panel listing network-visible devices with icon, name, distance, and a status light. */
 public class ScannedBlockListWidget {
@@ -15,10 +17,60 @@ public class ScannedBlockListWidget {
     private final EditorContext ctx;
     public int x, y, w, h;
     private int scroll = 0;
+    /** Scanned-block ids selected for a multi-drop drag (Ctrl/Shift click). */
+    private final Set<String> multiSelectedIds = new LinkedHashSet<>();
+    private int lastClickedRow = -1;
 
     public ScannedBlockListWidget(EditorContext ctx, int x, int y, int w, int h) {
         this.ctx = ctx;
         this.x = x; this.y = y; this.w = w; this.h = h;
+    }
+
+    public Set<String> multiSelectedIds() {
+        return multiSelectedIds;
+    }
+
+    public void clearMultiSelect() {
+        multiSelectedIds.clear();
+        lastClickedRow = -1;
+    }
+
+    /** Returns the row index under the cursor, or -1. */
+    public int rowIndexAt(double mx, double my) {
+        if (!contains(mx, my)) return -1;
+        List<ScannedBlockData> list = ctx.filteredScan();
+        int idx = (int) ((my - y) / ROW_H) + scroll;
+        if (idx < 0 || idx >= list.size()) return -1;
+        return idx;
+    }
+
+    /**
+     * Handles modifier-aware clicks on the list. Ctrl toggles a row in/out of the multi-select set;
+     * Shift range-selects from the last clicked row. Returns true if a multi-select gesture was handled
+     * (so the caller should not start a normal drag); false for a plain click.
+     */
+    public boolean handleModifierClick(double mx, double my, boolean ctrl, boolean shift) {
+        int idx = rowIndexAt(mx, my);
+        if (idx < 0) return false;
+        List<ScannedBlockData> list = ctx.filteredScan();
+        if (ctrl) {
+            String id = list.get(idx).id();
+            if (!multiSelectedIds.remove(id)) multiSelectedIds.add(id);
+            lastClickedRow = idx;
+            return true;
+        }
+        if (shift && lastClickedRow >= 0) {
+            int lo = Math.min(lastClickedRow, idx);
+            int hi = Math.max(lastClickedRow, idx);
+            multiSelectedIds.clear();
+            for (int i = lo; i <= hi && i < list.size(); i++) multiSelectedIds.add(list.get(i).id());
+            return true;
+        }
+        // Plain click: this row becomes the multi-select anchor and the sole member.
+        lastClickedRow = idx;
+        multiSelectedIds.clear();
+        multiSelectedIds.add(list.get(idx).id());
+        return false;
     }
 
     public boolean contains(double mx, double my) {
@@ -52,9 +104,10 @@ public class ScannedBlockListWidget {
             if (ry > y + h) break;
             ScannedBlockData s = list.get(i);
             boolean selected = s.id().equals(ctx.selectedScannedId);
+            boolean multi = multiSelectedIds.contains(s.id());
 
-            g.fill(x, ry, x + w, ry + ROW_H - 1, selected ? 0xFF14301f : (row % 2 == 0 ? DUTheme.PANEL_ALT : DUTheme.PANEL));
-            if (selected) DUTheme.outline(g, x, ry, w, ROW_H - 1, DUTheme.SELECTED);
+            g.fill(x, ry, x + w, ry + ROW_H - 1, (selected || multi) ? 0xFF14301f : (row % 2 == 0 ? DUTheme.PANEL_ALT : DUTheme.PANEL));
+            if (selected || multi) DUTheme.outline(g, x, ry, w, ROW_H - 1, DUTheme.SELECTED);
 
             // Real item icon (falls back to a category-coloured square).
             ItemIcons.render(g, s.registryId(), x + 3, ry + 3, ItemIcons.SIZE, iconColor(s));

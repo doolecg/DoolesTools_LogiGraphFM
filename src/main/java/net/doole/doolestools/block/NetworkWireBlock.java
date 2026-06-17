@@ -147,7 +147,7 @@ public class NetworkWireBlock extends Block implements EntityBlock {
         String id = "0000";
         int[] upgrades = new int[] { 0, 0, 0, 0 };
         if (level.getBlockEntity(pos) instanceof NetworkWireBlockEntity wire) {
-            title = wire.hasRouter() ? "Wireless Router" : wire.hasModem() ? "Network Modem" : title;
+            title = wire.hasRouter() ? "Wireless Router" : wire.hasModem() ? "Cable Socket" : title;
             name = wire.hasEndpoint() ? wire.endpointName() : "";
             id = wire.hasEndpoint() ? wire.formattedEndpointId() : id;
             upgrades = wire.hasEndpoint() ? wire.upgradeCounts() : upgrades;
