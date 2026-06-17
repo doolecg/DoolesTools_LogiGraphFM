@@ -16,8 +16,11 @@ public final class WirelessNetworkPolicy {
         return distanceSqr <= (long) range * range;
     }
 
-    public static int itemLimit(int baseLimit, int stackUpgrades) {
-        return Math.max(1, Math.min(64, Math.max(1, baseLimit) + Math.max(0, stackUpgrades) * 16));
+    /** Speed upgrades double the per-tick item limit (capped at 1 stack = 64). Stack upgrades add 64 beyond that. */
+    public static int speedItemLimit(int base, int speedUpgrades, int stackUpgrades) {
+        int cappedSpeed = Math.max(0, Math.min(4, speedUpgrades));
+        int speedMax = Math.min(64, Math.max(1, base) << cappedSpeed);
+        return speedMax + Math.max(0, stackUpgrades) * 64;
     }
 
     public static int routeBudgetBonus(int speedUpgrades, boolean wireless) {

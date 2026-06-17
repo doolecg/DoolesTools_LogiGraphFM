@@ -209,9 +209,11 @@ public abstract class NetworkEndpointBlockEntity extends BlockEntity {
         if (value == null) return "";
         StringBuilder out = new StringBuilder();
         String trimmed = value.trim();
-        for (int i = 0; i < trimmed.length() && out.length() < 48; i++) {
-            char c = trimmed.charAt(i);
-            if (!Character.isISOControl(c)) out.append(c);
+        int i = 0;
+        while (i < trimmed.length() && out.length() < 48) {
+            int cp = trimmed.codePointAt(i);
+            i += Character.charCount(cp);
+            if (!Character.isISOControl(cp)) out.appendCodePoint(cp);
         }
         return out.toString();
     }

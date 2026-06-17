@@ -165,6 +165,15 @@ public abstract class NetworkEndpointBlock extends DirectionalBlock implements E
         }
     }
 
+    static void openEndpointNameScreen(BlockPos pos, String title, String currentName, String currentId, int[] upgradeCounts, Direction face) {
+        try {
+            Class<?> bridge = Class.forName("net.doole.doolestools.client.LabelGunClientBridge");
+            Method open = bridge.getMethod("openEndpointNameForFace", BlockPos.class, String.class, String.class, String.class, int[].class, Direction.class);
+            open.invoke(null, pos, title, currentName, currentId, upgradeCounts, face);
+        } catch (ReflectiveOperationException ignored) {
+        }
+    }
+
     @Nullable
     @Override
     public abstract BlockEntity newBlockEntity(BlockPos pos, BlockState state);

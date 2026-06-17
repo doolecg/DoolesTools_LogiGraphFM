@@ -97,16 +97,21 @@ public class NetworkWireBlock extends Block implements EntityBlock {
 
     @Override
     protected InteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
+        // Block items must pass through so wire-to-wire placement works even when an endpoint is mounted.
+        if (stack.getItem() instanceof net.minecraft.world.item.BlockItem) return InteractionResult.PASS;
+
         // Upgrades/screwdriver work on a plain right-click (no shift): vanilla skips useItemOn when the
         // player sneaks with an item in hand, so a shift-gated install could never fire.
         if (hasEndpointFlag(state) && level.getBlockEntity(pos) instanceof NetworkWireBlockEntity wire) {
+            Direction hitFace = hit.getDirection();
             if (stack.getItem() == ModItems.NETWORK_SCREWDRIVER.get()) {
-                if (!level.isClientSide()) removeOneUpgrade(level, pos, player, wire);
+                if (!level.isClientSide()) removeOneUpgrade(level, pos, player, wire, hitFace);
                 return InteractionResult.SUCCESS;
             }
             String upgradeType = ModItems.upgradeType(stack);
             if (!upgradeType.isBlank()) {
-                if (!level.isClientSide() && wire.installUpgrade(upgradeType)) {
+                Direction epFace = wire.hasEndpointAt(hitFace) ? hitFace : wire.endpointFace();
+                if (!level.isClientSide() && wire.installUpgrade(upgradeType, epFace)) {
                     if (!player.getAbilities().instabuild) stack.shrink(1);
                     level.sendBlockUpdated(pos, state, state, 3);
                 }
@@ -114,7 +119,7 @@ public class NetworkWireBlock extends Block implements EntityBlock {
             }
         }
 
-        // Placing a socket item onto a bare wire.
+        // Placing a socket item onto a wire face.
         String kind = null;
         if (stack.getItem() == ModItems.NETWORK_MODEM.get()) kind = "modem";
         if (kind != null) {
@@ -130,7 +135,7 @@ public class NetworkWireBlock extends Block implements EntityBlock {
 
         // Otherwise open the endpoint screen if one is mounted.
         if (hasEndpointFlag(state)) {
-            if (level.isClientSide()) openWireEndpointScreen(level, pos);
+            if (level.isClientSide()) openWireEndpointScreen(level, pos, hit.getDirection());
             return InteractionResult.SUCCESS;
         }
         return InteractionResult.PASS;
@@ -139,30 +144,31 @@ public class NetworkWireBlock extends Block implements EntityBlock {
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
         if (!hasEndpointFlag(state)) return InteractionResult.PASS;
-        if (level.isClientSide()) openWireEndpointScreen(level, pos);
+        if (level.isClientSide()) openWireEndpointScreen(level, pos, hit.getDirection());
         return InteractionResult.SUCCESS;
     }
 
-    private static void openWireEndpointScreen(Level level, BlockPos pos) {
-        String title = "Network Endpoint";
-        String name = "";
-        String id = "0000";
-        int[] upgrades = new int[] { 0, 0, 0, 0 };
-        if (level.getBlockEntity(pos) instanceof NetworkWireBlockEntity wire) {
-            title = wire.hasRouter() ? "Wireless Router" : wire.hasModem() ? "Cable Socket" : title;
-            name = wire.hasEndpoint() ? wire.endpointName() : "";
-            id = wire.hasEndpoint() ? wire.formattedEndpointId() : id;
-            upgrades = wire.hasEndpoint() ? wire.upgradeCounts() : upgrades;
-        }
-        NetworkEndpointBlock.openEndpointNameScreen(pos, title, name, id, upgrades);
+    private static void openWireEndpointScreen(Level level, BlockPos pos, Direction hitFace) {
+        if (!(level.getBlockEntity(pos) instanceof NetworkWireBlockEntity wire)) return;
+        // Pick the endpoint on the hit face; fall back to any available endpoint.
+        Direction useFace = wire.hasEndpointAt(hitFace) ? hitFace
+                : wire.endpointFaces().stream().findFirst().orElse(hitFace);
+        String title = wire.hasRouter() ? "Wireless Router" : wire.hasModem() ? "Cable Socket" : "Network Endpoint";
+        String name = wire.hasEndpointAt(useFace) ? wire.endpointName(useFace) : "";
+        String id = wire.hasEndpointAt(useFace) ? wire.formattedEndpointId(useFace) : "0000";
+        int[] upgrades = wire.hasEndpointAt(useFace) ? wire.upgradeCounts(useFace) : new int[]{0, 0, 0, 0};
+        NetworkEndpointBlock.openEndpointNameScreen(pos, title, name, id, upgrades, useFace);
     }
 
     @Override
     public boolean onDestroyedByPlayer(BlockState state, Level level, BlockPos pos, Player player, ItemStack toolStack, boolean willHarvest, FluidState fluid) {
         if (level.getBlockEntity(pos) instanceof NetworkWireBlockEntity wire && wire.hasEndpoint()) {
             if (!level.isClientSide()) {
-                ItemStack drop = new ItemStack(ModItems.NETWORK_MODEM.get());
-                if (player == null || !player.getAbilities().instabuild) popResource(level, pos, drop);
+                // Drop one modem per installed endpoint, then leave the wire intact.
+                for (Direction face : wire.endpointFaces()) {
+                    if (player == null || !player.getAbilities().instabuild)
+                        popResource(level, pos, new ItemStack(ModItems.NETWORK_MODEM.get()));
+                }
                 wire.clearEndpoint();
             }
             return false;
@@ -170,9 +176,11 @@ public class NetworkWireBlock extends Block implements EntityBlock {
         return super.onDestroyedByPlayer(state, level, pos, player, toolStack, willHarvest, fluid);
     }
 
-    private static void removeOneUpgrade(Level level, BlockPos pos, Player player, NetworkWireBlockEntity wire) {
+    private static void removeOneUpgrade(Level level, BlockPos pos, Player player, NetworkWireBlockEntity wire, Direction hitFace) {
+        // Try the hit face first, then fall back to the first endpoint with upgrades.
+        Direction epFace = wire.hasEndpointAt(hitFace) ? hitFace : wire.endpointFace();
         for (String type : new String[] { "efficiency", "range", "stack", "speed" }) {
-            if (!wire.removeUpgrade(type)) continue;
+            if (!wire.removeUpgrade(type, epFace)) continue;
             giveOrDrop(level, pos, player, type);
             player.sendSystemMessage(Component.literal(ModItems.upgradeLabel(type) + " upgrade removed"));
             return;
@@ -229,8 +237,10 @@ public class NetworkWireBlock extends Block implements EntityBlock {
             state = state.setValue(propertyFor(direction), connectsTo(level, pos.relative(direction)));
             state = state.setValue(endpointPropertyFor(direction), false);
         }
-        if (level.getBlockEntity(pos) instanceof NetworkWireBlockEntity wire && wire.hasEndpoint()) {
-            state = state.setValue(endpointPropertyFor(wire.endpointFace()), true);
+        if (level.getBlockEntity(pos) instanceof NetworkWireBlockEntity wire) {
+            for (Direction epFace : wire.endpointFaces()) {
+                state = state.setValue(endpointPropertyFor(epFace), true);
+            }
         }
         return state;
     }

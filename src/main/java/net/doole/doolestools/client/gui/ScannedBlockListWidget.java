@@ -20,7 +20,7 @@ public class ScannedBlockListWidget {
     /** Scanned-block ids selected for a multi-drop drag (Ctrl/Shift click). */
     private final Set<String> multiSelectedIds = new LinkedHashSet<>();
     private int lastClickedRow = -1;
-    private static final int TAB_W = 12;
+    private static final int TAB_W = 22;
 
     public ScannedBlockListWidget(EditorContext ctx, int x, int y, int w, int h) {
         this.ctx = ctx;
@@ -149,9 +149,17 @@ public class ScannedBlockListWidget {
             if (ty >= y + h) break;
             EditorContext.NetworkTab tab = tabs.get(i);
             boolean selected = tab.id().equals(ctx.selectedScanNetworkId);
-            g.fill(x, ty, x + TAB_W - 1, Math.min(y + h, ty + 32), selected ? DUTheme.SELECTED : DUTheme.PANEL_ALT);
+            int tabH = Math.min(y + h, ty + 32) - ty;
+            g.fill(x, ty, x + TAB_W - 1, ty + tabH, selected ? DUTheme.SELECTED : DUTheme.PANEL_ALT);
+            if (selected) g.fill(x + TAB_W - 2, ty, x + TAB_W - 1, ty + tabH, DUTheme.TEXT_GREEN);
             String label = tab.name() == null || tab.name().isBlank() ? "NET" : tab.name();
-            g.text(font, label.substring(0, Math.min(1, label.length())).toUpperCase(java.util.Locale.ROOT), x + 3, ty + 11, selected ? 0xFF001408 : DUTheme.TEXT_DIM, false);
+            String abbrev = label.length() >= 3
+                    ? label.substring(0, 3).toUpperCase(java.util.Locale.ROOT)
+                    : label.toUpperCase(java.util.Locale.ROOT);
+            int labelColor = selected ? 0xFF001408 : DUTheme.TEXT_DIM;
+            g.text(font, abbrev.substring(0, Math.min(1, abbrev.length())), x + 3, ty + 6, labelColor, false);
+            if (abbrev.length() >= 2) g.text(font, abbrev.substring(1, 2), x + 3, ty + 14, labelColor, false);
+            if (abbrev.length() >= 3) g.text(font, abbrev.substring(2, 3), x + 3, ty + 22, labelColor, false);
         }
     }
 

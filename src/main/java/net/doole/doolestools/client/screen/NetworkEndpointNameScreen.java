@@ -12,7 +12,9 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
+import org.jetbrains.annotations.Nullable;
 
 public class NetworkEndpointNameScreen extends Screen {
     private static final int PANEL_W = 260;
@@ -22,23 +24,25 @@ public class NetworkEndpointNameScreen extends Screen {
     private final String initialName;
     private final String initialId;
     private final int[] upgradeCounts;
+    @Nullable private final Direction endpointFace;
     private int networkIndex;
     private boolean networkDropdownOpen;
     private EditBox idBox;
     private EditBox nicknameBox;
     private TerminalButton networkButton;
 
-    public NetworkEndpointNameScreen(BlockPos pos, String title, String initialName, String initialId, int[] upgradeCounts) {
+    public NetworkEndpointNameScreen(BlockPos pos, String title, String initialName, String initialId, int[] upgradeCounts, @Nullable Direction endpointFace) {
         super(Component.literal(title));
         this.pos = pos;
         this.title = title == null || title.isBlank() ? "Network Endpoint" : title;
         this.initialName = initialName == null ? "" : initialName;
         this.initialId = initialId == null || initialId.isBlank() ? "0000" : initialId;
         this.upgradeCounts = normalizeUpgradeCounts(upgradeCounts);
+        this.endpointFace = endpointFace;
     }
 
-    public static void open(BlockPos pos, String title, String currentName, String currentId, int[] upgradeCounts) {
-        Minecraft.getInstance().setScreen(new NetworkEndpointNameScreen(pos, title, currentName, currentId, upgradeCounts));
+    public static void open(BlockPos pos, String title, String currentName, String currentId, int[] upgradeCounts, @Nullable Direction face) {
+        Minecraft.getInstance().setScreen(new NetworkEndpointNameScreen(pos, title, currentName, currentId, upgradeCounts, face));
     }
 
     @Override
@@ -77,7 +81,8 @@ public class NetworkEndpointNameScreen extends Screen {
         DUTheme.bezel(g, x, y, PANEL_W, PANEL_H);
         DUTheme.box(g, x + 6, y + 6, PANEL_W - 12, PANEL_H - 12, DUTheme.SCREEN, DUTheme.PANEL_BORDER);
         g.text(font, title.toUpperCase(java.util.Locale.ROOT), x + 12, y + 12, DUTheme.TEXT_GREEN, false);
-        g.text(font, "Endpoint identity", x + 12, y + 22, DUTheme.TEXT_DIM, false);
+        String subtitle = endpointFace != null ? "Endpoint identity (" + endpointFace.getSerializedName() + " face)" : "Endpoint identity";
+        g.text(font, subtitle, x + 12, y + 22, DUTheme.TEXT_DIM, false);
         g.text(font, "ID", x + 12, y + 37, DUTheme.TEXT_DIM, false);
         g.text(font, "NETWORK", x + 12, y + 55, DUTheme.TEXT_DIM, false);
         g.text(font, "NICKNAME", x + 12, y + 73, DUTheme.TEXT_DIM, false);
@@ -117,7 +122,11 @@ public class NetworkEndpointNameScreen extends Screen {
     }
 
     private void saveAndClose() {
-        ClientNetworkSender.setNetworkEndpointIdentity(pos, nicknameBox.getValue(), selectedNetworkId());
+        if (endpointFace != null) {
+            ClientNetworkSender.setNetworkEndpointIdentity(pos, nicknameBox.getValue(), selectedNetworkId(), endpointFace);
+        } else {
+            ClientNetworkSender.setNetworkEndpointIdentity(pos, nicknameBox.getValue(), selectedNetworkId());
+        }
         onClose();
     }
 

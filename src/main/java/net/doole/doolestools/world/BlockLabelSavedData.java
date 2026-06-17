@@ -69,9 +69,11 @@ public class BlockLabelSavedData extends SavedData {
         if (label == null) return "";
         StringBuilder out = new StringBuilder();
         String trimmed = label.trim();
-        for (int i = 0; i < trimmed.length() && out.length() < MAX_LABEL; i++) {
-            char c = trimmed.charAt(i);
-            if (!Character.isISOControl(c)) out.append(c);
+        int i = 0;
+        while (i < trimmed.length() && out.length() < MAX_LABEL) {
+            int cp = trimmed.codePointAt(i);
+            i += Character.charCount(cp);
+            if (!Character.isISOControl(cp)) out.appendCodePoint(cp);
         }
         return out.toString();
     }

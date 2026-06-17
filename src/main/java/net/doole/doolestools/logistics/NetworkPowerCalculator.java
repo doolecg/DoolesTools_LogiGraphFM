@@ -215,7 +215,7 @@ public final class NetworkPowerCalculator {
             BlockEntity be = level.getBlockEntity(pos);
             if (be instanceof NetworkModemBlockEntity modem && modem.attachedPos().equals(computerPos)) {
                 queue.add(pos);
-            } else if (be instanceof NetworkWireBlockEntity wire && wire.hasModem() && wire.attachedPos().equals(computerPos)) {
+            } else if (be instanceof NetworkWireBlockEntity wire && wire.hasModem() && wireAttachesToPos(wire, computerPos)) {
                 queue.add(pos);
             }
         }
@@ -227,7 +227,9 @@ public final class NetworkPowerCalculator {
             BlockEntity be = level.getBlockEntity(pos);
             if (be instanceof NetworkWireBlockEntity wire) {
                 counts.wires++;
-                if (wire.hasEndpoint()) {
+                // Each face may have its own endpoint — count each one.
+                for (Direction epDir : Direction.values()) {
+                    if (!wire.hasEndpointAt(epDir)) continue;
                     counts.endpoints++;
                     if (wire.hasRouter()) counts.routerEndpoints++; else counts.modemEndpoints++;
                 }
@@ -366,6 +368,14 @@ public final class NetworkPowerCalculator {
                 rangeUpgrades,
                 ModServerConfig.WIRELESS_MAX_RANGE.get(),
                 distanceSqr(computerPos, endpointPos));
+    }
+
+    /** Returns true if any endpoint face on this wire points to {@code pos}. */
+    private static boolean wireAttachesToPos(NetworkWireBlockEntity wire, BlockPos pos) {
+        for (Direction dir : Direction.values()) {
+            if (wire.hasEndpointAt(dir) && wire.attachedPos(dir).equals(pos)) return true;
+        }
+        return false;
     }
 
     private static long distanceSqr(BlockPos a, BlockPos b) {

@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-> Beta testing build. Back up worlds before testing current Switchboard/LFM/network assignment behavior.
+## [0.6.0] — 2026-06-17
 
 ### Added
 
@@ -42,11 +42,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed / Optimised
 
+- **Double chest — one dongle/socket is enough** — a dongle or socket on either half of a double chest
+  now correctly exposes the full combined 54-slot inventory. Previously the non-canonical half was
+  silently ignored. Placing a second chest next to a connected single chest is picked up on the next
+  scan without any extra hardware.
 - **Endpoint network assignment** — newly placed routers, dongles, and sockets auto-join exactly one nearby
   computer network when unambiguous; otherwise they remain isolated until assigned.
 - **Graph node labels** — scanned nodes now show device/block name plus id in the title and source network
   in smaller text at the node footer.
-
 - **GraphCanvasWidget.nodeMap()** was rebuilding a `HashMap` on every hit-test call (link click,
   port hover, etc.), ignoring the existing revision-gated cache. Now returns `cachedNodesById`
   directly after calling `ensureModel()` — zero extra allocations on frames where the graph hasn't changed.
@@ -170,7 +173,8 @@ and planning tool. No item/fluid/energy transport — observation and visualisat
   only inside lambda bodies, so they never load on a dedicated server.
 - One Mojang `CODEC` per data record drives both persistence and networking.
 
-[Unreleased]: https://github.com/doolecg/DoolesTools_LogiGraph/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/doolecg/DoolesTools_LogiGraph/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/doolecg/DoolesTools_LogiGraph/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/doolecg/DoolesTools_LogiGraph/compare/v0.3.0...v0.5.0
 [0.3.0]: https://github.com/doolecg/DoolesTools_LogiGraph/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/doolecg/DoolesTools_LogiGraph/compare/v0.1.0...v0.2.0

@@ -118,8 +118,18 @@ public final class LogisticsScanner {
             BlockPos pos = blockEntity.getBlockPos();
             if (pos.equals(computerPos) || center.distSqr(pos) > radiusSqr) return;
             try {
-                ScannedBlockData data = readBlock(level, computerPos, pos, gameTime, labels, true, networkId, relays);
-                if (data != null) resultsById.put(data.id(), data.withProgress(progressFor(data, previousById.get(data.id()))));
+                if (blockEntity instanceof NetworkWireBlockEntity wire) {
+                    // Multi-endpoint wires produce one scan result per endpoint face.
+                    for (Direction dir : Direction.values()) {
+                        if (!wire.hasEndpointAt(dir)) continue;
+                        if (!networkMatches(wire.endpointNetworkId(dir), networkId)) continue;
+                        ScannedBlockData data = readWireHostedEndpointAtFace(level, computerPos, wire, dir, gameTime, labels, relays);
+                        if (data != null) resultsById.put(data.id(), data.withProgress(progressFor(data, previousById.get(data.id()))));
+                    }
+                } else {
+                    ScannedBlockData data = readBlock(level, computerPos, pos, gameTime, labels, true, networkId, relays);
+                    if (data != null) resultsById.put(data.id(), data.withProgress(progressFor(data, previousById.get(data.id()))));
+                }
             } catch (Exception e) {
                 DoolesTools.LOGGER.debug("Scan skipped unreadable block at {}: {}", pos, e.toString());
             }
@@ -261,6 +271,10 @@ public final class LogisticsScanner {
         if (!(endpoint instanceof NetworkModemBlockEntity) && !wirelessReachable(center, endpoint.getBlockPos(), endpoint.upgradeCount("range"), relays)) return null;
         BlockPos attached = endpoint.attachedPos();
         if (!level.hasChunkAt(attached)) return null;
+        // For double chests, redirect to the canonical half so a dongle on either side works.
+        BlockState attachedState = level.getBlockState(attached);
+        attached = canonicalScanPos(attached, attachedState);
+        if (!level.hasChunkAt(attached)) return null;
         BlockEntity attachedBe = level.getBlockEntity(attached);
         if (attachedBe == null || attachedBe instanceof NetworkEndpointBlockEntity) return null;
         ScannedBlockData attachedData = readBlock(level, center, attached, gameTime, labels, false);
@@ -271,15 +285,25 @@ public final class LogisticsScanner {
     private static ScannedBlockData readWireHostedEndpoint(ServerLevel level, BlockPos center, NetworkWireBlockEntity wire,
                                                            long gameTime, BlockLabelSavedData labels, List<RelayNode> relays) {
         if (!wire.hasEndpoint()) return null;
+        return readWireHostedEndpointAtFace(level, center, wire, wire.endpointFace(), gameTime, labels, relays);
+    }
+
+    private static ScannedBlockData readWireHostedEndpointAtFace(ServerLevel level, BlockPos center, NetworkWireBlockEntity wire,
+                                                                  Direction face, long gameTime, BlockLabelSavedData labels, List<RelayNode> relays) {
+        if (!wire.hasEndpointAt(face)) return null;
         if (wire.hasModem() && !isWiredEndpointOnline(level, wire.getBlockPos())) return null;
-        if (wire.hasRouter() && !wirelessReachable(center, wire.getBlockPos(), wire.upgradeCount("range"), relays)) return null;
-        BlockPos attached = wire.attachedPos();
+        if (wire.hasRouter() && !wirelessReachable(center, wire.getBlockPos(), wire.upgradeCount(face, "range"), relays)) return null;
+        BlockPos attached = wire.attachedPos(face);
+        if (!level.hasChunkAt(attached)) return null;
+        // For double chests, redirect to the canonical half so a socket on either side works.
+        BlockState attachedState = level.getBlockState(attached);
+        attached = canonicalScanPos(attached, attachedState);
         if (!level.hasChunkAt(attached)) return null;
         BlockEntity attachedBe = level.getBlockEntity(attached);
         if (attachedBe == null || attachedBe instanceof NetworkEndpointBlockEntity || attachedBe instanceof NetworkWireBlockEntity) return null;
         ScannedBlockData attachedData = readBlock(level, center, attached, gameTime, labels, false);
         if (attachedData == null) return null;
-        return attachedData.withNetworkIdentity("net_" + wire.endpointId(), wire.endpointName());
+        return attachedData.withNetworkIdentity("net_" + wire.endpointId(face), wire.endpointName(face));
     }
 
     private static boolean isWiredModemOnline(ServerLevel level, NetworkModemBlockEntity start) {
@@ -351,6 +375,14 @@ public final class LogisticsScanner {
         }
     }
 
+    /** True if any endpoint face of the wire block attaches to a LogisticsComputer. */
+    private static boolean wireAttachedToComputer(ServerLevel level, NetworkWireBlockEntity wire) {
+        for (Direction dir : Direction.values()) {
+            if (wire.hasEndpointAt(dir) && level.getBlockEntity(wire.attachedPos(dir)) instanceof LogisticsComputerBlockEntity) return true;
+        }
+        return false;
+    }
+
     private static long distanceSqr(BlockPos a, BlockPos b) {
         long dx = (long) a.getX() - b.getX();
         long dy = (long) a.getY() - b.getY();
@@ -377,7 +409,7 @@ public final class LogisticsScanner {
                     if (!next.equals(startPos) && level.getBlockEntity(modem.attachedPos()) instanceof LogisticsComputerBlockEntity) return true;
                     queue.add(next);
                 } else if (be instanceof NetworkWireBlockEntity wire) {
-                    if (!next.equals(startPos) && wire.hasModem() && level.getBlockEntity(wire.attachedPos()) instanceof LogisticsComputerBlockEntity) return true;
+                    if (!next.equals(startPos) && wire.hasModem() && wireAttachedToComputer(level, wire)) return true;
                     queue.add(next);
                 }
             }

@@ -40,17 +40,25 @@ public final class LogiFactoryManager {
     }
 
     public static java.util.Set<String> tick(LogisticsGraphData graph, ServerLevel level, java.util.List<ScannedBlockData> scan, float satisfaction) {
-        return tickWithCounts(graph, level, scan, satisfaction).keySet();
+        return tickWithCounts(graph, level, scan, satisfaction, null).keySet();
+    }
+
+    public static java.util.Map<String, Integer> tickWithCounts(LogisticsGraphData graph, ServerLevel level, java.util.List<ScannedBlockData> scan, float satisfaction) {
+        return tickWithCounts(graph, level, scan, satisfaction, null);
     }
 
     /**
-     * @param satisfaction power satisfaction in [0,1]; under 1 the per-tick route budget is scaled
-     *                     down so an underpowered network visibly transports slower (brownout).
+     * @param satisfaction  power satisfaction in [0,1]; under 1 the per-tick route budget is scaled
+     *                      down so an underpowered network visibly transports slower (brownout).
+     * @param linkBirthTimes mutable map of linkId → game-time the link was first processed; used to
+     *                       compute the 10-second speed ramp-up. Pass null to skip ramp (instant full speed).
      *
      * NOTE: this runs every computer tick on the server. keep it lean - getBlockEntity calls add up fast
      * on big servers with lots of computers. the outbound index below is the main thing keeping this cheap.
      */
-    public static java.util.Map<String, Integer> tickWithCounts(LogisticsGraphData graph, ServerLevel level, java.util.List<ScannedBlockData> scan, float satisfaction) {
+    public static java.util.Map<String, Integer> tickWithCounts(LogisticsGraphData graph, ServerLevel level,
+            java.util.List<ScannedBlockData> scan, float satisfaction,
+            java.util.Map<String, Long> linkBirthTimes) {
         java.util.Map<String, Integer> movedByLink = new java.util.LinkedHashMap<>();
         if (!ModServerConfig.ENABLE_LFM_TRANSPORT.get() || graph.isEmpty()) return movedByLink;
         java.util.Map<String, BlockPos> positions = scannedPositions(scan);
@@ -62,28 +70,50 @@ public final class LogiFactoryManager {
         java.util.Map<String, java.util.List<GraphLinkData>> outboundIndex = buildOutboundIndex(graph);
         java.util.List<GraphLinkData> orderedLinks = new java.util.ArrayList<>(graph.activeCanvas().links());
         orderedLinks.sort((a, b) -> Integer.compare(routePriority(level, graph, b, scannedById), routePriority(level, graph, a, scannedById)));
+        long gameTime = level.getGameTime();
         for (GraphLinkData link : orderedLinks) {
             if (processed >= routeBudget) break;
+            if (linkBirthTimes != null) linkBirthTimes.putIfAbsent(link.linkId(), gameTime);
             GraphNodeData sourceNode = graph.findNode(link.sourceNodeId());
             GraphNodeData targetNode = graph.findNode(link.targetNodeId());
             BlockPos sourcePos = targetPosOf(sourceNode, positions);
             BlockPos targetPos = targetPosOf(targetNode, positions);
+            float rampFraction = computeRampFraction(link.linkId(), gameTime, linkBirthTimes, level, sourcePos, targetPos);
             if (sourcePos != null && targetNode != null && isRoutingNode(targetNode.type())) {
                 if (!level.hasChunkAt(sourcePos)) continue;
                 if (!switchboardAllows(level, link, sourceNode, targetNode, scannedById)) continue;
-                if (routeThroughNodesCount(graph, level, link, sourceNode, sourcePos, positions, movedByLink, outboundIndex) > 0) processed++;
+                if (routeThroughNodesCount(graph, level, link, sourceNode, sourcePos, positions, movedByLink, outboundIndex, rampFraction) > 0) processed++;
                 continue;
             }
             if (sourcePos == null || targetPos == null) continue;
             if (!level.hasChunkAt(sourcePos) || !level.hasChunkAt(targetPos)) continue;
             if (!switchboardAllows(level, link, sourceNode, targetNode, scannedById)) continue;
-            int moved = transferCount(link, level, sourceNode, targetNode, sourcePos, targetPos);
+            int moved = transferCount(link, level, sourceNode, targetNode, sourcePos, targetPos, rampFraction);
             if (moved > 0) {
                 movedByLink.merge(link.linkId(), moved, Integer::sum);
                 processed++;
             }
         }
         return movedByLink;
+    }
+
+    /**
+     * Fraction of full item throughput to apply based on how long this link has been running.
+     * Ramp duration is 200 ticks (10 s) at 0 efficiency, reduced by 50 ticks per efficiency upgrade,
+     * reaching 0 (instant) at 4 efficiency upgrades.
+     */
+    private static float computeRampFraction(String linkId, long gameTime,
+            java.util.Map<String, Long> linkBirthTimes, ServerLevel level,
+            BlockPos sourcePos, BlockPos targetPos) {
+        if (linkBirthTimes == null) return 1f;
+        long birthTime = linkBirthTimes.getOrDefault(linkId, gameTime);
+        long warmupTicks = Math.min(200L, gameTime - birthTime);
+        int efficiency = 0;
+        if (sourcePos != null) efficiency = Math.max(efficiency, endpointUpgradeCount(level, sourcePos, "efficiency"));
+        if (targetPos != null) efficiency = Math.max(efficiency, endpointUpgradeCount(level, targetPos, "efficiency"));
+        int rampTicks = 200 * (4 - Math.min(4, Math.max(0, efficiency))) / 4; // 200, 150, 100, 50, 0
+        if (rampTicks <= 0) return 1f;
+        return Math.min(1f, warmupTicks / (float) rampTicks);
     }
 
     private static java.util.Map<String, BlockPos> scannedPositions(java.util.List<ScannedBlockData> scan) {
@@ -138,13 +168,9 @@ public final class LogiFactoryManager {
         }
     }
 
-    private static boolean transfer(GraphLinkData link, ServerLevel level, GraphNodeData sourceNode, GraphNodeData targetNode, BlockPos sourcePos, BlockPos targetPos) {
-        return transferCount(link, level, sourceNode, targetNode, sourcePos, targetPos) > 0;
-    }
-
-    private static int transferCount(GraphLinkData link, ServerLevel level, GraphNodeData sourceNode, GraphNodeData targetNode, BlockPos sourcePos, BlockPos targetPos) {
+    private static int transferCount(GraphLinkData link, ServerLevel level, GraphNodeData sourceNode, GraphNodeData targetNode, BlockPos sourcePos, BlockPos targetPos, float rampFraction) {
         return switch (link.type()) {
-            case ITEMS -> ModServerConfig.ENABLE_ITEM_ROUTES.get() ? transferItemsCount(level, link, sourceNode, targetNode, sourcePos, targetPos, r -> true, Integer.MAX_VALUE) : 0;
+            case ITEMS -> ModServerConfig.ENABLE_ITEM_ROUTES.get() ? transferItemsCount(level, link, sourceNode, targetNode, sourcePos, targetPos, r -> true, Integer.MAX_VALUE, rampFraction) : 0;
             case FLUIDS -> ModServerConfig.ENABLE_FLUID_ROUTES.get() ? transferFluidsCount(level, sourcePos, targetPos) : 0;
             case ENERGY -> ModServerConfig.ENABLE_ENERGY_ROUTES.get() ? transferEnergyCount(level, sourcePos, targetPos) : 0;
             case MANUAL -> 0;
@@ -168,15 +194,10 @@ public final class LogiFactoryManager {
     private record ResolvedRoute(BlockPos targetPos, GraphNodeData targetNode, GraphLinkData finalLink,
                                  java.util.List<Gate> gates, java.util.List<String> linkPath) {}
 
-    private static boolean routeThroughNodes(LogisticsGraphData graph, ServerLevel level, GraphLinkData inbound,
-            GraphNodeData sourceNode, BlockPos sourcePos, java.util.Map<String, BlockPos> positions,
-            java.util.Map<String, Integer> movedByLink, java.util.Map<String, java.util.List<GraphLinkData>> outboundIndex) {
-        return routeThroughNodesCount(graph, level, inbound, sourceNode, sourcePos, positions, movedByLink, outboundIndex) > 0;
-    }
-
     private static int routeThroughNodesCount(LogisticsGraphData graph, ServerLevel level, GraphLinkData inbound,
             GraphNodeData sourceNode, BlockPos sourcePos, java.util.Map<String, BlockPos> positions,
-            java.util.Map<String, Integer> movedByLink, java.util.Map<String, java.util.List<GraphLinkData>> outboundIndex) {
+            java.util.Map<String, Integer> movedByLink, java.util.Map<String, java.util.List<GraphLinkData>> outboundIndex,
+            float rampFraction) {
         if (inbound.type() != LinkType.ITEMS) return 0;
         GraphNodeData first = graph.findNode(inbound.targetNodeId());
         if (first == null || !isRoutingNode(first.type())) return 0;
@@ -195,7 +216,7 @@ public final class LogiFactoryManager {
                     LinkType.ITEMS, r.finalLink().sideOverride());
             java.util.List<Gate> gates = r.gates();
             int moved = transferItemsCount(level, route, sourceNode, r.targetNode(), sourcePos, r.targetPos(),
-                    resource -> gatesAllow(gates, resource), gateLimit(gates));
+                    resource -> gatesAllow(gates, resource), gateLimit(gates), rampFraction);
             if (moved > 0) {
                 for (String linkId : r.linkPath()) movedByLink.merge(linkId, moved, Integer::sum);
                 movedTotal += moved;
@@ -318,13 +339,8 @@ public final class LogiFactoryManager {
         return dz > 0 ? Direction.SOUTH : Direction.NORTH;
     }
 
-    private static boolean transferItems(ServerLevel level, GraphLinkData link, GraphNodeData sourceNode, GraphNodeData targetNode, BlockPos sourcePos, BlockPos targetPos,
-                                         java.util.function.Predicate<ItemResource> allow, int filterLimit) {
-        return transferItemsCount(level, link, sourceNode, targetNode, sourcePos, targetPos, allow, filterLimit) > 0;
-    }
-
     private static int transferItemsCount(ServerLevel level, GraphLinkData link, GraphNodeData sourceNode, GraphNodeData targetNode, BlockPos sourcePos, BlockPos targetPos,
-                                         java.util.function.Predicate<ItemResource> allow, int filterLimit) {
+                                         java.util.function.Predicate<ItemResource> allow, int filterLimit, float rampFraction) {
         Direction physicalSourceSide = sideFrom(sourcePos, targetPos);
         Direction physicalTargetSide = physicalSourceSide == null ? null : physicalSourceSide.getOpposite();
         Direction overrideSide = sideOverride(link.sideOverride());
@@ -346,7 +362,9 @@ public final class LogiFactoryManager {
         }
         if (source == null || target == null) return 0;
 
-        int max = Math.min(itemLimit(level, sourcePos, targetPos), filterLimit);
+        int rawLimit = itemLimit(level, sourcePos, targetPos);
+        int rampedLimit = rampFraction >= 1f ? rawLimit : Math.max(1, (int)(rawLimit * rampFraction));
+        int max = Math.min(rampedLimit, filterLimit);
         for (int slot = 0; slot < source.size(); slot++) {
             ItemResource resource = source.getResource(slot);
             long available = source.getAmountAsLong(slot);
@@ -355,16 +373,21 @@ public final class LogiFactoryManager {
             if (!canExtractItemFromSlot(level, link, sourceNode, sourcePos, sourceSide, source, slot, resource)) continue;
             int amount = (int) Math.min(max, available);
             for (ItemTargetSlot targetSlot : targetSlots(level, link, targetPos, targetSide, target, resource, overrideSide != null && targetMachine)) {
-                for (int move = amount; move > 0; move--) {
-                    try (Transaction tx = Transaction.openRoot()) {
-                        long extracted = source.extract(slot, resource, move, tx);
-                        if (extracted <= 0) continue;
-                        long inserted = targetSlot.handler().insert(targetSlot.slot(), resource, (int) extracted, tx);
-                        if (inserted <= 0) continue;
-                        if (inserted < extracted) continue;
-                        tx.commit();
-                        return (int) Math.min(Integer.MAX_VALUE, inserted);
-                    }
+                // Probe how much the target slot can accept, then do a single atomic move.
+                // This replaces the old O(amount) retry loop (which opened up to 64 transactions
+                // per slot pair on a full stack) with at most 2 transactions total.
+                int insertable;
+                try (Transaction probe = Transaction.openRoot()) {
+                    insertable = (int) Math.min(amount, targetSlot.handler().insert(targetSlot.slot(), resource, amount, probe));
+                }
+                if (insertable <= 0) continue;
+                try (Transaction tx = Transaction.openRoot()) {
+                    long extracted = source.extract(slot, resource, insertable, tx);
+                    if (extracted <= 0) continue;
+                    long inserted = targetSlot.handler().insert(targetSlot.slot(), resource, (int) extracted, tx);
+                    if (inserted != extracted) continue;
+                    tx.commit();
+                    return (int) Math.min(Integer.MAX_VALUE, inserted);
                 }
             }
         }
@@ -420,7 +443,9 @@ public final class LogiFactoryManager {
     }
 
     private static ItemTargetSlot[] worldlyTargetSlots(ServerLevel level, WorldlyContainer container, ItemResource resource, ItemTargetRole role) {
-        ItemTargetSlot[] slots = new ItemTargetSlot[container.getContainerSize() * Direction.values().length];
+        // Allocate only as many slots as the container has — each container slot can appear at most once
+        // thanks to the `added` dedup flag. The old size×6 allocation was a 6× over-allocation.
+        ItemTargetSlot[] slots = new ItemTargetSlot[container.getContainerSize()];
         boolean[] added = new boolean[container.getContainerSize()];
         int next = 0;
         if (role != ItemTargetRole.MATERIAL) {
@@ -505,11 +530,13 @@ public final class LogiFactoryManager {
     private static int routeBudget(ServerLevel level, LogisticsGraphData graph, java.util.Map<String, BlockPos> scannedPositions) {
         int base = ModServerConfig.MAX_LFM_ROUTES_PER_TICK.get();
         int bonus = 0;
+        // Cache per-block upgrade lookups within this tick — multiple nodes can reference the same pos.
+        java.util.Map<BlockPos, Integer> upgradeCache = new java.util.HashMap<>();
         for (GraphNodeData node : graph.activeCanvas().nodes()) {
             BlockPos pos = targetPosOf(node, scannedPositions);
-            if (pos != null && level.hasChunkAt(pos)) {
-                bonus += WirelessNetworkPolicy.routeBudgetBonus(endpointUpgradeCount(level, pos, "speed"), hasWirelessEndpoint(level, pos));
-            }
+            if (pos == null || !level.hasChunkAt(pos)) continue;
+            int speed = upgradeCache.computeIfAbsent(pos, p -> endpointUpgradeCount(level, p, "speed"));
+            bonus += WirelessNetworkPolicy.routeBudgetBonus(speed, hasWirelessEndpoint(level, pos));
         }
         return Math.max(1, Math.min(512, base + bonus));
     }
@@ -529,8 +556,9 @@ public final class LogiFactoryManager {
 
     private static int itemLimit(ServerLevel level, BlockPos sourcePos, BlockPos targetPos) {
         int base = ModServerConfig.MAX_ITEMS_MOVED_PER_ROUTE.get();
+        int speed = Math.max(endpointUpgradeCount(level, sourcePos, "speed"), endpointUpgradeCount(level, targetPos, "speed"));
         int stack = Math.max(endpointUpgradeCount(level, sourcePos, "stack"), endpointUpgradeCount(level, targetPos, "stack"));
-        return WirelessNetworkPolicy.itemLimit(base, stack);
+        return WirelessNetworkPolicy.speedItemLimit(base, speed, stack);
     }
 
     private static boolean hasWirelessEndpoint(ServerLevel level, BlockPos attachedPos) {
@@ -539,7 +567,7 @@ public final class LogiFactoryManager {
             BlockPos neighbor = attachedPos.relative(direction);
             BlockEntity be = level.getBlockEntity(neighbor);
             if (be instanceof NetworkEndpointBlockEntity ep && !(ep instanceof NetworkModemBlockEntity) && ep.attachedPos().equals(attachedPos)) return true;
-            if (be instanceof NetworkWireBlockEntity wire && wire.hasRouter() && wire.attachedPos().equals(attachedPos)) return true;
+            if (be instanceof NetworkWireBlockEntity wire && wire.hasRouterAttachedTo(attachedPos)) return true;
         }
         return false;
     }
@@ -551,8 +579,8 @@ public final class LogiFactoryManager {
             BlockEntity be = level.getBlockEntity(neighbor);
             if (be instanceof NetworkEndpointBlockEntity endpoint && endpoint.attachedPos().equals(attachedPos)) {
                 total += endpoint.upgradeCount(type);
-            } else if (be instanceof NetworkWireBlockEntity wire && wire.hasEndpoint() && wire.attachedPos().equals(attachedPos)) {
-                total += wire.upgradeCount(type);
+            } else if (be instanceof NetworkWireBlockEntity wire) {
+                total += wire.upgradeCountForAttachedPos(attachedPos, type);
             }
         }
         return total;

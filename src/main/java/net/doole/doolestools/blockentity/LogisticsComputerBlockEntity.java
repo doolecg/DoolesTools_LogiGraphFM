@@ -68,6 +68,9 @@ public class LogisticsComputerBlockEntity extends BlockEntity implements MenuPro
     private final java.util.ArrayDeque<Short> supplyAll = new java.util.ArrayDeque<>();
     private final java.util.ArrayDeque<Short> demandAll = new java.util.ArrayDeque<>();
     private final java.util.Map<String, java.util.ArrayDeque<Integer>> linkThroughputHistory = new java.util.HashMap<>();
+    // Game-time when each link was first processed this session; drives the 10-second ramp-up.
+    // Not persisted — routes always ramp from zero on load, which is intentional.
+    private final java.util.Map<String, Long> linkBirthTimes = new java.util.HashMap<>();
     private int countdown30m = BUCKET_30M;
     private int countdown1h = BUCKET_1H;
     private int countdown12h = BUCKET_12H;
@@ -100,23 +103,26 @@ public class LogisticsComputerBlockEntity extends BlockEntity implements MenuPro
     }
 
     private void recomputeWarnings(ServerLevel level) {
-        java.util.Map<String, net.doole.doolestools.logistics.data.ScannedBlockData> byId = new java.util.HashMap<>();
+        java.util.Map<String, net.doole.doolestools.logistics.data.ScannedBlockData> byId = new java.util.HashMap<>(lastScan.size() * 2);
         for (net.doole.doolestools.logistics.data.ScannedBlockData s : lastScan) byId.put(s.id(), s);
-        java.util.List<net.doole.doolestools.logistics.data.WarningData> warnings =
+        java.util.List<net.doole.doolestools.logistics.data.WarningData> graphWarnings =
             net.doole.doolestools.logistics.WarningGenerator.forGraph(graph, byId);
-        // also fold in per-block errors from the scan itself
-        for (net.doole.doolestools.logistics.data.ScannedBlockData s : lastScan) {
-            for (net.doole.doolestools.logistics.data.WarningData w : s.warnings()) {
-                if (w.severity() == net.doole.doolestools.logistics.data.WarningData.Severity.ERROR) {
-                    warnings = new java.util.ArrayList<>(warnings);
-                    warnings.add(w);
-                    break;
+        // Check for errors in graph warnings and per-block scan warnings without extra allocation.
+        boolean anyError = graphWarnings.stream().anyMatch(
+            w -> w.severity() == net.doole.doolestools.logistics.data.WarningData.Severity.ERROR);
+        if (!anyError) {
+            outer:
+            for (net.doole.doolestools.logistics.data.ScannedBlockData s : lastScan) {
+                for (net.doole.doolestools.logistics.data.WarningData w : s.warnings()) {
+                    if (w.severity() == net.doole.doolestools.logistics.data.WarningData.Severity.ERROR) {
+                        anyError = true;
+                        break outer;
+                    }
                 }
             }
         }
         boolean prev = hasErrorWarnings;
-        hasErrorWarnings = warnings.stream().anyMatch(
-            w -> w.severity() == net.doole.doolestools.logistics.data.WarningData.Severity.ERROR);
+        hasErrorWarnings = anyError;
         // only notify neighbours if the state actually changed, avoids redundant updates every tick
         if (prev != hasErrorWarnings && ModServerConfig.REDSTONE_ALERT_ON_ERROR.get()) {
             level.updateNeighborsAt(worldPosition, getBlockState().getBlock());
@@ -148,7 +154,7 @@ public class LogisticsComputerBlockEntity extends BlockEntity implements MenuPro
             activeRouteIds = java.util.Set.of();
             return;
         }
-        java.util.Map<String, Integer> tickCounts = LogiFactoryManager.tickWithCounts(graph, level, lastScan, satisfaction);
+        java.util.Map<String, Integer> tickCounts = LogiFactoryManager.tickWithCounts(graph, level, lastScan, satisfaction, linkBirthTimes);
         activeRouteIds = tickCounts.keySet();
         updateThroughputHistory(tickCounts);
     }
@@ -327,9 +333,11 @@ public class LogisticsComputerBlockEntity extends BlockEntity implements MenuPro
         if (value == null) return "";
         StringBuilder out = new StringBuilder();
         String trimmed = value.trim();
-        for (int i = 0; i < trimmed.length() && out.length() < 48; i++) {
-            char c = trimmed.charAt(i);
-            if (!Character.isISOControl(c)) out.append(c);
+        int i = 0;
+        while (i < trimmed.length() && out.length() < 48) {
+            int cp = trimmed.codePointAt(i);
+            i += Character.charCount(cp);
+            if (!Character.isISOControl(cp)) out.appendCodePoint(cp);
         }
         return out.toString();
     }
@@ -452,12 +460,17 @@ public class LogisticsComputerBlockEntity extends BlockEntity implements MenuPro
     }
 
     private void updateThroughputHistory(java.util.Map<String, Integer> tickCounts) {
-        java.util.Set<String> graphLinks = new java.util.HashSet<>();
-        for (var link : graph.activeCanvas().links()) graphLinks.add(link.linkId());
-        linkThroughputHistory.keySet().removeIf(id -> !graphLinks.contains(id));
-        for (String linkId : graphLinks) {
-            java.util.ArrayDeque<Integer> samples = linkThroughputHistory.computeIfAbsent(linkId, k -> new java.util.ArrayDeque<>());
-            samples.addLast(Math.max(0, tickCounts.getOrDefault(linkId, 0)));
+        var links = graph.activeCanvas().links();
+        // Evict history/birth entries for links that no longer exist in the graph.
+        if (!linkThroughputHistory.isEmpty()) {
+            linkThroughputHistory.keySet().removeIf(id -> links.stream().noneMatch(l -> l.linkId().equals(id)));
+        }
+        if (!linkBirthTimes.isEmpty()) {
+            linkBirthTimes.keySet().removeIf(id -> links.stream().noneMatch(l -> l.linkId().equals(id)));
+        }
+        for (var link : links) {
+            java.util.ArrayDeque<Integer> samples = linkThroughputHistory.computeIfAbsent(link.linkId(), k -> new java.util.ArrayDeque<>());
+            samples.addLast(Math.max(0, tickCounts.getOrDefault(link.linkId(), 0)));
             while (samples.size() > THROUGHPUT_SAMPLES) samples.removeFirst();
         }
     }

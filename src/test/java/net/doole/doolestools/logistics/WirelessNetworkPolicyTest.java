@@ -20,10 +20,19 @@ class WirelessNetworkPolicyTest {
     }
 
     @Test
-    void itemLimitRespectsStackUpgradesAndStackCap() {
-        assertEquals(16, WirelessNetworkPolicy.itemLimit(16, 0));
-        assertEquals(48, WirelessNetworkPolicy.itemLimit(16, 2));
-        assertEquals(64, WirelessNetworkPolicy.itemLimit(16, 8));
+    void speedItemLimitDoublesPerUpgradeAndStackGoesAbove64() {
+        // base 4, no upgrades
+        assertEquals(4, WirelessNetworkPolicy.speedItemLimit(4, 0, 0));
+        // doubles each speed upgrade: 8 → 16 → 32 → 64, caps at one stack
+        assertEquals(8,  WirelessNetworkPolicy.speedItemLimit(4, 1, 0));
+        assertEquals(16, WirelessNetworkPolicy.speedItemLimit(4, 2, 0));
+        assertEquals(32, WirelessNetworkPolicy.speedItemLimit(4, 3, 0));
+        assertEquals(64, WirelessNetworkPolicy.speedItemLimit(4, 4, 0));
+        // clamped — 5+ speed upgrades do not exceed 64
+        assertEquals(64, WirelessNetworkPolicy.speedItemLimit(4, 8, 0));
+        // stack upgrades add 64 per card, allowing beyond one stack
+        assertEquals(128, WirelessNetworkPolicy.speedItemLimit(4, 4, 1));
+        assertEquals(256, WirelessNetworkPolicy.speedItemLimit(4, 4, 3));
     }
 
     @Test

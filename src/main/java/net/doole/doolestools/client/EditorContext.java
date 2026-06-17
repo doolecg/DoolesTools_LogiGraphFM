@@ -167,6 +167,7 @@ public class EditorContext {
     public LogisticsGraphData graph() { return graph; }
     public NetworkPowerData power() { return power; }
     public boolean isRouteActive(String linkId) { return activeRouteIds.contains(linkId); }
+    public int activeRouteCount() { return activeRouteIds.size(); }
     public void setActiveRouteIds(java.util.List<String> ids) { this.activeRouteIds = ids == null ? java.util.Set.of() : new java.util.HashSet<>(ids); }
     public long lastScanTime() { return lastScanTime; }
     public boolean isDirty() { return dirty; }

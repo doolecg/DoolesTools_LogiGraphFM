@@ -61,11 +61,15 @@ public final class ClientNetworkSender {
     }
 
     public static void setNetworkEndpointName(BlockPos pos, String name) {
-        ClientPacketDistributor.sendToServer(new SetNetworkEndpointNamePayload(pos, name, ""));
+        ClientPacketDistributor.sendToServer(new SetNetworkEndpointNamePayload(pos, name, "", null));
     }
 
     public static void setNetworkEndpointIdentity(BlockPos pos, String name, String networkId) {
-        ClientPacketDistributor.sendToServer(new SetNetworkEndpointNamePayload(pos, name, networkId));
+        ClientPacketDistributor.sendToServer(new SetNetworkEndpointNamePayload(pos, name, networkId, null));
+    }
+
+    public static void setNetworkEndpointIdentity(BlockPos pos, String name, String networkId, net.minecraft.core.Direction face) {
+        ClientPacketDistributor.sendToServer(new SetNetworkEndpointNamePayload(pos, name, networkId, face));
     }
 
     public static void requestNearbyLabels() {

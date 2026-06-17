@@ -237,7 +237,11 @@ public final class ServerPayloadHandlers {
                 endpoint.setIdentity(payload.name(), networkId);
                 player.level().sendBlockUpdated(payload.pos(), endpoint.getBlockState(), endpoint.getBlockState(), 3);
             } else if (player.level().getBlockEntity(payload.pos()) instanceof NetworkWireBlockEntity wire) {
-                wire.setEndpointIdentity(payload.name(), networkId);
+                if (payload.face() != null && wire.hasEndpointAt(payload.face())) {
+                    wire.setEndpointIdentityAt(payload.face(), payload.name(), networkId);
+                } else {
+                    wire.setEndpointIdentity(payload.name(), networkId);
+                }
                 player.level().sendBlockUpdated(payload.pos(), wire.getBlockState(), wire.getBlockState(), 3);
             } else if (player.level().getBlockEntity(payload.pos()) instanceof NetworkRelayBlockEntity relay) {
                 relay.setIdentity(payload.name(), networkId);
@@ -460,7 +464,10 @@ public final class ServerPayloadHandlers {
 
     private static String clampStr(String s, int max) {
         if (s == null) return "";
-        return s.length() > max ? s.substring(0, max) : s;
+        if (s.length() <= max) return s;
+        // Use offsetByCodePoints to avoid splitting UTF-16 surrogate pairs (e.g. emoji).
+        int end = s.offsetByCodePoints(0, Math.min(max, s.codePointCount(0, s.length())));
+        return s.substring(0, end);
     }
 
     private static int clampCoord(int v) {
@@ -501,6 +508,12 @@ public final class ServerPayloadHandlers {
             }
             if (found == null) {
                 player.sendSystemMessage(net.minecraft.network.chat.Component.literal("[LogiGraph] Network not found or not loaded: " + targetId));
+                return;
+            }
+            // Require edit permission on the target computer too, so a player who discovers
+            // a private network's ID cannot silently mesh-link to it and read its scan data.
+            if (level.getBlockEntity(found) instanceof LogisticsComputerBlockEntity target && !target.canEdit(player)) {
+                player.sendSystemMessage(net.minecraft.network.chat.Component.literal("[LogiGraph] Access denied by target network."));
                 return;
             }
             if (be.linkPeer(found, level)) {

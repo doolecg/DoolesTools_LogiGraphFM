@@ -51,9 +51,15 @@ public class LinkingCardItem extends Item {
             return InteractionResult.SUCCESS;
         }
         if (blockEntity instanceof NetworkWireBlockEntity wire && wire.hasEndpoint()) {
-            wire.setEndpointIdentity(wire.endpointName(), networkId);
+            net.minecraft.core.Direction clickedFace = context.getClickedFace();
+            if (wire.hasEndpointAt(clickedFace)) {
+                wire.setEndpointIdentityAt(clickedFace, wire.endpointName(clickedFace), networkId);
+                player.sendSystemMessage(Component.literal(wire.endpointName(clickedFace) + " linked to " + label(networkId, networkName)));
+            } else {
+                wire.setEndpointIdentity(wire.endpointName(), networkId);
+                player.sendSystemMessage(Component.literal(wire.endpointName() + " linked to " + label(networkId, networkName)));
+            }
             context.getLevel().sendBlockUpdated(pos, wire.getBlockState(), wire.getBlockState(), 3);
-            player.sendSystemMessage(Component.literal(wire.endpointName() + " linked to " + label(networkId, networkName)));
             return InteractionResult.SUCCESS;
         }
         player.sendSystemMessage(Component.literal("Use on a computer, router, dongle, or socket."));

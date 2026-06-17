@@ -158,6 +158,7 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
     /** Set when the user shift-clicks a node — shows the copy/instance modal. */
     private String shiftModalNodeId = null;
     private double shiftModalX, shiftModalY;
+    private String pendingShiftModalNodeId = null;
     private List<PickerEntry> filterPickerEntries;
 
     public LogisticsComputerScreen(LogisticsComputerMenu menu, Inventory inv, Component title) {
@@ -835,6 +836,11 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
                 : "NETWORK SATISFIED";
         DUTheme.dot(g, cx, contentY + 6, statusColor);
         g.text(font, statusText, cx + 8, contentY + 4, statusColor, false);
+        int routeCount = ctx.activeRouteCount();
+        if (routeCount > 0) {
+            String pktText = routeCount + " PKT";
+            g.text(font, pktText, cx + 8 + font.width(statusText) + 6, contentY + 4, DUTheme.TEXT_DIM, false);
+        }
 
         // Production / Consumption segmented bars
         int barsTop = statsBarsTop();
@@ -1605,6 +1611,17 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         pose.popMatrix();
         // Subtitle sits directly under the brand wordmark, left-aligned with it.
         g.text(font, tr("doolestools.logigraph.subtitle"), lx + 41, ty + 25, DUTheme.TEXT_DIM, false);
+
+        // Network ID — positioned in the free zone between logo area and the SAVE button.
+        // Header buttons start at lx+guiW-106 (SAVE). Logo/brand ends around lx+130.
+        String netId = ctx.networkId();
+        if (!netId.isBlank()) {
+            String idText = "ID: " + netId;
+            int rightBound = lx + guiW - 112;  // safe left edge of SAVE button with margin
+            int maxIdW = rightBound - (lx + 130);
+            while (font.width(idText) > maxIdW && idText.length() > 8) idText = idText.substring(0, idText.length() - 1) + "…";
+            g.text(font, idText, rightBound - font.width(idText), ty + 17, DUTheme.TEXT_DIM, false);
+        }
     }
 
     private void renderTaskbar(GuiGraphicsExtractor g, int lx, int ty) {
@@ -1637,6 +1654,12 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         int graphX = netX - 14 - font.width(graphStatus);
         DUTheme.dot(g, graphX - 8, startY + 5, graphStatusColor);
         g.text(font, graphStatus, graphX, startY + 4, graphStatusColor, false);
+        // Active route count — always visible in the status bar across all pages.
+        int routeCount = ctx.activeRouteCount();
+        String pktText = routeCount + " PKT";
+        int pktX = graphX - 14 - font.width(pktText);
+        DUTheme.dot(g, pktX - 8, startY + 5, routeCount > 0 ? DUTheme.SELECTED : DUTheme.TEXT_DIM);
+        g.text(font, pktText, pktX, startY + 4, routeCount > 0 ? DUTheme.SELECTED : DUTheme.TEXT_DIM, false);
     }
 
     private void renderStartMenu(GuiGraphicsExtractor g, int lx, int ty, int mouseX, int mouseY) {
@@ -2153,10 +2176,9 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
                 else { ctx.selectedNodeId = node.nodeId(); ctx.selectedFrameId = null; }
                 ctx.selectedScannedId = node.scannedBlockId();
                 if ((event.modifiers() & MOD_SHIFT) != 0) {
-                    // Show modal: COPY (routing nodes only) / INSTANCE / CANCEL.
-                    shiftModalNodeId = node.nodeId();
-                    shiftModalX = mx;
-                    shiftModalY = my;
+                    // Start dragging; defer the modal until mouse release so the user can position first.
+                    draggingNodeId = node.nodeId();
+                    pendingShiftModalNodeId = node.nodeId();
                 } else {
                     draggingNodeId = node.nodeId();
                 }
@@ -2331,6 +2353,12 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
                 ctx.setGraph(LogisticsGraph.insertNodeIntoLink(ctx.graph(), link.linkId(), draggingNodeId));
             }
         }
+        if (pendingShiftModalNodeId != null && page == PAGE_GRAPH) {
+            shiftModalNodeId = pendingShiftModalNodeId;
+            shiftModalX = mx;
+            shiftModalY = my;
+            pendingShiftModalNodeId = null;
+        }
         draggingNodeId = null;
         draggingFrameId = null;
         resizingFrameId = null;
@@ -2413,6 +2441,7 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
     public boolean keyPressed(KeyEvent event) {
         if (handleFilterPickerKey(event)) return true;
         if (event.key() == KEY_ESCAPE) {
+            if (pendingShiftModalNodeId != null) { pendingShiftModalNodeId = null; return true; }
             if (shiftModalNodeId != null) { shiftModalNodeId = null; return true; }
             if (inventoryPopup != null) { inventoryPopup = null; return true; }
             if (contextMenu != null) { contextMenu = null; return true; }

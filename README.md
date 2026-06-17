@@ -7,8 +7,8 @@ network through a wireless **Dongle** or wired **Socket**. A **Router** creates 
 the computer can scan device inventories/capabilities, place them on a flowgraph, warn about problems,
 and route items, fluids, or energy when server config allows it.
 
-> **Beta testing build:** this branch contains active LogiGraph/LFM/Switchboard work. Back up worlds before
-> testing and report scan, routing, and UI issues with reproduction steps.
+> **Beta — v0.6.0:** active LogiGraph/LFM/Switchboard development. Back up worlds before testing and
+> report scan, routing, and UI issues with reproduction steps.
 
 Minecraft `26.1.2` | NeoForge `26.1.2.76` | Java `25`
 
@@ -247,6 +247,9 @@ When CC:Tweaked is present, a Logistics Computer exposes peripheral type `logist
 ### What The Scanner Reads From Connected Blocks
 
 - Vanilla containers: chests, barrels, hoppers, droppers, dispensers.
+- **Double chests** — one dongle or socket on either half is enough. The scanner reads the full combined
+  54-slot inventory regardless of which half the endpoint is attached to. Placing a second chest next to
+  an already-connected single chest is picked up on the next scan automatically.
 - Furnaces, blast furnaces, smokers: slots, recipe state, cook progress, fuel state.
 - NeoForge item/fluid/energy capabilities.
 - Modded machine progress through guarded reflection.
@@ -309,6 +312,11 @@ net.doole.doolestools
 **Why does Scan Network not show my chest/machine?** It must be attached to a reachable Socket for wired
 networks or a Wireless Dongle for wireless networks. A Router only anchors wireless; it does not add the
 attached block as a device.
+
+**Do I need a dongle/socket on both halves of a double chest?** No. One dongle or socket on either half
+is enough — the scanner reads the full 54-slot combined inventory from whichever half has the endpoint.
+Forming a double chest by placing a second chest next to a connected single chest is picked up automatically
+on the next scan.
 
 **Can it move items/fluids/energy?** Yes, when the server config allows LFM and the relevant
 route type. The graph must be saved before server automation uses it.
