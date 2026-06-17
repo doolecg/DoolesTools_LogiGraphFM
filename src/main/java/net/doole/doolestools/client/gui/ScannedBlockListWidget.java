@@ -20,6 +20,7 @@ public class ScannedBlockListWidget {
     /** Scanned-block ids selected for a multi-drop drag (Ctrl/Shift click). */
     private final Set<String> multiSelectedIds = new LinkedHashSet<>();
     private int lastClickedRow = -1;
+    private static final int TAB_W = 12;
 
     public ScannedBlockListWidget(EditorContext ctx, int x, int y, int w, int h) {
         this.ctx = ctx;
@@ -96,8 +97,11 @@ public class ScannedBlockListWidget {
     }
 
     public void render(GuiGraphicsExtractor g, Font font) {
+        renderNetworkTabs(g, font);
         List<ScannedBlockData> list = ctx.filteredScan();
-        g.enableScissor(x, y, x + w, y + h);
+        int listX = x + tabOffset();
+        int listW = w - tabOffset();
+        g.enableScissor(listX, y, x + w, y + h);
         int row = 0;
         for (int i = scroll; i < list.size(); i++) {
             int ry = y + (row++) * ROW_H;
@@ -106,23 +110,53 @@ public class ScannedBlockListWidget {
             boolean selected = s.id().equals(ctx.selectedScannedId);
             boolean multi = multiSelectedIds.contains(s.id());
 
-            g.fill(x, ry, x + w, ry + ROW_H - 1, (selected || multi) ? 0xFF14301f : (row % 2 == 0 ? DUTheme.PANEL_ALT : DUTheme.PANEL));
-            if (selected || multi) DUTheme.outline(g, x, ry, w, ROW_H - 1, DUTheme.SELECTED);
+            g.fill(listX, ry, x + w, ry + ROW_H - 1, (selected || multi) ? 0xFF14301f : (row % 2 == 0 ? DUTheme.PANEL_ALT : DUTheme.PANEL));
+            if (selected || multi) DUTheme.outline(g, listX, ry, listW, ROW_H - 1, DUTheme.SELECTED);
 
             // Real item icon (falls back to a category-coloured square).
-            ItemIcons.render(g, s.registryId(), x + 3, ry + 3, ItemIcons.SIZE, iconColor(s));
+            ItemIcons.render(g, s.registryId(), listX + 3, ry + 3, ItemIcons.SIZE, iconColor(s));
 
-            g.text(font, trim(font, s.blockName(), w - 56), x + 23, ry + 4, DUTheme.TEXT, false);
-            g.text(font, Math.round(s.distance()) + "m", x + 23, ry + 13, DUTheme.TEXT_DIM, false);
+            g.text(font, trim(font, s.blockName(), listW - 56), listX + 23, ry + 4, DUTheme.TEXT, false);
+            g.text(font, Math.round(s.distance()) + "m", listX + 23, ry + 13, DUTheme.TEXT_DIM, false);
 
             DUTheme.dot(g, x + w - 12, ry + 8, ctx.statusColorFor(s));
         }
         g.disableScissor();
 
         if (list.isEmpty()) {
-            g.centeredText(font, "NO DEVICES", x + w / 2, y + 8, DUTheme.TEXT_DIM);
-            g.centeredText(font, "SCAN NETWORK", x + w / 2, y + 20, DUTheme.TEXT_DIM);
+            g.centeredText(font, "NO DEVICES", listX + listW / 2, y + 8, DUTheme.TEXT_DIM);
+            g.centeredText(font, "SCAN NETWORK", listX + listW / 2, y + 20, DUTheme.TEXT_DIM);
         }
+    }
+
+    public boolean handleNetworkTabClick(double mx, double my) {
+        if (ctx.scanNetworkTabs().size() <= 1) return false;
+        if (mx < x || mx >= x + TAB_W || my < y || my >= y + h) return false;
+        int idx = (int) ((my - y) / 34);
+        java.util.List<EditorContext.NetworkTab> tabs = ctx.scanNetworkTabs();
+        if (idx < 0 || idx >= tabs.size()) return false;
+        ctx.selectedScanNetworkId = tabs.get(idx).id();
+        scroll = 0;
+        clearMultiSelect();
+        return true;
+    }
+
+    private void renderNetworkTabs(GuiGraphicsExtractor g, Font font) {
+        java.util.List<EditorContext.NetworkTab> tabs = ctx.scanNetworkTabs();
+        if (tabs.size() <= 1) return;
+        for (int i = 0; i < tabs.size(); i++) {
+            int ty = y + i * 34;
+            if (ty >= y + h) break;
+            EditorContext.NetworkTab tab = tabs.get(i);
+            boolean selected = tab.id().equals(ctx.selectedScanNetworkId);
+            g.fill(x, ty, x + TAB_W - 1, Math.min(y + h, ty + 32), selected ? DUTheme.SELECTED : DUTheme.PANEL_ALT);
+            String label = tab.name() == null || tab.name().isBlank() ? "NET" : tab.name();
+            g.text(font, label.substring(0, Math.min(1, label.length())).toUpperCase(java.util.Locale.ROOT), x + 3, ty + 11, selected ? 0xFF001408 : DUTheme.TEXT_DIM, false);
+        }
+    }
+
+    private int tabOffset() {
+        return ctx.scanNetworkTabs().size() > 1 ? TAB_W + 2 : 0;
     }
 
     private static int iconColor(ScannedBlockData s) {

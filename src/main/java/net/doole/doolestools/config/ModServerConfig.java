@@ -6,9 +6,9 @@ import net.neoforged.neoforge.common.ModConfigSpec;
 public final class ModServerConfig {
     public static final ModConfigSpec SPEC;
 
-    public static final ModConfigSpec.BooleanValue ENABLE_EASY_FACTORY_TRANSPORT;
-    public static final ModConfigSpec.IntValue EASY_FACTORY_TICK_INTERVAL;
-    public static final ModConfigSpec.IntValue MAX_EASY_FACTORY_ROUTES_PER_TICK;
+    public static final ModConfigSpec.BooleanValue ENABLE_LFM_TRANSPORT;
+    public static final ModConfigSpec.IntValue LFM_TICK_INTERVAL;
+    public static final ModConfigSpec.IntValue MAX_LFM_ROUTES_PER_TICK;
     public static final ModConfigSpec.IntValue MAX_ITEMS_MOVED_PER_ROUTE;
     public static final ModConfigSpec.IntValue MAX_FLUID_MOVED_PER_ROUTE;
     public static final ModConfigSpec.IntValue MAX_ENERGY_MOVED_PER_ROUTE;
@@ -40,10 +40,10 @@ public final class ModServerConfig {
     static {
         ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
 
-        builder.push("easyFactory");
-        ENABLE_EASY_FACTORY_TRANSPORT = builder.define("enableEasyFactoryTransport", true);
-        EASY_FACTORY_TICK_INTERVAL = builder.defineInRange("easyFactoryTickInterval", 20, 1, Integer.MAX_VALUE);
-        MAX_EASY_FACTORY_ROUTES_PER_TICK = builder.defineInRange("maxEasyFactoryRoutesPerTick", 16, 1, Integer.MAX_VALUE);
+        builder.push("lfm");
+        ENABLE_LFM_TRANSPORT = builder.define("enableLfmTransport", true);
+        LFM_TICK_INTERVAL = builder.defineInRange("lfmTickInterval", 20, 1, Integer.MAX_VALUE);
+        MAX_LFM_ROUTES_PER_TICK = builder.defineInRange("maxLfmRoutesPerTick", 16, 1, Integer.MAX_VALUE);
         MAX_ITEMS_MOVED_PER_ROUTE = builder.defineInRange("maxItemsMovedPerRoute", 16, 1, 64);
         MAX_FLUID_MOVED_PER_ROUTE = builder.defineInRange("maxFluidMovedPerRoute", 1000, 1, Integer.MAX_VALUE);
         MAX_ENERGY_MOVED_PER_ROUTE = builder.defineInRange("maxEnergyMovedPerRoute", 1024, 1, Integer.MAX_VALUE);

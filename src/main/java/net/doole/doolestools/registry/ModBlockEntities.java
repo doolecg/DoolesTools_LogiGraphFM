@@ -8,6 +8,7 @@ import net.doole.doolestools.blockentity.NetworkBatteryBlockEntity;
 import net.doole.doolestools.blockentity.NetworkModemBlockEntity;
 import net.doole.doolestools.blockentity.NetworkGeneratorBlockEntity;
 import net.doole.doolestools.blockentity.NetworkRelayBlockEntity;
+import net.doole.doolestools.blockentity.NetworkSwitchboardBlockEntity;
 import net.doole.doolestools.blockentity.NetworkWireBlockEntity;
 import net.doole.doolestools.blockentity.WirelessDongleBlockEntity;
 import net.doole.doolestools.blockentity.WirelessRouterBlockEntity;
@@ -63,4 +64,8 @@ public final class ModBlockEntities {
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<NetworkBatteryBlockEntity>> NETWORK_BATTERY =
             BLOCK_ENTITY_TYPES.register("network_battery", () ->
                     new BlockEntityType<>(NetworkBatteryBlockEntity::new, Set.of(ModBlocks.NETWORK_BATTERY.get())));
+
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<NetworkSwitchboardBlockEntity>> NETWORK_SWITCHBOARD =
+            BLOCK_ENTITY_TYPES.register("network_switchboard", () ->
+                    new BlockEntityType<>(NetworkSwitchboardBlockEntity::new, Set.of(ModBlocks.NETWORK_SWITCHBOARD.get())));
 }

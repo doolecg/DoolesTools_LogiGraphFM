@@ -5,6 +5,7 @@ import net.doole.doolestools.menu.LogisticsComputerMenu;
 import net.doole.doolestools.menu.LogisticsMonitorMenu;
 import net.doole.doolestools.menu.NetworkBatteryMenu;
 import net.doole.doolestools.menu.NetworkGeneratorMenu;
+import net.doole.doolestools.menu.NetworkSwitchboardMenu;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.inventory.MenuType;
 import net.neoforged.neoforge.common.extensions.IMenuTypeExtension;
@@ -28,5 +29,8 @@ public final class ModMenus {
 
     public static final DeferredHolder<MenuType<?>, MenuType<NetworkBatteryMenu>> NETWORK_BATTERY =
             MENUS.register("network_battery", () -> IMenuTypeExtension.create(NetworkBatteryMenu::new));
+
+    public static final DeferredHolder<MenuType<?>, MenuType<NetworkSwitchboardMenu>> NETWORK_SWITCHBOARD =
+            MENUS.register("network_switchboard", () -> IMenuTypeExtension.create(NetworkSwitchboardMenu::new));
 
 }

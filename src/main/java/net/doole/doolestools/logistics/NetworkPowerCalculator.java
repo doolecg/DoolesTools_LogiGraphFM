@@ -100,7 +100,7 @@ public final class NetworkPowerCalculator {
     public static float consumePower(ServerLevel level, BlockPos computerPos, NetworkPowerData power) {
         if (power == null || power.demandCentiFe() <= 0) return 1f;
         if (!hasRealEnergySource(level, computerPos)) return power.satisfaction();
-        int interval = Math.max(1, ModServerConfig.EASY_FACTORY_TICK_INTERVAL.get());
+        int interval = Math.max(1, ModServerConfig.LFM_TICK_INTERVAL.get());
         int needed = Math.max(1, (int) Math.ceil(power.demandCentiFe() * interval / 100.0));
         int pulled = 0;
         try (Transaction tx = Transaction.openRoot()) {
@@ -118,7 +118,7 @@ public final class NetworkPowerCalculator {
     }
 
     private static int realSupplyCentiFe(ServerLevel level, BlockPos computerPos, List<NetworkGeneratorBlockEntity> wiredGenerators) {
-        int interval = Math.max(1, ModServerConfig.EASY_FACTORY_TICK_INTERVAL.get());
+        int interval = Math.max(1, ModServerConfig.LFM_TICK_INTERVAL.get());
         long extractable = 0L;
         // Sources directly adjacent to the computer (any energy provider, incl. other mods).
         for (Direction direction : Direction.values()) {

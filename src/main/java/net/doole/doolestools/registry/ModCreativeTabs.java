@@ -24,6 +24,7 @@ public final class ModCreativeTabs {
                         output.accept(ModItems.LOGISTICS_MONITOR.get());
                         output.accept(ModItems.LABEL_GUN.get());
                         output.accept(ModItems.NETWORK_SCREWDRIVER.get());
+                        output.accept(ModItems.LINKING_CARD.get());
                         output.accept(ModItems.LOGIGRAPH_WALL_MONITOR.get());
                         output.accept(ModItems.WIRELESS_ROUTER.get());
                         output.accept(ModItems.WIRELESS_DONGLE.get());
@@ -32,6 +33,7 @@ public final class ModCreativeTabs {
                         output.accept(ModItems.NETWORK_RELAY.get());
                         output.accept(ModItems.NETWORK_GENERATOR.get());
                         output.accept(ModItems.NETWORK_BATTERY.get());
+                        output.accept(ModItems.NETWORK_SWITCHBOARD.get());
                         output.accept(ModItems.SPEED_UPGRADE_CARD.get());
                         output.accept(ModItems.STACK_UPGRADE_CARD.get());
                         output.accept(ModItems.RANGE_UPGRADE_CARD.get());

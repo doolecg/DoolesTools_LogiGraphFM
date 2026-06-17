@@ -1,4 +1,4 @@
-package net.doole.doolestools.logistics.easyfactory;
+package net.doole.doolestools.logistics.lfm;
 
 enum ItemTargetRole {
     MATERIAL,

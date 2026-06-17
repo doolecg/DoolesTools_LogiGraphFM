@@ -3,6 +3,9 @@
 LogiGraph is a powered logistics network. A Logistics Computer sees blocks through connected endpoints,
 not by sweeping every loose block around it. Build the network first, then scan it.
 
+> **Beta testing build:** current Switchboard, LFM routing, scan providers, and UI polish are in active
+> testing. Use backup worlds and expect behavior to change while issues are found.
+
 ---
 
 ## Table Of Contents
@@ -11,26 +14,30 @@ not by sweeping every loose block around it. Build the network first, then scan 
 2. [How Discovery Works](#how-discovery-works)
 3. [Network Devices](#network-devices)
 4. [Computer UI](#computer-ui)
-5. [Power And Batteries](#power-and-batteries)
-6. [Easy Factory Routing](#easy-factory-routing)
-7. [Filters And Routing Nodes](#filters-and-routing-nodes)
-8. [Throughput And Planner](#throughput-and-planner)
-9. [Multi-Computer Mesh](#multi-computer-mesh)
-10. [Config Reference](#config-reference)
-11. [Compatibility](#compatibility)
-12. [FAQ](#faq)
+5. [Network Switchboard](#network-switchboard)
+6. [Power And Batteries](#power-and-batteries)
+7. [Logi Factory Manager](#logi-factory-manager)
+8. [Filters And Routing Nodes](#filters-and-routing-nodes)
+9. [Throughput And Planner](#throughput-and-planner)
+10. [Multi-Computer Mesh](#multi-computer-mesh)
+11. [Config Reference](#config-reference)
+12. [Compatibility](#compatibility)
+13. [FAQ](#faq)
 
 ---
 
 ## Getting Started
 
 1. Place a **Logistics Computer**.
-2. Attach a **Network Modem**, **Wireless Router**, **Wireless Dongle**, or wire-hosted endpoint to each
-   machine/storage block you want to manage.
-3. Wire modems back to the computer, or keep wireless endpoints in computer/relay range.
-4. Add **Network Generators** and **Network Batteries** if automation should run under real power.
-5. Open the computer and press **Scan Network**.
-6. Add scanned devices to the graph, draw item/fluid/energy links, and press **Save**.
+2. For wired machines, attach a **Socket** to the machine/storage block and connect it with **Network Wire**.
+3. For wireless machines, place one **Wireless Router** for the network and attach **Wireless Dongles** to
+   the machine/storage blocks you want to manage.
+4. Add **Extenders** when dongles are too far from the router.
+5. Endpoints auto-join the only nearby computer network when possible. For quick manual assignment,
+   shift-right-click a computer with a **Linking Card**, then shift-right-click the target endpoint.
+6. Add **Network Generators** and **Network Batteries** if automation should run under real power.
+7. Open the computer and press **Scan Network**.
+8. Add scanned devices to the graph, draw item/fluid/energy links, and press **Save**.
 
 If a machine does not appear, check its endpoint first. Range alone is not enough.
 
@@ -43,14 +50,15 @@ chunks. It only reads the block attached to those endpoints.
 
 Reachable sources:
 
-- **Wired modem:** attached to a block and connected back to the computer through wire.
-- **Wire-hosted endpoint:** a wire segment configured as a socket/router and attached to a block.
-- **Wireless router/dongle:** attached to a block and in wireless range of the computer or a relay.
-- **Relay path:** wireless endpoints can be discovered through reachable relays.
+- **Socket:** wired adapter attached to a block and connected back to the computer through Network Wire.
+- **Wireless Dongle:** wireless adapter attached to a block and in range of the network router or an extender.
+- **Router:** one-per-network wireless base. It anchors the wireless network but does not add an attached block as a scanned device.
+- **Extender path:** wireless dongles can be discovered through reachable extenders.
 - **Peer mesh:** linked computers contribute their latest saved scan results.
 
-Network ids filter visibility. Blank endpoint ids are unclaimed and visible to nearby computers. Assigned
-endpoint ids must match the computer network.
+Network ids filter visibility. New routers, dongles, and sockets copy the one nearby loaded computer
+network when the match is unambiguous. If more than one network is nearby, they stay blank until assigned
+with a Linking Card or the naming screen. Blank endpoint ids stay isolated and do not leak into nearby computers.
 
 The scanner skips unloaded chunks and catches per-block failures. Unknown but connected block entities may
 show as `UNKNOWN_MACHINE` if no useful inventory/capability/provider data is available.
@@ -62,17 +70,20 @@ show as `UNKNOWN_MACHINE` if no useful inventory/capability/provider data is ava
 | Device | Purpose |
 |---|---|
 | Logistics Computer | Controller, graph editor, scan store, power dashboard, automation host. |
-| Network Wire | Wired backbone between computer, modems, batteries, generators, and endpoints. |
-| Network Modem | Wired endpoint attached to a target block face. |
-| Wireless Router | Wireless endpoint attached to a target block. |
-| Wireless Dongle | Compact wireless endpoint variant. |
-| Network Relay | Extends wireless reach across relay hops. |
+| Network Wire | Wired backbone between the computer, sockets, batteries, generators, and wired devices. |
+| Socket | Wired adapter attached to a target block face. |
+| Wireless Router | One-per-network wireless base/anchor. Routers are infrastructure, not machine adapters. |
+| Wireless Dongle | Wireless adapter attached to a target block face. |
+| Extender | Extends wireless reach from the router toward farther dongles. |
 | Network Generator | Burns fuel to produce FE for the network. |
 | Network Battery | Buffers FE and smooths surplus/deficit. |
+| Network Switchboard | Connects networks together with LFM permissions and priorities. |
+| Linking Card | Copies a computer network id and applies it to routers, dongles, and sockets. |
 | Logistics Monitor | Single-block external display. |
 | LogiGraph Wall Monitor | Multi-block external display. |
 
-Sneak + right-click endpoints or relays to rename them, assign a network id, and view/install upgrades.
+Sneak + right-click sockets, dongles, routers, or extenders to rename them, assign a network id, and view/install upgrades.
+Use the Linking Card for faster assignment: shift-right-click a Logistics Computer to copy, then shift-right-click an endpoint to paste.
 
 ---
 
@@ -81,6 +92,9 @@ Sneak + right-click endpoints or relays to rename them, assign a network id, and
 ### Graph Page
 
 - **Scan Network:** rebuilds the connected-device list.
+- **Network tabs:** when Switchboards expose more networks, vertical tabs group scanned blocks by source network.
+- **Node labels:** graph nodes use the device/block name plus id as the title and show the source network in
+  small text at the bottom-right of the node card.
 - **Refresh Data:** asks the server for current state without forcing a scan.
 - **Save:** sends the graph to the server; automation uses saved graph data.
 - **Tool palette:** add selected devices, filters, splitters, combiners, channels, frames, and text labels.
@@ -95,6 +109,18 @@ per-link throughput when the server has samples.
 - Display preferences are client-local.
 - Graph export/import uses compact base64 strings on the clipboard.
 - Network name, access mode, and whitelist are server-owned.
+
+---
+
+## Network Switchboard
+
+The Network Switchboard is the explicit bridge between networks. Place it in loaded chunks, open it, then
+use the LogiGraph-style canvas to arrange known networks as draggable nodes. Middle-drag pans, mouse wheel
+zooms, and links between nodes store item/fluid/energy permissions plus priority.
+
+Switchboard links are bidirectional. A Logistics Computer on any connected network can scan every network
+reachable through loaded Switchboards. The computer UI groups those results by source network, and LFM only
+routes across network boundaries when the Switchboard graph allows the resource type.
 
 ---
 
@@ -113,15 +139,15 @@ Batteries charge from surplus and discharge during deficits using transactional 
 
 ---
 
-## Easy Factory Routing
+## Logi Factory Manager
 
-Easy Factory runs on the server from the saved graph. It supports item, fluid, and energy routes when the
-corresponding config gates are enabled.
+Logi Factory Manager, or **LFM**, runs on the server from the saved graph. It supports item, fluid, and
+energy routes when the corresponding config gates are enabled.
 
 For each route tick:
 
 1. The computer calculates power satisfaction.
-2. Easy Factory builds a link index and walks graph routes.
+2. LFM builds a link index and walks graph routes.
 3. Transfers simulate extract/insert in a transaction.
 4. Successful transfers commit and report moved counts per link.
 5. Clients receive active route ids and throughput samples.
@@ -145,7 +171,7 @@ and keeps JEI/REI/EMI panels outside the modal.
 
 ## Throughput And Planner
 
-Live throughput comes from actual server transfers. `EasyFactoryManager.tickWithCounts(...)` returns moved
+Live throughput comes from actual server transfers. `LogiFactoryManager.tickWithCounts(...)` returns moved
 amounts per link; the computer stores rolling samples and syncs them in `ComputerStatePayload`.
 
 The planner is an estimate. It compares configured route capacity against scan-derived machine progress and
@@ -166,16 +192,16 @@ Current defaults are from `ModServerConfig`, not old README prose.
 
 | Key | Default | Description |
 |---|---:|---|
-| `easyFactory.enableEasyFactoryTransport` | `true` | Master automation gate. |
-| `easyFactory.enableItemRoutes` | `true` | Enables item transfers. |
-| `easyFactory.enableFluidRoutes` | `true` | Enables fluid transfers. |
-| `easyFactory.enableEnergyRoutes` | `true` | Enables energy transfers. |
-| `easyFactory.easyFactoryTickInterval` | `20` | Ticks between route passes. |
-| `easyFactory.maxEasyFactoryRoutesPerTick` | `16` | Base route budget. |
-| `easyFactory.maxItemsMovedPerRoute` | `16` | Base item move size. |
-| `easyFactory.maxFluidMovedPerRoute` | `1000` | Base fluid move size. |
-| `easyFactory.maxEnergyMovedPerRoute` | `1024` | Base FE move size. |
-| `scan.scanRadius` | `16` | Loaded endpoint search radius. |
+| `lfm.enableLfmTransport` | `true` | Master automation gate. |
+| `lfm.enableItemRoutes` | `true` | Enables item transfers. |
+| `lfm.enableFluidRoutes` | `true` | Enables fluid transfers. |
+| `lfm.enableEnergyRoutes` | `true` | Enables energy transfers. |
+| `lfm.lfmTickInterval` | `20` | Ticks between route passes. |
+| `lfm.maxLfmRoutesPerTick` | `16` | Base route budget. |
+| `lfm.maxItemsMovedPerRoute` | `16` | Base item move size. |
+| `lfm.maxFluidMovedPerRoute` | `1000` | Base fluid move size. |
+| `lfm.maxEnergyMovedPerRoute` | `1024` | Base FE move size. |
+| `scan.scanRadius` | `16` | Loaded device search radius around the computer and extenders. |
 | `scan.autoScanIntervalTicks` | `0` | Scheduled scan interval; `0` disables it. |
 | `scan.maxWireTraversalSteps` | `256` | Wired traversal cap. |
 | `scan.redstoneAlertOnError` | `true` | Computer emits redstone strength 15 while ERROR warnings exist. |
@@ -187,7 +213,7 @@ Current defaults are from `ModServerConfig`, not old README prose.
 
 ## Compatibility
 
-- **AE2 / Mekanism / Create:** optional scan providers add data when those mods are loaded.
+- **AE2 / Refined Storage / Storage Drawers / Mekanism / Create:** optional scan providers add data when those mods are loaded.
 - **CC:Tweaked:** Logistics Computers expose a `logistics_computer` peripheral when present.
 - **JEI / REI / EMI:** recipe panels are kept away from the computer GUI and filter picker.
 - **Hidden pipes/cables:** use `doolestools:scanner_blacklist` or `ScannerHiddenBlock`.
@@ -196,16 +222,17 @@ Current defaults are from `ModServerConfig`, not old README prose.
 
 ## FAQ
 
-**Why does Scan Network show nothing?** Connect a target block to a reachable endpoint first. Loose blocks
-inside radius are not listed.
+**Why does Scan Network show nothing?** Connect a target block to a reachable Socket or Wireless Dongle
+first. Loose blocks inside radius are not listed, and routers do not add machines by themselves.
 
 **Can it move resources?** Yes. The saved graph drives server-side item/fluid/energy transfers when config
 allows the route type and the network has usable power.
 
 **Does it load chunks?** No. Unloaded chunks are skipped.
 
-**Do devices need network ids?** Blank ids are unclaimed and visible to nearby computers. Assigned ids must
-match the computer network.
+**Do devices need network ids?** Yes. Assign sockets, dongles, routers, and extenders to the intended
+network. They auto-join only when exactly one nearby computer network is found; otherwise use a Linking Card
+or naming screen. Blank ids stay isolated and do not make devices visible to nearby computers.
 
 **Why do planner estimates differ from live throughput?** Throughput is actual server history. Planner
 output is a snapshot estimate.

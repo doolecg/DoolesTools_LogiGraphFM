@@ -1,0 +1,146 @@
+package net.doole.doolestools.blockentity;
+
+import net.doole.doolestools.logistics.switchboard.SwitchboardLinkData;
+import net.doole.doolestools.logistics.switchboard.SwitchboardNodePositionData;
+import net.doole.doolestools.menu.NetworkSwitchboardMenu;
+import net.doole.doolestools.registry.ModBlockEntities;
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.MenuProvider;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.storage.ValueInput;
+import net.minecraft.world.level.storage.ValueOutput;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
+
+public class NetworkSwitchboardBlockEntity extends BlockEntity implements MenuProvider {
+    private static final Map<net.minecraft.resources.ResourceKey<Level>, Map<BlockPos, NetworkSwitchboardBlockEntity>> LOADED = new ConcurrentHashMap<>();
+
+    private List<SwitchboardLinkData> links = new ArrayList<>();
+    private List<SwitchboardNodePositionData> nodePositions = new ArrayList<>();
+
+    public NetworkSwitchboardBlockEntity(BlockPos pos, BlockState state) {
+        super(ModBlockEntities.NETWORK_SWITCHBOARD.get(), pos, state);
+    }
+
+    @Override
+    public void onLoad() {
+        super.onLoad();
+        if (level instanceof ServerLevel serverLevel) {
+            LOADED.computeIfAbsent(serverLevel.dimension(), key -> new ConcurrentHashMap<>()).put(worldPosition.immutable(), this);
+        }
+    }
+
+    @Override
+    public void setRemoved() {
+        if (level instanceof ServerLevel serverLevel) {
+            Map<BlockPos, NetworkSwitchboardBlockEntity> map = LOADED.get(serverLevel.dimension());
+            if (map != null) map.remove(worldPosition);
+        }
+        super.setRemoved();
+    }
+
+    public static void forEachLoaded(ServerLevel level, Consumer<NetworkSwitchboardBlockEntity> consumer) {
+        Map<BlockPos, NetworkSwitchboardBlockEntity> map = LOADED.get(level.dimension());
+        if (map == null) return;
+        map.values().forEach(be -> {
+            if (!be.isRemoved()) consumer.accept(be);
+        });
+    }
+
+    public static String networkDisplayName(ServerLevel level, String networkId) {
+        if (networkId == null || networkId.isBlank()) return "";
+        final String[] found = {""};
+        forEachLoaded(level, switchboard -> {
+            if (!found[0].isBlank()) return;
+            BlockPos center = switchboard.getBlockPos();
+            int radius = 96;
+            int minChunkX = (center.getX() - radius) >> 4;
+            int maxChunkX = (center.getX() + radius) >> 4;
+            int minChunkZ = (center.getZ() - radius) >> 4;
+            int maxChunkZ = (center.getZ() + radius) >> 4;
+            for (int chunkX = minChunkX; chunkX <= maxChunkX && found[0].isBlank(); chunkX++) {
+                for (int chunkZ = minChunkZ; chunkZ <= maxChunkZ && found[0].isBlank(); chunkZ++) {
+                    if (!(level.getChunk(chunkX, chunkZ, net.minecraft.world.level.chunk.status.ChunkStatus.FULL, false) instanceof net.minecraft.world.level.chunk.LevelChunk chunk)) continue;
+                    for (BlockEntity be : chunk.getBlockEntities().values()) {
+                        if (be instanceof LogisticsComputerBlockEntity computer && networkId.equals(computer.networkId())) {
+                            found[0] = computer.networkName();
+                            break;
+                        }
+                    }
+                }
+            }
+        });
+        return found[0];
+    }
+
+    public List<SwitchboardLinkData> links() {
+        return List.copyOf(links);
+    }
+
+    public List<SwitchboardNodePositionData> nodePositions() {
+        return List.copyOf(nodePositions);
+    }
+
+    public void setLinks(List<SwitchboardLinkData> newLinks) {
+        List<SwitchboardLinkData> sanitized = new ArrayList<>();
+        if (newLinks != null) {
+            for (SwitchboardLinkData link : newLinks) {
+                SwitchboardLinkData clean = link.sanitized();
+                if (clean.valid()) sanitized.add(clean);
+                if (sanitized.size() >= 64) break;
+            }
+        }
+        this.links = sanitized;
+        setChanged();
+    }
+
+    public void setNodePositions(List<SwitchboardNodePositionData> newPositions) {
+        List<SwitchboardNodePositionData> sanitized = new ArrayList<>();
+        if (newPositions != null) {
+            for (SwitchboardNodePositionData position : newPositions) {
+                SwitchboardNodePositionData clean = position.sanitized();
+                if (clean.valid()) sanitized.add(clean);
+                if (sanitized.size() >= 128) break;
+            }
+        }
+        this.nodePositions = sanitized;
+        setChanged();
+    }
+
+    @Override
+    public Component getDisplayName() {
+        return Component.literal("Network Switchboard");
+    }
+
+    @Nullable
+    @Override
+    public AbstractContainerMenu createMenu(int containerId, Inventory playerInventory, Player player) {
+        return new NetworkSwitchboardMenu(containerId, playerInventory, worldPosition);
+    }
+
+    @Override
+    protected void saveAdditional(ValueOutput output) {
+        super.saveAdditional(output);
+        output.store("links", SwitchboardLinkData.CODEC.listOf(), links);
+        output.store("nodePositions", SwitchboardNodePositionData.CODEC.listOf(), nodePositions);
+    }
+
+    @Override
+    protected void loadAdditional(ValueInput input) {
+        super.loadAdditional(input);
+        this.links = new ArrayList<>(input.read("links", SwitchboardLinkData.CODEC.listOf()).orElse(List.of()));
+        this.nodePositions = new ArrayList<>(input.read("nodePositions", SwitchboardNodePositionData.CODEC.listOf()).orElse(List.of()));
+    }
+}

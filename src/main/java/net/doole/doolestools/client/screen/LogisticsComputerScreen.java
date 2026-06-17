@@ -2066,6 +2066,8 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
             if (detailsPanel.mouseClicked(mx, my)) return true;
         }
 
+        if (!right && listWidget.handleNetworkTabClick(mx, my)) return true;
+
         ScannedBlockData row = listWidget.rowAt(mx, my);
         if (row != null && !right) {
             editingGraphName = false;

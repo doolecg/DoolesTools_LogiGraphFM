@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=north": { "model": "doolestools:block/network_switchboard" },
+    "facing=east": { "model": "doolestools:block/network_switchboard", "y": 90 },
+    "facing=south": { "model": "doolestools:block/network_switchboard", "y": 180 },
+    "facing=west": { "model": "doolestools:block/network_switchboard", "y": 270 }
+  }
+}

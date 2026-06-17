@@ -46,11 +46,28 @@ public final class LogisticsGraph {
         }
         List<GraphNodeData> nodes = new ArrayList<>(graph.activeCanvas().nodes());
         GraphNodeData newNode = new GraphNodeData(
-                newNodeId(), scanned.id(), shortName(scanned.blockName()),
+                newNodeId(), scanned.id(), shortName(displayName(scanned)),
                 scanned.type().toDefaultNodeType(), x, y,
                 GraphNodeData.DEFAULT_WIDTH, GraphNodeData.DEFAULT_HEIGHT, PortDiscovery.discover(scanned), false, "");
         nodes.add(alreadyPresent ? newNode.withInstanced(true) : newNode);
         return withNodes(graph, nodes);
+    }
+
+    private static String displayName(ScannedBlockData scanned) {
+        String blockName = scanned.blockName() == null ? "Block" : scanned.blockName().replace("#", " #");
+        if (!blockName.contains("#") && scanned.id() != null && scanned.id().startsWith("net_")) {
+            blockName = blockName + " #" + compactId(scanned.id());
+        }
+        return blockName;
+    }
+
+    private static String compactId(String id) {
+        String value = id == null ? "" : id;
+        int underscore = value.lastIndexOf('_');
+        if (underscore >= 0 && underscore < value.length() - 1) value = value.substring(underscore + 1);
+        value = value.replaceAll("[^A-Za-z0-9]", "");
+        if (value.length() > 4) value = value.substring(value.length() - 4);
+        return value.isBlank() ? "0000" : value.toUpperCase(java.util.Locale.ROOT);
     }
 
     /** Adds an already-built node (e.g. a standalone Filter node not tied to a scanned block). */

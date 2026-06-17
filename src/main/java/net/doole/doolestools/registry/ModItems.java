@@ -2,6 +2,7 @@ package net.doole.doolestools.registry;
 
 import net.doole.doolestools.DoolesTools;
 import net.doole.doolestools.item.LabelGunItem;
+import net.doole.doolestools.item.LinkingCardItem;
 import net.doole.doolestools.item.NetworkEndpointBlockItem;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
@@ -26,6 +27,9 @@ public final class ModItems {
     public static final DeferredItem<Item> NETWORK_SCREWDRIVER =
             ITEMS.registerSimpleItem("network_screwdriver");
 
+    public static final DeferredItem<Item> LINKING_CARD =
+            ITEMS.registerItem("linking_card", LinkingCardItem::new);
+
     public static final DeferredItem<BlockItem> LOGIGRAPH_WALL_MONITOR =
             ITEMS.registerSimpleBlockItem("logigraph_wall_monitor", ModBlocks.LOGIGRAPH_WALL_MONITOR);
 
@@ -49,6 +53,9 @@ public final class ModItems {
 
     public static final DeferredItem<BlockItem> NETWORK_BATTERY =
             ITEMS.registerSimpleBlockItem("network_battery", ModBlocks.NETWORK_BATTERY);
+
+    public static final DeferredItem<BlockItem> NETWORK_SWITCHBOARD =
+            ITEMS.registerSimpleBlockItem("network_switchboard", ModBlocks.NETWORK_SWITCHBOARD);
 
     public static final DeferredItem<Item> SPEED_UPGRADE_CARD =
             ITEMS.registerSimpleItem("speed_upgrade_card");

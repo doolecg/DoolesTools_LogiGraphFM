@@ -5,9 +5,11 @@ import net.doole.doolestools.blockentity.NetworkEndpointBlockEntity;
 import net.doole.doolestools.registry.ModItems;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -65,6 +67,19 @@ public abstract class NetworkEndpointBlock extends DirectionalBlock implements E
 
     public static BlockPos attachedPos(BlockPos pos, BlockState state) {
         return pos.relative(state.getValue(FACING).getOpposite());
+    }
+
+    @Override
+    public void setPlacedBy(Level level, BlockPos pos, BlockState state, @Nullable LivingEntity placer, ItemStack stack) {
+        super.setPlacedBy(level, pos, state, placer, stack);
+        if (!(level instanceof ServerLevel serverLevel)) return;
+        if (level.getBlockEntity(pos) instanceof NetworkEndpointBlockEntity endpoint && endpoint.networkId().isBlank()) {
+            String networkId = NetworkEndpointBlockEntity.inferNearbyNetwork(serverLevel, pos);
+            if (!networkId.isBlank()) {
+                endpoint.setNetworkId(networkId);
+                level.sendBlockUpdated(pos, state, state, 3);
+            }
+        }
     }
 
     @Override

@@ -33,6 +33,7 @@ public class NetworkEndpointBlockItem extends BlockItem {
     }
 
     private boolean installIntoWire(UseOnContext context, BlockPos wirePos, Direction endpointFace) {
+        if (!"modem".equals(endpointKind)) return false;
         if (!context.getLevel().getBlockState(wirePos).is(ModBlocks.NETWORK_WIRE.get())) return false;
         if (!(context.getLevel().getBlockEntity(wirePos) instanceof NetworkWireBlockEntity wire)) return false;
         if (wire.hasEndpoint()) return true;
@@ -42,6 +43,7 @@ public class NetworkEndpointBlockItem extends BlockItem {
                     && context.getPlayer() != null && !context.getPlayer().getAbilities().instabuild) {
                 stack.shrink(1);
             }
+            context.getLevel().sendBlockUpdated(wirePos, wire.getBlockState(), wire.getBlockState(), 3);
         }
         return true;
     }

@@ -66,7 +66,7 @@ public class NetworkWireBlockEntity extends BlockEntity {
     }
 
     public boolean hasEndpoint() {
-        return "router".equals(endpointKind) || "modem".equals(endpointKind);
+        return "modem".equals(endpointKind);
     }
 
     public boolean hasRouter() {
@@ -115,14 +115,16 @@ public class NetworkWireBlockEntity extends BlockEntity {
 
     public boolean installEndpoint(String kind, Direction face, String name) {
         if (hasEndpoint()) return false;
-        if (!"router".equals(kind) && !"modem".equals(kind)) return false;
+        if (!"modem".equals(kind)) return false;
         endpointKind = kind;
         endpointFace = face == null ? Direction.NORTH : face;
         endpointId = endpointKind + "_" + Long.toUnsignedString(worldPosition.asLong());
         endpointNumber = 0;
         ensureEndpointNumber();
         endpointName = sanitize(name);
-        endpointNetworkId = "";
+        endpointNetworkId = level instanceof ServerLevel serverLevel
+                ? NetworkEndpointBlockEntity.inferNearbyNetwork(serverLevel, worldPosition)
+                : "";
         refreshBlockState();
         setChanged();
         return true;

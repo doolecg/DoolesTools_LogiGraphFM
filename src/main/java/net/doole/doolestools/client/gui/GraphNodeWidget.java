@@ -131,8 +131,15 @@ public final class GraphNodeWidget {
 
         // Warning strip.
         String strip = stripLabel(scanned);
+        String network = networkLabel(scanned);
+        int networkMax = w / 2;
+        int networkW = network.isBlank() ? 0 : Math.min(font.width(network), networkMax);
         g.fill(x + 1, y + h - 12, x + w - 1, y + h - 1, 0xFF0a0d09);
-        g.text(font, trim(font, strip, w - 8), x + 5, y + h - 11, worst, false);
+        g.text(font, trim(font, strip, w - networkW - 12), x + 5, y + h - 11, worst, false);
+        if (!network.isBlank()) {
+            String trimmedNetwork = trim(font, network, networkMax);
+            g.text(font, trimmedNetwork, x + w - 5 - font.width(trimmedNetwork), y + h - 11, DUTheme.TEXT_DIM, false);
+        }
 
         // Selection corner brackets (cyan).
         if (selected) {
@@ -348,6 +355,11 @@ public final class GraphNodeWidget {
             case WARNING -> w.message();
             default -> w.message();
         };
+    }
+
+    private static String networkLabel(ScannedBlockData scanned) {
+        if (scanned == null || scanned.networkName() == null || scanned.networkName().isBlank()) return "";
+        return scanned.networkName();
     }
 
     private static int worstColor(ScannedBlockData scanned) {

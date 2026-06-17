@@ -1,4 +1,4 @@
-package net.doole.doolestools.logistics.easyfactory;
+package net.doole.doolestools.logistics.lfm;
 
 import net.doole.doolestools.config.ModServerConfig;
 import net.doole.doolestools.logistics.FilterSettings;
@@ -9,6 +9,7 @@ import net.doole.doolestools.logistics.data.GraphLinkData;
 import net.doole.doolestools.logistics.data.GraphNodeData;
 import net.doole.doolestools.logistics.data.LogisticsGraphData;
 import net.doole.doolestools.logistics.data.ScannedBlockData;
+import net.doole.doolestools.logistics.switchboard.SwitchboardNetworkAccess;
 import net.doole.doolestools.blockentity.NetworkEndpointBlockEntity;
 import net.doole.doolestools.blockentity.NetworkModemBlockEntity;
 import net.doole.doolestools.blockentity.NetworkWireBlockEntity;
@@ -29,10 +30,10 @@ import net.neoforged.neoforge.transfer.item.VanillaContainerWrapper;
 import net.neoforged.neoforge.transfer.item.WorldlyContainerWrapper;
 import net.neoforged.neoforge.transfer.transaction.Transaction;
 
-public final class EasyFactoryManager {
+public final class LogiFactoryManager {
     private record ItemTargetSlot(ResourceHandler<ItemResource> handler, int slot) {}
 
-    private EasyFactoryManager() {}
+    private LogiFactoryManager() {}
 
     public static java.util.Set<String> tick(LogisticsGraphData graph, ServerLevel level, java.util.List<ScannedBlockData> scan) {
         return tick(graph, level, scan, 1f);
@@ -51,15 +52,16 @@ public final class EasyFactoryManager {
      */
     public static java.util.Map<String, Integer> tickWithCounts(LogisticsGraphData graph, ServerLevel level, java.util.List<ScannedBlockData> scan, float satisfaction) {
         java.util.Map<String, Integer> movedByLink = new java.util.LinkedHashMap<>();
-        if (!ModServerConfig.ENABLE_EASY_FACTORY_TRANSPORT.get() || graph.isEmpty()) return movedByLink;
+        if (!ModServerConfig.ENABLE_LFM_TRANSPORT.get() || graph.isEmpty()) return movedByLink;
         java.util.Map<String, BlockPos> positions = scannedPositions(scan);
+        java.util.Map<String, ScannedBlockData> scannedById = scannedById(scan);
         int processed = 0;
         int routeBudget = routeBudget(level, graph, positions);
         if (satisfaction < 1f) routeBudget = Math.max(1, Math.round(routeBudget * Math.max(0f, satisfaction)));
         // build the outbound index once so DFS routes dont scan all links on every node visit
         java.util.Map<String, java.util.List<GraphLinkData>> outboundIndex = buildOutboundIndex(graph);
         java.util.List<GraphLinkData> orderedLinks = new java.util.ArrayList<>(graph.activeCanvas().links());
-        orderedLinks.sort((a, b) -> Integer.compare(filterPriority(graph, a), filterPriority(graph, b)));
+        orderedLinks.sort((a, b) -> Integer.compare(routePriority(level, graph, b, scannedById), routePriority(level, graph, a, scannedById)));
         for (GraphLinkData link : orderedLinks) {
             if (processed >= routeBudget) break;
             GraphNodeData sourceNode = graph.findNode(link.sourceNodeId());
@@ -68,11 +70,13 @@ public final class EasyFactoryManager {
             BlockPos targetPos = targetPosOf(targetNode, positions);
             if (sourcePos != null && targetNode != null && isRoutingNode(targetNode.type())) {
                 if (!level.hasChunkAt(sourcePos)) continue;
+                if (!switchboardAllows(level, link, sourceNode, targetNode, scannedById)) continue;
                 if (routeThroughNodesCount(graph, level, link, sourceNode, sourcePos, positions, movedByLink, outboundIndex) > 0) processed++;
                 continue;
             }
             if (sourcePos == null || targetPos == null) continue;
             if (!level.hasChunkAt(sourcePos) || !level.hasChunkAt(targetPos)) continue;
+            if (!switchboardAllows(level, link, sourceNode, targetNode, scannedById)) continue;
             int moved = transferCount(link, level, sourceNode, targetNode, sourcePos, targetPos);
             if (moved > 0) {
                 movedByLink.merge(link.linkId(), moved, Integer::sum);
@@ -89,6 +93,37 @@ public final class EasyFactoryManager {
             positions.put(scanned.id(), scanned.pos());
         }
         return positions;
+    }
+
+    private static java.util.Map<String, ScannedBlockData> scannedById(java.util.List<ScannedBlockData> scan) {
+        java.util.Map<String, ScannedBlockData> byId = new java.util.HashMap<>();
+        if (scan == null) return byId;
+        for (ScannedBlockData scanned : scan) byId.put(scanned.id(), scanned);
+        return byId;
+    }
+
+    private static boolean switchboardAllows(ServerLevel level, GraphLinkData link, GraphNodeData sourceNode, GraphNodeData targetNode,
+                                             java.util.Map<String, ScannedBlockData> scannedById) {
+        ScannedBlockData source = scannedFor(sourceNode, scannedById);
+        ScannedBlockData target = scannedFor(targetNode, scannedById);
+        if (source == null || target == null) return true;
+        return SwitchboardNetworkAccess.canRoute(level, source.networkId(), target.networkId(), link.type());
+    }
+
+    private static int routePriority(ServerLevel level, LogisticsGraphData graph, GraphLinkData link,
+                                     java.util.Map<String, ScannedBlockData> scannedById) {
+        int base = filterPriority(graph, link);
+        GraphNodeData sourceNode = graph.findNode(link.sourceNodeId());
+        GraphNodeData targetNode = graph.findNode(link.targetNodeId());
+        ScannedBlockData source = scannedFor(sourceNode, scannedById);
+        ScannedBlockData target = scannedFor(targetNode, scannedById);
+        if (source == null || target == null) return base;
+        return base + SwitchboardNetworkAccess.priority(level, source.networkId(), target.networkId(), link.type());
+    }
+
+    private static ScannedBlockData scannedFor(GraphNodeData node, java.util.Map<String, ScannedBlockData> scannedById) {
+        if (node == null || node.scannedBlockId() == null) return null;
+        return scannedById.get(node.scannedBlockId());
     }
 
     private static BlockPos targetPosOf(GraphNodeData node, java.util.Map<String, BlockPos> scannedPositions) {
@@ -468,7 +503,7 @@ public final class EasyFactoryManager {
     }
 
     private static int routeBudget(ServerLevel level, LogisticsGraphData graph, java.util.Map<String, BlockPos> scannedPositions) {
-        int base = ModServerConfig.MAX_EASY_FACTORY_ROUTES_PER_TICK.get();
+        int base = ModServerConfig.MAX_LFM_ROUTES_PER_TICK.get();
         int bonus = 0;
         for (GraphNodeData node : graph.activeCanvas().nodes()) {
             BlockPos pos = targetPosOf(node, scannedPositions);

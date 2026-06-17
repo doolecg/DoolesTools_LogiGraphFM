@@ -7,13 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+> Beta testing build. Back up worlds before testing current Switchboard/LFM/network assignment behavior.
+
 ### Added
 
 - **Scheduled auto-scan** — Logistics Computers can rescan on `scan.autoScanIntervalTicks` without a
   player opening the GUI.
 - **Redstone alerts** — Logistics Computers emit redstone when `scan.redstoneAlertOnError` is enabled
   and any ERROR-level warning is active.
-- **Per-link throughput stats** — Easy Factory returns server-owned moved counts per link; the computer
+- **Per-link throughput stats** — LFM returns server-owned moved counts per link; the computer
   syncs rolling samples to node details and the stats page.
 - **Configurable wire traversal depth** — `scan.maxWireTraversalSteps` replaces the fixed wired traversal
   cap for large grids.
@@ -29,16 +31,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   mutating the peer world or graph.
 - **Throughput planner** — pure stats-page analysis estimates bottlenecks/starvation from route capacity
   and machine progress snapshots.
+- **Network Switchboard** — connects networks with per-resource LFM permissions and priorities; connected
+  computers show multi-network scan tabs.
+- **Storage Drawers / Refined Storage scan providers** — optional providers read exposed item capabilities
+  from drawer and RS controllers/interfaces when present.
+- **Linking Card** — shift-use a Logistics Computer to copy its network id, then shift-use a router,
+  dongle, or socket to assign it without typing.
+- **Switchboard canvas UI** — LogiGraph-style Switchboard screen with draggable nodes, pan, zoom, saved
+  node positions, and item/fluid/energy bridge permissions.
 
 ### Fixed / Optimised
+
+- **Endpoint network assignment** — newly placed routers, dongles, and sockets auto-join exactly one nearby
+  computer network when unambiguous; otherwise they remain isolated until assigned.
+- **Graph node labels** — scanned nodes now show device/block name plus id in the title and source network
+  in smaller text at the node footer.
 
 - **GraphCanvasWidget.nodeMap()** was rebuilding a `HashMap` on every hit-test call (link click,
   port hover, etc.), ignoring the existing revision-gated cache. Now returns `cachedNodesById`
   directly after calling `ensureModel()` — zero extra allocations on frames where the graph hasn't changed.
-- **EasyFactoryManager DFS** — `outboundLinks()` previously scanned the entire link list for every
+- **LogiFactoryManager DFS** — `outboundLinks()` previously scanned the entire link list for every
   routing node visited during a route-through pass (O(links * nodes) per tick). Now builds one
   `Map<nodeId, List<links>>` index at the start of each tick and reuses it for all DFS calls.
-- **EasyFactoryManager dead code** — removed `singleAcceptingSlot` and `isInputLikeInsertionSlot`,
+- **LogiFactoryManager dead code** — removed `singleAcceptingSlot` and `isInputLikeInsertionSlot`,
   neither of which was called anywhere in the codebase.
 - **NetworkPowerCalculator** — logs a `debug` line when the wired traversal hits `MAX_COMPONENT_STEPS`
   so large wire grids are visible in logs without flooding them at normal scale.
@@ -52,9 +67,9 @@ action is server-authoritative and config-gated.
 ### Added
 
 - **Power network** — a logical FE network the Logistics Computer draws over connected
-  infrastructure: **Network Wire**, **Network Relay** (extends wireless reach, hop-limited),
-  **Network Modem** and **Wireless Router** endpoints, and a fuel-burning **Network Generator**.
-  The computer tallies devices/relays/routers each tick and only runs graph automation when the
+  infrastructure: **Network Wire**, wired **Sockets**, one-per-network **Wireless Router** anchors,
+  wireless **Dongles**, wireless **Extenders**, and a fuel-burning **Network Generator**.
+  The computer tallies devices/extenders/routers each tick and only runs graph automation when the
   network has enough power.
 - **Device upgrades** — Speed, Stack, Range, and Efficiency upgrade cards (max 4 per type). Install
   with **Shift + right-click** using a card; remove one with the **Network Screwdriver**. Counts are
@@ -62,13 +77,13 @@ action is server-authoritative and config-gated.
 - **Numeric identities** — devices and networks get globally-unique four-digit IDs
   (`NETWORK#0001`), allocated by per-world saved data; networks can be named and access-gated
   (shared / private / whitelist).
-- **Easy Factory item routing** — server-gated item movement along the links you draw. All transfers
+- **Logi Factory Manager item routing** — server-gated item movement along the links you draw. All transfers
   are two-phase (simulate then commit) so a partial insert never voids items.
 - **Power dashboard** — supply/demand history graph in the computer terminal.
 
 ### Changed
 
-- **Performance — networking:** standalone relays and wireless routers now register in a persistent
+- **Performance — networking:** standalone extenders and wireless routers now register in a persistent
   per-dimension node index on load and drop out on removal (AE2/RS/Powah-style), so power
   recalculation no longer scans every block entity in a chunk radius. Power history switched to an
   `ArrayDeque` ring buffer (O(1) eviction).

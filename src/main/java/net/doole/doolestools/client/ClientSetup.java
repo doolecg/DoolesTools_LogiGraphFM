@@ -4,6 +4,7 @@ import net.doole.doolestools.DoolesTools;
 import net.doole.doolestools.client.screen.LogisticsComputerScreen;
 import net.doole.doolestools.client.screen.LogisticsMonitorScreen;
 import net.doole.doolestools.client.screen.NetworkGeneratorScreen;
+import net.doole.doolestools.client.screen.NetworkSwitchboardScreen;
 import net.doole.doolestools.client.render.LogiGraphWallMonitorRenderer;
 import net.doole.doolestools.config.ModClientConfig;
 import net.doole.doolestools.registry.ModBlockEntities;
@@ -26,6 +27,7 @@ public final class ClientSetup {
         event.register(ModMenus.LOGISTICS_MONITOR.get(), LogisticsMonitorScreen::new);
         event.register(ModMenus.NETWORK_GENERATOR.get(), NetworkGeneratorScreen::new);
         event.register(ModMenus.NETWORK_BATTERY.get(), net.doole.doolestools.client.screen.NetworkBatteryScreen::new);
+        event.register(ModMenus.NETWORK_SWITCHBOARD.get(), NetworkSwitchboardScreen::new);
     }
 
     @SubscribeEvent

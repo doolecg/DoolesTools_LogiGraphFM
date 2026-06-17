@@ -5,6 +5,8 @@ import net.doole.doolestools.integration.ae2.AE2StorageProvider;
 import net.doole.doolestools.integration.computercraft.ComputerCraftIntegration;
 import net.doole.doolestools.integration.create.CreateStorageProvider;
 import net.doole.doolestools.integration.mekanism.MekanismStorageProvider;
+import net.doole.doolestools.integration.refinedstorage.RefinedStorageProvider;
+import net.doole.doolestools.integration.storagedrawers.StorageDrawersProvider;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModList;
 
@@ -34,6 +36,10 @@ public final class IntegrationHooks {
         catch (Throwable t) { DoolesTools.LOGGER.warn("Mekanism provider registration failed: {}", t.toString()); }
         try { ModProviderRegistry.register(new CreateStorageProvider()); }
         catch (Throwable t) { DoolesTools.LOGGER.warn("Create provider registration failed: {}", t.toString()); }
+        try { ModProviderRegistry.register(new StorageDrawersProvider()); }
+        catch (Throwable t) { DoolesTools.LOGGER.warn("Storage Drawers provider registration failed: {}", t.toString()); }
+        try { ModProviderRegistry.register(new RefinedStorageProvider()); }
+        catch (Throwable t) { DoolesTools.LOGGER.warn("Refined Storage provider registration failed: {}", t.toString()); }
     }
 
     public static boolean isLoaded(String modId) {

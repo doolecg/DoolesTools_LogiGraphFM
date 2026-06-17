@@ -114,14 +114,16 @@ public class NetworkWireBlock extends Block implements EntityBlock {
             }
         }
 
-        // Placing a router/modem item onto a bare wire.
+        // Placing a socket item onto a bare wire.
         String kind = null;
-        if (stack.getItem() == ModItems.WIRELESS_ROUTER.get()) kind = "router";
         if (stack.getItem() == ModItems.NETWORK_MODEM.get()) kind = "modem";
         if (kind != null) {
             if (!level.isClientSide() && level.getBlockEntity(pos) instanceof NetworkWireBlockEntity wire) {
                 Direction face = endpointInstallFace(level, pos, hit.getDirection());
-                if (face != null && wire.installEndpoint(kind, face, "") && !player.getAbilities().instabuild) stack.shrink(1);
+                if (face != null && wire.installEndpoint(kind, face, "")) {
+                    level.sendBlockUpdated(pos, state, wire.getBlockState(), 3);
+                    if (!player.getAbilities().instabuild) stack.shrink(1);
+                }
             }
             return InteractionResult.SUCCESS;
         }
@@ -159,7 +161,7 @@ public class NetworkWireBlock extends Block implements EntityBlock {
     public boolean onDestroyedByPlayer(BlockState state, Level level, BlockPos pos, Player player, ItemStack toolStack, boolean willHarvest, FluidState fluid) {
         if (level.getBlockEntity(pos) instanceof NetworkWireBlockEntity wire && wire.hasEndpoint()) {
             if (!level.isClientSide()) {
-                ItemStack drop = new ItemStack(wire.hasRouter() ? ModItems.WIRELESS_ROUTER.get() : ModItems.NETWORK_MODEM.get());
+                ItemStack drop = new ItemStack(ModItems.NETWORK_MODEM.get());
                 if (player == null || !player.getAbilities().instabuild) popResource(level, pos, drop);
                 wire.clearEndpoint();
             }

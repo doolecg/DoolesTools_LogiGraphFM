@@ -9,6 +9,7 @@ import net.doole.doolestools.blockentity.NetworkEndpointBlockEntity;
 import net.doole.doolestools.blockentity.NetworkModemBlockEntity;
 import net.doole.doolestools.blockentity.NetworkRelayBlockEntity;
 import net.doole.doolestools.blockentity.NetworkWireBlockEntity;
+import net.doole.doolestools.blockentity.WirelessRouterBlockEntity;
 import net.doole.doolestools.config.ModServerConfig;
 import net.doole.doolestools.logistics.data.EnergySummary;
 import net.doole.doolestools.logistics.data.FluidEntry;
@@ -244,20 +245,19 @@ public final class LogisticsScanner {
     }
 
     private static boolean networkMatches(String endpointNetworkId, String computerNetworkId) {
-        if (computerNetworkId == null || computerNetworkId.isBlank()) return true;
-        // A device with no network assigned is unclaimed and shows up on any nearby computer, so a
-        // freshly-placed modem/router works immediately without opening its screen to set fields.
-        if (endpointNetworkId == null || endpointNetworkId.isBlank()) return true;
+        if (computerNetworkId == null || computerNetworkId.isBlank()) return false;
+        if (endpointNetworkId == null || endpointNetworkId.isBlank()) return false;
         return endpointNetworkId.equals(computerNetworkId);
     }
 
     private static boolean relayNetworkMatches(String relayNetworkId, String computerNetworkId) {
-        return relayNetworkId == null || relayNetworkId.isBlank() || networkMatches(relayNetworkId, computerNetworkId);
+        return networkMatches(relayNetworkId, computerNetworkId);
     }
 
     private static ScannedBlockData readNetworkEndpoint(ServerLevel level, BlockPos center, NetworkEndpointBlockEntity endpoint,
                                                         long gameTime, BlockLabelSavedData labels, List<RelayNode> relays) {
         if (endpoint instanceof NetworkModemBlockEntity modem && !isWiredModemOnline(level, modem)) return null;
+        if (endpoint instanceof WirelessRouterBlockEntity) return null;
         if (!(endpoint instanceof NetworkModemBlockEntity) && !wirelessReachable(center, endpoint.getBlockPos(), endpoint.upgradeCount("range"), relays)) return null;
         BlockPos attached = endpoint.attachedPos();
         if (!level.hasChunkAt(attached)) return null;

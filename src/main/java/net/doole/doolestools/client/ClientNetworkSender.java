@@ -1,10 +1,14 @@
 package net.doole.doolestools.client;
 
 import net.doole.doolestools.logistics.data.LogisticsGraphData;
+import net.doole.doolestools.logistics.switchboard.SwitchboardLinkData;
+import net.doole.doolestools.logistics.switchboard.SwitchboardNodePositionData;
 import net.doole.doolestools.network.payload.ClearScanPayload;
 import net.doole.doolestools.network.payload.RequestComputerSyncPayload;
 import net.doole.doolestools.network.payload.RequestMonitorSyncPayload;
+import net.doole.doolestools.network.payload.RequestSwitchboardStatePayload;
 import net.doole.doolestools.network.payload.SaveGraphPayload;
+import net.doole.doolestools.network.payload.SaveSwitchboardPayload;
 import net.doole.doolestools.network.payload.ScanAreaPayload;
 import net.doole.doolestools.network.payload.SetMonitorModePayload;
 import net.doole.doolestools.network.payload.SetComputerNetworkSettingsPayload;
@@ -70,6 +74,14 @@ public final class ClientNetworkSender {
 
     public static void requestKnownNetworks() {
         ClientPacketDistributor.sendToServer(net.doole.doolestools.network.payload.RequestKnownNetworksPayload.INSTANCE);
+    }
+
+    public static void requestSwitchboardState(BlockPos pos) {
+        ClientPacketDistributor.sendToServer(new RequestSwitchboardStatePayload(pos));
+    }
+
+    public static void saveSwitchboard(BlockPos pos, List<SwitchboardLinkData> links, List<SwitchboardNodePositionData> nodePositions) {
+        ClientPacketDistributor.sendToServer(new SaveSwitchboardPayload(pos, links, nodePositions));
     }
 
 }

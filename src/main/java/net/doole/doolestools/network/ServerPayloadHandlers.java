@@ -4,6 +4,7 @@ import net.doole.doolestools.blockentity.LogisticsComputerBlockEntity;
 import net.doole.doolestools.blockentity.LogisticsMonitorBlockEntity;
 import net.doole.doolestools.blockentity.NetworkEndpointBlockEntity;
 import net.doole.doolestools.blockentity.NetworkRelayBlockEntity;
+import net.doole.doolestools.blockentity.NetworkSwitchboardBlockEntity;
 import net.doole.doolestools.blockentity.NetworkWireBlockEntity;
 import net.doole.doolestools.item.LabelGunItem;
 import net.doole.doolestools.logistics.LogisticsGraph;
@@ -17,6 +18,7 @@ import net.doole.doolestools.logistics.data.GraphTextData;
 import net.doole.doolestools.logistics.data.LogisticsGraphData;
 import net.doole.doolestools.menu.LogisticsComputerMenu;
 import net.doole.doolestools.menu.LogisticsMonitorMenu;
+import net.doole.doolestools.menu.NetworkSwitchboardMenu;
 import net.doole.doolestools.network.payload.ClearScanPayload;
 import net.doole.doolestools.network.payload.ComputerStatePayload;
 import net.doole.doolestools.network.payload.MonitorStatePayload;
@@ -25,13 +27,16 @@ import net.doole.doolestools.network.payload.KnownNetworksPayload;
 import net.doole.doolestools.network.payload.RequestComputerSyncPayload;
 import net.doole.doolestools.network.payload.RequestMonitorSyncPayload;
 import net.doole.doolestools.network.payload.RequestNearbyLabelsPayload;
+import net.doole.doolestools.network.payload.RequestSwitchboardStatePayload;
 import net.doole.doolestools.network.payload.SaveGraphPayload;
+import net.doole.doolestools.network.payload.SaveSwitchboardPayload;
 import net.doole.doolestools.network.payload.ScanAreaPayload;
 import net.doole.doolestools.network.payload.SetBlockLabelPayload;
 import net.doole.doolestools.network.payload.SetComputerNetworkSettingsPayload;
 import net.doole.doolestools.network.payload.SetGunLabelPayload;
 import net.doole.doolestools.network.payload.SetNetworkEndpointNamePayload;
 import net.doole.doolestools.network.payload.SetMonitorModePayload;
+import net.doole.doolestools.network.payload.SwitchboardStatePayload;
 import net.doole.doolestools.world.BlockLabelSavedData;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
@@ -305,6 +310,23 @@ public final class ServerPayloadHandlers {
 
     private record NetworkEntry(String id, String name, boolean editable) {}
 
+    public static void handleRequestSwitchboardState(RequestSwitchboardStatePayload payload, IPayloadContext ctx) {
+        ctx.enqueueWork(() -> withSwitchboard(ctx, payload.pos(), (player, be) -> sendSwitchboardState(player, payload.pos(), be)));
+    }
+
+    public static void handleSaveSwitchboard(SaveSwitchboardPayload payload, IPayloadContext ctx) {
+        ctx.enqueueWork(() -> withSwitchboard(ctx, payload.pos(), (player, be) -> {
+            be.setLinks(payload.links());
+            be.setNodePositions(payload.nodePositions());
+            sendSwitchboardState(player, payload.pos(), be);
+        }));
+    }
+
+    private static void sendSwitchboardState(ServerPlayer player, BlockPos pos, NetworkSwitchboardBlockEntity be) {
+        PacketDistributor.sendToPlayer(player, new SwitchboardStatePayload(pos, be.links(), be.nodePositions()));
+        sendKnownNetworks(player);
+    }
+
     public static void handleRequestMonitorSync(RequestMonitorSyncPayload payload, IPayloadContext ctx) {
         ctx.enqueueWork(() -> withMonitor(ctx, payload.pos(), (player, be) -> sendMonitorState(player, payload.pos(), be)));
     }
@@ -337,6 +359,10 @@ public final class ServerPayloadHandlers {
         void run(ServerPlayer player, LogisticsMonitorBlockEntity be);
     }
 
+    private interface SwitchboardAction {
+        void run(ServerPlayer player, NetworkSwitchboardBlockEntity be);
+    }
+
     private static void withComputer(IPayloadContext ctx, BlockPos pos, ComputerAction action) {
         if (!(ctx.player() instanceof ServerPlayer player)) return;
         if (!(player.containerMenu instanceof LogisticsComputerMenu menu) || !menu.getPos().equals(pos)) return;
@@ -351,6 +377,16 @@ public final class ServerPayloadHandlers {
         if (!(player.containerMenu instanceof LogisticsMonitorMenu menu) || !menu.getPos().equals(pos)) return;
         if (!player.level().hasChunkAt(pos)) return;
         if (player.level().getBlockEntity(pos) instanceof LogisticsMonitorBlockEntity be) {
+            action.run(player, be);
+        }
+    }
+
+    private static void withSwitchboard(IPayloadContext ctx, BlockPos pos, SwitchboardAction action) {
+        if (!(ctx.player() instanceof ServerPlayer player)) return;
+        if (!(player.containerMenu instanceof NetworkSwitchboardMenu menu) || !menu.pos().equals(pos)) return;
+        if (!player.level().hasChunkAt(pos)) return;
+        if (player.distanceToSqr(pos.getCenter()) > 64.0D) return;
+        if (player.level().getBlockEntity(pos) instanceof NetworkSwitchboardBlockEntity be) {
             action.run(player, be);
         }
     }

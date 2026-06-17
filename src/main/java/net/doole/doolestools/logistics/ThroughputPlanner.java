@@ -6,7 +6,7 @@ import net.doole.doolestools.logistics.data.GraphNodeData;
 import net.doole.doolestools.logistics.data.LogisticsGraphData;
 import net.doole.doolestools.logistics.data.MachineProgressData;
 import net.doole.doolestools.logistics.data.ScannedBlockData;
-import net.doole.doolestools.logistics.easyfactory.EasyFactoryManager;
+import net.doole.doolestools.logistics.lfm.LogiFactoryManager;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -46,7 +46,7 @@ public final class ThroughputPlanner {
         Map<String, String> nodeNames = new HashMap<>();
         for (GraphNodeData n : graph.activeCanvas().nodes()) nodeNames.put(n.nodeId(), n.displayName());
 
-        int tickInterval = Math.max(1, ModServerConfig.EASY_FACTORY_TICK_INTERVAL.get());
+        int tickInterval = Math.max(1, ModServerConfig.LFM_TICK_INTERVAL.get());
         int baseItemsPerRoute = ModServerConfig.MAX_ITEMS_MOVED_PER_ROUTE.get();
         int baseMbPerRoute = ModServerConfig.MAX_FLUID_MOVED_PER_ROUTE.get();
         int baseFePerRoute = ModServerConfig.MAX_ENERGY_MOVED_PER_ROUTE.get();
@@ -65,7 +65,7 @@ public final class ThroughputPlanner {
             if (sourceNode == null || targetNode == null) continue;
 
             // skip routing nodes - they dont have real capacity on their own
-            if (EasyFactoryManager.isRoutingNode(sourceNode.type()) || EasyFactoryManager.isRoutingNode(targetNode.type())) continue;
+            if (LogiFactoryManager.isRoutingNode(sourceNode.type()) || LogiFactoryManager.isRoutingNode(targetNode.type())) continue;
 
             String sourceName = sourceNode.displayName();
             String targetName = targetNode.displayName();

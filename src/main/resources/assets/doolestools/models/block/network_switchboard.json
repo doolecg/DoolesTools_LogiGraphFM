@@ -1,0 +1,12 @@
+{
+  "parent": "minecraft:block/cube",
+  "textures": {
+    "north": "doolestools:block/switch_front",
+    "east": "doolestools:block/switch_side",
+    "south": "doolestools:block/switch_back",
+    "west": "doolestools:block/switch_side",
+    "up": "doolestools:block/switch_top",
+    "down": "doolestools:block/switch_bottom",
+    "particle": "doolestools:block/switch_side"
+  }
+}

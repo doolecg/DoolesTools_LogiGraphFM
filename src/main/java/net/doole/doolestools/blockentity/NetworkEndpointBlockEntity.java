@@ -4,11 +4,11 @@ import net.doole.doolestools.block.NetworkEndpointBlock;
 import net.doole.doolestools.world.NetworkIdentitySavedData;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientGamePacketListener;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
@@ -41,7 +41,10 @@ public abstract class NetworkEndpointBlockEntity extends BlockEntity {
     @Override
     public void onLoad() {
         super.onLoad();
-        if (level instanceof ServerLevel) ensureDeviceNumber();
+        if (level instanceof ServerLevel serverLevel) {
+            ensureDeviceNumber();
+            if (networkId().isBlank()) setNetworkId(inferNearbyNetwork(serverLevel, worldPosition));
+        }
     }
 
     // Sync identity/upgrade state to the client so the naming screen and holograms show real values.
@@ -242,5 +245,32 @@ public abstract class NetworkEndpointBlockEntity extends BlockEntity {
             if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-') out.append(c);
         }
         return out.toString();
+    }
+
+    public static String inferNearbyNetwork(ServerLevel level, BlockPos center) {
+        String found = "";
+        int matches = 0;
+        int radius = 32;
+        int minChunkX = (center.getX() - radius) >> 4;
+        int maxChunkX = (center.getX() + radius) >> 4;
+        int minChunkZ = (center.getZ() - radius) >> 4;
+        int maxChunkZ = (center.getZ() + radius) >> 4;
+        for (int chunkX = minChunkX; chunkX <= maxChunkX; chunkX++) {
+            for (int chunkZ = minChunkZ; chunkZ <= maxChunkZ; chunkZ++) {
+                if (!(level.getChunk(chunkX, chunkZ, net.minecraft.world.level.chunk.status.ChunkStatus.FULL, false) instanceof net.minecraft.world.level.chunk.LevelChunk chunk)) continue;
+                for (BlockEntity blockEntity : chunk.getBlockEntities().values()) {
+                    if (!(blockEntity instanceof LogisticsComputerBlockEntity computer)) continue;
+                    if (center.distSqr(computer.getBlockPos()) > radius * radius) continue;
+                    String id = computer.networkId();
+                    if (id.isBlank()) continue;
+                    if (!id.equals(found)) {
+                        found = id;
+                        matches++;
+                        if (matches > 1) return "";
+                    }
+                }
+            }
+        }
+        return matches == 1 ? found : "";
     }
 }

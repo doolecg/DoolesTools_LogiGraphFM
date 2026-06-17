@@ -4,10 +4,11 @@ import net.doole.doolestools.DoolesTools;
 import net.doole.doolestools.config.ModServerConfig;
 import net.doole.doolestools.logistics.NetworkPowerCalculator;
 import net.doole.doolestools.logistics.LogisticsScanner;
-import net.doole.doolestools.logistics.easyfactory.EasyFactoryManager;
+import net.doole.doolestools.logistics.lfm.LogiFactoryManager;
 import net.doole.doolestools.logistics.data.LogisticsGraphData;
 import net.doole.doolestools.logistics.data.NetworkPowerData;
 import net.doole.doolestools.logistics.data.ScannedBlockData;
+import net.doole.doolestools.logistics.switchboard.SwitchboardNetworkAccess;
 import net.doole.doolestools.menu.LogisticsComputerMenu;
 import net.doole.doolestools.registry.ModBlockEntities;
 import net.doole.doolestools.world.NetworkIdentitySavedData;
@@ -133,8 +134,8 @@ public class LogisticsComputerBlockEntity extends BlockEntity implements MenuPro
             }
         }
 
-        if (!ModServerConfig.ENABLE_EASY_FACTORY_TRANSPORT.get() || graph == LogisticsGraphData.EMPTY) return;
-        int interval = ModServerConfig.EASY_FACTORY_TICK_INTERVAL.get();
+        if (!ModServerConfig.ENABLE_LFM_TRANSPORT.get() || graph == LogisticsGraphData.EMPTY) return;
+        int interval = ModServerConfig.LFM_TICK_INTERVAL.get();
         if (level.getGameTime() % interval != 0L) return;
         NetworkPowerData power = getNetworkPower();
         samplePower(power);
@@ -147,7 +148,7 @@ public class LogisticsComputerBlockEntity extends BlockEntity implements MenuPro
             activeRouteIds = java.util.Set.of();
             return;
         }
-        java.util.Map<String, Integer> tickCounts = EasyFactoryManager.tickWithCounts(graph, level, lastScan, satisfaction);
+        java.util.Map<String, Integer> tickCounts = LogiFactoryManager.tickWithCounts(graph, level, lastScan, satisfaction);
         activeRouteIds = tickCounts.keySet();
         updateThroughputHistory(tickCounts);
     }
@@ -191,7 +192,7 @@ public class LogisticsComputerBlockEntity extends BlockEntity implements MenuPro
             return;
         }
         int radius = Math.max(ModServerConfig.SCAN_RADIUS.get(), ModServerConfig.WIRELESS_MAX_RANGE.get());
-        this.lastScan = LogisticsScanner.scan(serverLevel, this.worldPosition, radius, this.lastScan, networkId());
+        this.lastScan = scanVisibleNetworks(serverLevel, radius);
         // merge scan results from linked peer computers
         // each peer contributes its own lastScan - read-only, no mutations
         mergePeerScans(serverLevel);
@@ -199,6 +200,20 @@ public class LogisticsComputerBlockEntity extends BlockEntity implements MenuPro
         invalidatePowerCache();
         recomputeWarnings(serverLevel);
         setChanged();
+    }
+
+    private List<ScannedBlockData> scanVisibleNetworks(ServerLevel serverLevel, int radius) {
+        java.util.Map<String, ScannedBlockData> merged = new java.util.LinkedHashMap<>();
+        List<SwitchboardNetworkAccess.NetworkRef> networks = SwitchboardNetworkAccess.visibleNetworks(serverLevel, networkId(), networkName());
+        if (networks.isEmpty()) networks = List.of(new SwitchboardNetworkAccess.NetworkRef(networkId(), networkName()));
+        for (SwitchboardNetworkAccess.NetworkRef network : networks) {
+            List<ScannedBlockData> scan = LogisticsScanner.scan(serverLevel, this.worldPosition, radius, this.lastScan, network.id());
+            for (ScannedBlockData data : scan) {
+                ScannedBlockData sourced = data.withNetworkSource(network.id(), network.name());
+                merged.putIfAbsent(network.id() + ":" + sourced.id(), sourced);
+            }
+        }
+        return new ArrayList<>(merged.values());
     }
 
     private void mergePeerScans(ServerLevel serverLevel) {

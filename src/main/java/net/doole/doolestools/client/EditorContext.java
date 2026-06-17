@@ -61,6 +61,7 @@ public class EditorContext {
     private long lastScanTime = -1L;
 
     public String selectedScannedId;
+    public String selectedScanNetworkId = "";
     public String selectedNodeId;
     /** Additional nodes selected via the marquee tool; {@link #selectedNodeId} is the primary one. */
     public final java.util.Set<String> selectedNodeIds = new java.util.LinkedHashSet<>();
@@ -97,6 +98,7 @@ public class EditorContext {
         this.power = power == null ? NetworkPowerData.EMPTY : power;
         this.scanById.clear();
         for (ScannedBlockData s : this.scan) scanById.put(s.id(), s);
+        if (!hasNetwork(selectedScanNetworkId)) selectedScanNetworkId = firstNetworkId();
         // Keep local edits if the player has unsaved changes; otherwise take the server's graph.
         if (!dirty) {
             this.graph = graph;
@@ -210,7 +212,7 @@ public class EditorContext {
         if (history == null || history.isEmpty()) return -1.0;
         long sum = 0;
         for (int value : history) sum += value;
-        int interval = Math.max(1, net.doole.doolestools.config.ModServerConfig.EASY_FACTORY_TICK_INTERVAL.get());
+        int interval = Math.max(1, net.doole.doolestools.config.ModServerConfig.LFM_TICK_INTERVAL.get());
         double samplesPerMinute = 1200.0 / interval;
         return (sum / (double) history.size()) * samplesPerMinute;
     }
@@ -272,9 +274,61 @@ public class EditorContext {
     public List<ScannedBlockData> filteredScan() {
         List<ScannedBlockData> out = new ArrayList<>();
         for (ScannedBlockData s : scan) {
-            if (matches(s)) out.add(s);
+            if (networkMatches(s) && matches(s)) out.add(s);
         }
         return out;
+    }
+
+    public List<NetworkTab> scanNetworkTabs() {
+        java.util.Map<String, String> tabs = new java.util.LinkedHashMap<>();
+        for (ScannedBlockData s : scan) {
+            String id = normalizeNetworkId(s.networkId());
+            tabs.putIfAbsent(id, networkLabel(s, id));
+        }
+        List<NetworkTab> out = new ArrayList<>();
+        for (Map.Entry<String, String> entry : tabs.entrySet()) out.add(new NetworkTab(entry.getKey(), entry.getValue()));
+        return out;
+    }
+
+    public void selectNextScanNetwork() {
+        List<NetworkTab> tabs = scanNetworkTabs();
+        if (tabs.isEmpty()) { selectedScanNetworkId = ""; return; }
+        int idx = 0;
+        for (int i = 0; i < tabs.size(); i++) {
+            if (tabs.get(i).id().equals(selectedScanNetworkId)) { idx = i; break; }
+        }
+        selectedScanNetworkId = tabs.get((idx + 1) % tabs.size()).id();
+    }
+
+    public String selectedScanNetworkLabel() {
+        for (NetworkTab tab : scanNetworkTabs()) if (tab.id().equals(selectedScanNetworkId)) return tab.name();
+        return selectedScanNetworkId == null || selectedScanNetworkId.isBlank() ? "NETWORK" : selectedScanNetworkId;
+    }
+
+    public record NetworkTab(String id, String name) {}
+
+    private boolean networkMatches(ScannedBlockData s) {
+        if (selectedScanNetworkId == null || selectedScanNetworkId.isBlank()) return true;
+        return selectedScanNetworkId.equals(normalizeNetworkId(s.networkId()));
+    }
+
+    private boolean hasNetwork(String id) {
+        if (id == null || id.isBlank()) return true;
+        for (ScannedBlockData s : scan) if (id.equals(normalizeNetworkId(s.networkId()))) return true;
+        return false;
+    }
+
+    private String firstNetworkId() {
+        return scan.isEmpty() ? "" : normalizeNetworkId(scan.get(0).networkId());
+    }
+
+    private static String normalizeNetworkId(String id) {
+        return id == null ? "" : id;
+    }
+
+    private static String networkLabel(ScannedBlockData s, String id) {
+        if (s.networkName() != null && !s.networkName().isBlank()) return s.networkName();
+        return id == null || id.isBlank() ? "LOCAL" : id;
     }
 
     private boolean matches(ScannedBlockData s) {

@@ -7,6 +7,7 @@ import net.doole.doolestools.network.payload.KnownNetworksPayload;
 import net.doole.doolestools.network.payload.LinkedComputersPayload;
 import net.doole.doolestools.network.payload.MonitorStatePayload;
 import net.doole.doolestools.network.payload.NearbyLabelsPayload;
+import net.doole.doolestools.network.payload.SwitchboardStatePayload;
 import net.minecraft.client.Minecraft;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
@@ -61,6 +62,14 @@ public final class ClientPayloadHandlers {
                     && screen.monitorPos().equals(payload.pos())) {
                 screen.applyState(payload.linked(), payload.computerPos(), payload.mode(),
                         payload.graph(), payload.scan());
+            }
+        });
+    }
+
+    public static void handleSwitchboardState(SwitchboardStatePayload payload, IPayloadContext ctx) {
+        ctx.enqueueWork(() -> {
+            if (Minecraft.getInstance().screen instanceof net.doole.doolestools.client.screen.NetworkSwitchboardScreen screen) {
+                screen.applyState(payload.links(), payload.nodePositions());
             }
         });
     }

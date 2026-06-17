@@ -8,6 +8,7 @@ import net.doole.doolestools.block.NetworkBatteryBlock;
 import net.doole.doolestools.block.NetworkModemBlock;
 import net.doole.doolestools.block.NetworkGeneratorBlock;
 import net.doole.doolestools.block.NetworkRelayBlock;
+import net.doole.doolestools.block.NetworkSwitchboardBlock;
 import net.doole.doolestools.block.NetworkWireBlock;
 import net.doole.doolestools.block.WirelessDongleBlock;
 import net.doole.doolestools.block.WirelessRouterBlock;
@@ -100,6 +101,15 @@ public final class ModBlocks {
     public static final DeferredBlock<NetworkBatteryBlock> NETWORK_BATTERY = BLOCKS.registerBlock(
             "network_battery",
             NetworkBatteryBlock::new,
+            () -> BlockBehaviour.Properties.of()
+                    .strength(3.0F, 6.0F)
+                    .sound(SoundType.METAL)
+                    .requiresCorrectToolForDrops()
+    );
+
+    public static final DeferredBlock<NetworkSwitchboardBlock> NETWORK_SWITCHBOARD = BLOCKS.registerBlock(
+            "network_switchboard",
+            NetworkSwitchboardBlock::new,
             () -> BlockBehaviour.Properties.of()
                     .strength(3.0F, 6.0F)
                     .sound(SoundType.METAL)
