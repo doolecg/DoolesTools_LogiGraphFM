@@ -28,13 +28,20 @@ import java.util.Map;
 public class NetworkSwitchboardScreen extends AbstractContainerScreen<NetworkSwitchboardMenu> {
     private static final int MIN_GUI_W = 420;
     private static final int MIN_GUI_H = 246;
-    private static final int NODE_W = 118;
+    private static final int NODE_W = 150;
     private static final int NODE_H = 48;
     private static final int SNAP = 12;
     private static final DateTimeFormatter CLOCK = DateTimeFormatter.ofPattern("hh:mm a");
+    private static final int PAGE_CANVAS = 0;
+    private static final int PAGE_TRAFFIC = 1;
 
     private final List<SwitchboardLinkData> links = new ArrayList<>();
     private final Map<String, int[]> nodePositions = new java.util.HashMap<>();
+    private List<Integer> packetHistory = List.of();
+    private List<Integer> powerHistory = List.of();
+    private List<Integer> itemHistory = List.of();
+    private int activeRoutes;
+    private int page = PAGE_CANVAS;
     private String selectedNetworkId = "";
     private int selectedLink = -1;
     private String linkSourceId = "";
@@ -42,6 +49,7 @@ public class NetworkSwitchboardScreen extends AbstractContainerScreen<NetworkSwi
     private String clickNetworkId = "";
     private boolean draggedNetwork;
     private boolean panning;
+    private int autoRefreshTicks;
     private double lastMouseX, lastMouseY;
 
     private final CanvasViewState canvasView = new CanvasViewState();
@@ -53,7 +61,10 @@ public class NetworkSwitchboardScreen extends AbstractContainerScreen<NetworkSwi
     private TerminalButton priorityButton;
     private TerminalButton saveButton;
     private TerminalButton refreshButton;
+    private TerminalButton clearStaleButton;
     private TerminalButton fitButton;
+    private TerminalButton canvasTabButton;
+    private TerminalButton trafficTabButton;
 
     private int guiW = MIN_GUI_W;
     private int guiH = MIN_GUI_H;
@@ -121,20 +132,34 @@ public class NetworkSwitchboardScreen extends AbstractContainerScreen<NetworkSwi
             ClientNetworkSender.requestKnownNetworks();
             ClientNetworkSender.requestSwitchboardState(menu.pos());
         }).accent(DUTheme.OK);
+        clearStaleButton = new TerminalButton(leftX, leftY + leftH - 20, leftW, 14, Component.literal("CLEAR STALE"), () -> {
+            ClientNetworkSender.requestKnownNetworks();
+            ClientNetworkSender.clearSwitchboardCache(menu.pos());
+        }).accent(DUTheme.WARN);
         fitButton = new TerminalButton(canvasX + canvasW - 30, canvasY + 2, 26, 10, Component.literal("FIT"), this::fitCanvas).accent(DUTheme.PROGRESS_BLUE);
+        canvasTabButton = new TerminalButton(leftPos + 10, tabBarY, 76, 16, Component.literal("FACTORY"), () -> page = PAGE_CANVAS).accent(DUTheme.SELECTED);
+        trafficTabButton = new TerminalButton(leftPos + 89, tabBarY, 76, 16, Component.literal("TRAFFIC"), () -> page = PAGE_TRAFFIC).accent(DUTheme.PROGRESS_BLUE);
         addRenderableWidget(itemButton);
         addRenderableWidget(fluidButton);
         addRenderableWidget(energyButton);
         addRenderableWidget(priorityButton);
         addRenderableWidget(saveButton);
         addRenderableWidget(refreshButton);
+        addRenderableWidget(clearStaleButton);
         addRenderableWidget(fitButton);
+        addRenderableWidget(canvasTabButton);
+        addRenderableWidget(trafficTabButton);
 
         ClientNetworkSender.requestKnownNetworks();
         ClientNetworkSender.requestSwitchboardState(menu.pos());
     }
 
     public void applyState(List<SwitchboardLinkData> newLinks, List<SwitchboardNodePositionData> newPositions) {
+        applyState(newLinks, newPositions, List.of(), List.of(), List.of(), 0);
+    }
+
+    public void applyState(List<SwitchboardLinkData> newLinks, List<SwitchboardNodePositionData> newPositions,
+            List<Integer> newPacketHistory, List<Integer> newPowerHistory, List<Integer> newItemHistory, int newActiveRoutes) {
         links.clear();
         if (newLinks != null) links.addAll(newLinks);
         nodePositions.clear();
@@ -144,7 +169,20 @@ public class NetworkSwitchboardScreen extends AbstractContainerScreen<NetworkSwi
                 if (clean.valid()) nodePositions.put(clean.networkId(), clampLogical(clean.x(), clean.y()));
             }
         }
+        packetHistory = cleanHistory(newPacketHistory);
+        powerHistory = cleanHistory(newPowerHistory);
+        itemHistory = cleanHistory(newItemHistory);
+        activeRoutes = Math.max(0, newActiveRoutes);
         selectedLink = links.isEmpty() ? -1 : Math.max(0, Math.min(selectedLink, links.size() - 1));
+    }
+
+    @Override
+    protected void containerTick() {
+        super.containerTick();
+        if (++autoRefreshTicks >= 40) {
+            autoRefreshTicks = 0;
+            ClientNetworkSender.requestSwitchboardState(menu.pos());
+        }
     }
 
     @Override
@@ -154,10 +192,13 @@ public class NetworkSwitchboardScreen extends AbstractContainerScreen<NetworkSwi
         syncButtons();
         DUTheme.frame(g, leftPos, topPos, guiW, guiH);
         renderHeader(g);
-        renderNetworkList(g);
-        panel(g, canvasX, canvasY, canvasW, canvasH, "FACTORY BRIDGE CANVAS");
-        canvasWidget.render(g, font, designMouseX, designMouseY);
-        renderInfo(g);
+        if (page == PAGE_TRAFFIC) renderTrafficPage(g);
+        else {
+            renderNetworkList(g);
+            panel(g, canvasX, canvasY, canvasW, canvasH, "FACTORY BRIDGE CANVAS");
+            canvasWidget.render(g, font, designMouseX, designMouseY);
+            renderInfo(g);
+        }
         renderTaskbar(g);
         g.pose().popMatrix();
     }
@@ -178,9 +219,111 @@ public class NetworkSwitchboardScreen extends AbstractContainerScreen<NetworkSwi
 
     private void renderTaskbar(GuiGraphicsExtractor g) {
         DUTheme.box(g, leftPos + 8, tabBarY - 2, guiW - 16, 20, DUTheme.PANEL_ALT, DUTheme.PANEL_BORDER);
-        g.text(font, "SWITCHBOARD", leftPos + 16, tabBarY + 4, DUTheme.TEXT_GREEN, false);
-        g.text(font, "FACTORY CANVAS", leftPos + 100, tabBarY + 4, DUTheme.SELECTED, false);
-        g.text(font, "MOUSE3 PAN  |  WHEEL ZOOM  |  SAVE TO APPLY", leftPos + 220, tabBarY + 4, DUTheme.TEXT_DIM, false);
+        g.text(font, page == PAGE_TRAFFIC
+                ? "GLOBAL NETWORK TRAFFIC  |  CONFIGURED BRIDGE LANES"
+                : "MOUSE3 PAN  |  WHEEL ZOOM  |  SAVE TO APPLY", leftPos + 180, tabBarY + 4, DUTheme.TEXT_DIM, false);
+    }
+
+    private void renderTrafficPage(GuiGraphicsExtractor g) {
+        int x = leftPos + 10;
+        int y = leftY;
+        int w = guiW - 20;
+        int h = leftH;
+        panel(g, x, y, w, h, "GLOBAL NETWORK OVERVIEW");
+
+        int cardY = y + 22;
+        int gap = 6;
+        int cardW = Math.max(70, (w - 20 - gap * 3) / 4);
+        renderTrafficCard(g, x + 8, cardY, cardW, "NETWORKS", String.valueOf(networks().size()), DUTheme.TEXT_GREEN);
+        renderTrafficCard(g, x + 8 + (cardW + gap), cardY, cardW, "BRIDGES", String.valueOf(links.size()), DUTheme.SELECTED);
+        renderTrafficCard(g, x + 8 + (cardW + gap) * 2, cardY, cardW, "PACKETS", String.valueOf(latest(packetHistory)), DUTheme.PROGRESS_BLUE);
+        renderTrafficCard(g, x + 8 + (cardW + gap) * 3, cardY, cardW, "POWER", powerLabel(), DUTheme.WARN);
+
+        int graphY = cardY + 44;
+        int graphH = Math.max(86, Math.min(126, h / 3));
+        int graphW = Math.max(92, (w - 22) / 3);
+        renderTelemetryGraph(g, x + 8, graphY, graphW, graphH, "PACKETS TRANSFERRING", packetHistory, DUTheme.PROGRESS_BLUE);
+        renderTelemetryGraph(g, x + 11 + graphW, graphY, graphW, graphH, "POWER USED", powerHistory, DUTheme.WARN);
+        renderTelemetryGraph(g, x + 14 + graphW * 2, graphY, w - 22 - graphW * 2, graphH, "ITEM AMOUNTS", itemHistory, DUTheme.OK);
+
+        int matrixY = graphY + graphH + 16;
+        DUTheme.box(g, x + 8, matrixY, w - 16, h - (matrixY - y) - 8, DUTheme.PANEL_ALT, DUTheme.PANEL_BORDER);
+        g.text(font, "LINK OVERVIEW", x + 16, matrixY + 8, DUTheme.TEXT_GREEN, false);
+        g.text(font, activeRoutes + " ROUTES LIVE", x + w - 126, matrixY + 8, activeRoutes > 0 ? DUTheme.OK : DUTheme.DISABLED, false);
+        int headerY = matrixY + 28;
+        g.text(font, "FROM", x + 16, headerY, DUTheme.TEXT_GREEN_DIM, false);
+        g.text(font, "TO", x + Math.max(150, w / 3), headerY, DUTheme.TEXT_GREEN_DIM, false);
+        g.text(font, "ITEM", x + w - 178, headerY, DUTheme.TEXT_GREEN_DIM, false);
+        g.text(font, "FLUID", x + w - 136, headerY, DUTheme.TEXT_GREEN_DIM, false);
+        g.text(font, "FE", x + w - 88, headerY, DUTheme.TEXT_GREEN_DIM, false);
+        g.text(font, "PRI", x + w - 48, headerY, DUTheme.TEXT_GREEN_DIM, false);
+        g.fill(x + 14, headerY + 12, x + w - 14, headerY + 13, DUTheme.PANEL_BORDER);
+
+        if (links.isEmpty()) {
+            g.centeredText(font, "NO GLOBAL BRIDGES CONFIGURED", x + w / 2, matrixY + 48, DUTheme.TEXT_DIM);
+            g.centeredText(font, "CREATE BRIDGES ON THE FACTORY CANVAS PAGE", x + w / 2, matrixY + 62, DUTheme.TEXT_GREEN_DIM);
+            return;
+        }
+
+        int rowY = headerY + 19;
+        int row = 0;
+        for (SwitchboardLinkData link : links) {
+            if (rowY + 15 > y + h - 12) break;
+            int fill = row % 2 == 0 ? 0x5510150f : 0x3310150f;
+            g.fill(x + 12, rowY - 2, x + w - 12, rowY + 12, fill);
+            g.text(font, trim(nameFor(link.sourceNetworkId()), 22), x + 16, rowY, DUTheme.TEXT, false);
+            g.text(font, trim(nameFor(link.targetNetworkId()), 22), x + Math.max(150, w / 3), rowY, DUTheme.TEXT, false);
+            drawLane(g, x + w - 174, rowY, link.items(), DUTheme.OK);
+            drawLane(g, x + w - 132, rowY, link.fluids(), DUTheme.PROGRESS_BLUE);
+            drawLane(g, x + w - 90, rowY, link.energy(), DUTheme.WARN);
+            g.text(font, String.valueOf(link.priority()), x + w - 45, rowY, DUTheme.TEXT, false);
+            rowY += 16;
+            row++;
+        }
+    }
+
+    private void renderTrafficCard(GuiGraphicsExtractor g, int x, int y, int w, String label, String value, int color) {
+        DUTheme.box(g, x, y, w, 32, DUTheme.PANEL_ALT, color);
+        g.text(font, label, x + 6, y + 6, DUTheme.TEXT_DIM, false);
+        g.text(font, value, x + 6, y + 18, color, false);
+    }
+
+    private void drawLane(GuiGraphicsExtractor g, int x, int y, boolean enabled, int color) {
+        DUTheme.box(g, x, y - 2, 30, 12, enabled ? 0xFF122419 : 0xFF1a1414, enabled ? color : DUTheme.DISABLED);
+        g.centeredText(font, enabled ? "ON" : "OFF", x + 15, y, enabled ? color : DUTheme.DISABLED);
+    }
+
+    private void renderTelemetryGraph(GuiGraphicsExtractor g, int x, int y, int w, int h, String label, List<Integer> history, int color) {
+        DUTheme.box(g, x, y, w, h, DUTheme.SCREEN, DUTheme.PANEL_BORDER);
+        int value = latest(history);
+        g.text(font, label, x + 6, y + 5, color, false);
+        g.text(font, String.valueOf(value), x + w - font.width(String.valueOf(value)) - 6, y + 5, DUTheme.TEXT, false);
+        int baseY = y + h - 9;
+        g.fill(x + 6, baseY, x + w - 6, baseY + 1, 0x553fd2e0);
+        if (history == null || history.size() < 2) {
+            g.centeredText(font, "WAITING FOR LIVE SAMPLES", x + w / 2, y + h / 2, DUTheme.TEXT_DIM);
+            return;
+        }
+        int max = 1;
+        for (int sample : history) max = Math.max(max, sample);
+        int points = Math.min(history.size(), Math.max(8, Math.min(40, (w - 14) / 5)));
+        int start = Math.max(0, history.size() - points);
+        int lastX = x + 7;
+        int lastY = graphPoint(baseY, h, history.get(start), max);
+        for (int i = 1; i < points; i++) {
+            int px = x + 7 + i * (w - 14) / Math.max(1, points - 1);
+            int py = graphPoint(baseY, h, history.get(start + i), max);
+            DUTheme.line(g, lastX, lastY, px, py, color);
+            if (i % 4 == 0) g.fill(px - 1, py - 1, px + 2, py + 2, color);
+            lastX = px;
+            lastY = py;
+        }
+        int barW = Math.max(4, Math.min(w - 16, value % Math.max(8, w - 16)));
+        g.fill(x + 8, y + h - 5, x + 8 + barW, y + h - 3, color);
+    }
+
+    private int graphPoint(int baseY, int h, int value, int max) {
+        return baseY - 5 - Math.round(Math.max(0, value) / (float) Math.max(1, max) * Math.max(1, h - 22));
     }
 
     private void renderNetworkList(GuiGraphicsExtractor g) {
@@ -242,6 +385,7 @@ public class NetworkSwitchboardScreen extends AbstractContainerScreen<NetworkSwi
         MouseButtonEvent de = new MouseButtonEvent(mx, my, event.buttonInfo());
         boolean right = event.button() == 1;
         boolean middle = event.button() == 2;
+        if (page != PAGE_CANVAS) return super.mouseClicked(de, doubleClick);
         if (middle && canvasWidget.contains(mx, my)) {
             panning = true;
             lastMouseX = mx;
@@ -288,6 +432,7 @@ public class NetworkSwitchboardScreen extends AbstractContainerScreen<NetworkSwi
     public boolean mouseDragged(MouseButtonEvent event, double dx, double dy) {
         double ddx = dx / uiScale;
         double ddy = dy / uiScale;
+        if (page != PAGE_CANVAS) return super.mouseDragged(new MouseButtonEvent(designX(event.x()), designY(event.y()), event.buttonInfo()), ddx, ddy);
         if (!draggingNetworkId.isBlank()) {
             double mx = designX(event.x());
             double my = designY(event.y());
@@ -317,6 +462,7 @@ public class NetworkSwitchboardScreen extends AbstractContainerScreen<NetworkSwi
     @Override
     public boolean mouseReleased(MouseButtonEvent event) {
         MouseButtonEvent de = new MouseButtonEvent(designX(event.x()), designY(event.y()), event.buttonInfo());
+        if (page != PAGE_CANVAS) return super.mouseReleased(de);
         if (!draggingNetworkId.isBlank()) {
             if (!draggedNetwork && clickNetworkId.equals(draggingNetworkId)) {
                 handleNodeConnect(draggingNetworkId);
@@ -339,6 +485,7 @@ public class NetworkSwitchboardScreen extends AbstractContainerScreen<NetworkSwi
     @Override
     public boolean mouseScrolled(double rawX, double rawY, double sx, double sy) {
         double mx = designX(rawX), my = designY(rawY);
+        if (page != PAGE_CANVAS) return super.mouseScrolled(mx, my, sx, sy);
         if (!canvasWidget.contains(mx, my)) return super.mouseScrolled(mx, my, sx, sy);
         float oldZoom = canvasView.zoom;
         float nextZoom = Math.max(0.1f, Math.min(2.0f, canvasView.zoom + (float) sy * 0.1f));
@@ -393,11 +540,21 @@ public class NetworkSwitchboardScreen extends AbstractContainerScreen<NetworkSwi
     private void syncButtons() {
         boolean hasLink = selectedLink >= 0 && selectedLink < links.size();
         if (itemButton == null) return;
-        itemButton.active = hasLink;
-        fluidButton.active = hasLink;
-        energyButton.active = hasLink;
-        priorityButton.active = hasLink;
+        boolean canvasPage = page == PAGE_CANVAS;
+        itemButton.visible = canvasPage;
+        fluidButton.visible = canvasPage;
+        energyButton.visible = canvasPage;
+        priorityButton.visible = canvasPage;
+        saveButton.visible = canvasPage;
+        refreshButton.visible = canvasPage;
+        fitButton.visible = canvasPage;
+        itemButton.active = canvasPage && hasLink;
+        fluidButton.active = canvasPage && hasLink;
+        energyButton.active = canvasPage && hasLink;
+        priorityButton.active = canvasPage && hasLink;
         saveButton.active = true;
+        canvasTabButton.setToggled(page == PAGE_CANVAS);
+        trafficTabButton.setToggled(page == PAGE_TRAFFIC);
         if (!hasLink) {
             itemButton.setToggled(false);
             fluidButton.setToggled(false);
@@ -455,6 +612,44 @@ public class NetworkSwitchboardScreen extends AbstractContainerScreen<NetworkSwi
 
     private int[] clampLogical(int x, int y) {
         return new int[]{ Math.max(-10000, Math.min(10000, x)), Math.max(-10000, Math.min(10000, y)) };
+    }
+
+    private int enabledLaneCount() {
+        int count = 0;
+        for (SwitchboardLinkData link : links) {
+            if (link.items()) count++;
+            if (link.fluids()) count++;
+            if (link.energy()) count++;
+        }
+        return count;
+    }
+
+    private int disabledLaneCount() {
+        return links.size() * 3 - enabledLaneCount();
+    }
+
+    private String powerLabel() {
+        return formatFe(latest(powerHistory)) + "/t";
+    }
+
+    private static int latest(List<Integer> history) {
+        return history == null || history.isEmpty() ? 0 : history.get(history.size() - 1);
+    }
+
+    private static List<Integer> cleanHistory(List<Integer> history) {
+        if (history == null || history.isEmpty()) return List.of();
+        int start = Math.max(0, history.size() - 80);
+        List<Integer> out = new ArrayList<>();
+        for (int i = start; i < history.size(); i++) out.add(Math.max(0, history.get(i)));
+        return List.copyOf(out);
+    }
+
+    private static String formatFe(int centiFe) {
+        int whole = centiFe / 100;
+        int frac = Math.abs(centiFe % 100);
+        if (frac == 0) return whole + " FE";
+        if (frac % 10 == 0) return whole + "." + (frac / 10) + " FE";
+        return whole + "." + (frac < 10 ? "0" : "") + frac + " FE";
     }
 
     private static int snap(int value) {
@@ -569,10 +764,18 @@ public class NetworkSwitchboardScreen extends AbstractContainerScreen<NetworkSwi
             DUTheme.box(g, x, y, NODE_W, NODE_H, DUTheme.PANEL_ALT, border);
             g.fill(x + 1, y + 1, x + NODE_W - 1, y + 13, header);
             g.text(font, "NETWORK COMPUTER", x + 5, y + 4, source ? DUTheme.PROGRESS_ORANGE : DUTheme.TEXT_GREEN, false);
-            g.text(font, trim(nameFor(id), 18), x + 6, y + 18, DUTheme.TEXT, false);
-            g.text(font, trim(id, 20), x + 6, y + 31, DUTheme.TEXT_DIM, false);
+            g.text(font, trimToWidth(nameFor(id), NODE_W - 12), x + 6, y + 18, DUTheme.TEXT, false);
+            g.text(font, trimToWidth("NET " + id, NODE_W - 12), x + 6, y + 31, DUTheme.TEXT_DIM, false);
             port(g, portInX(node), portInY(node), border);
             port(g, portOutX(node), portOutY(node), border);
+        }
+
+        private String trimToWidth(String value, int maxWidth) {
+            if (value == null) return "";
+            if (font.width(value) <= maxWidth) return value;
+            String out = value;
+            while (out.length() > 3 && font.width(out + "...") > maxWidth) out = out.substring(0, out.length() - 1);
+            return out + "...";
         }
 
         private void port(GuiGraphicsExtractor g, int x, int y, int color) {

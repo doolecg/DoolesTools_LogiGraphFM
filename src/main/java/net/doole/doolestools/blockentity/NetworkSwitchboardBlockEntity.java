@@ -1,5 +1,6 @@
 package net.doole.doolestools.blockentity;
 
+import net.doole.doolestools.logistics.switchboard.SwitchboardCleanup;
 import net.doole.doolestools.logistics.switchboard.SwitchboardLinkData;
 import net.doole.doolestools.logistics.switchboard.SwitchboardNodePositionData;
 import net.doole.doolestools.menu.NetworkSwitchboardMenu;
@@ -21,6 +22,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
@@ -57,6 +59,36 @@ public class NetworkSwitchboardBlockEntity extends BlockEntity implements MenuPr
         map.values().forEach(be -> {
             if (!be.isRemoved()) consumer.accept(be);
         });
+    }
+
+    public static void removeNetworkFromLoaded(ServerLevel level, String networkId) {
+        forEachLoaded(level, switchboard -> switchboard.removeNetwork(networkId));
+    }
+
+    public boolean removeNetwork(String networkId) {
+        SwitchboardCleanup.Result result = SwitchboardCleanup.removeNetwork(networkId, links, nodePositions);
+        if (result.links().equals(links) && result.nodePositions().equals(nodePositions)) return false;
+        links = new ArrayList<>(result.links());
+        nodePositions = new ArrayList<>(result.nodePositions());
+        setChanged();
+        return true;
+    }
+
+    public boolean retainNetworks(Set<String> liveNetworkIds) {
+        Set<String> live = liveNetworkIds == null ? Set.of() : liveNetworkIds;
+        List<SwitchboardLinkData> keptLinks = new ArrayList<>();
+        for (SwitchboardLinkData link : links) {
+            if (live.contains(link.sourceNetworkId()) && live.contains(link.targetNetworkId())) keptLinks.add(link);
+        }
+        List<SwitchboardNodePositionData> keptPositions = new ArrayList<>();
+        for (SwitchboardNodePositionData position : nodePositions) {
+            if (live.contains(position.networkId())) keptPositions.add(position);
+        }
+        if (keptLinks.equals(links) && keptPositions.equals(nodePositions)) return false;
+        links = keptLinks;
+        nodePositions = keptPositions;
+        setChanged();
+        return true;
     }
 
     public static String networkDisplayName(ServerLevel level, String networkId) {

@@ -4,6 +4,7 @@ import net.doole.doolestools.logistics.data.LogisticsGraphData;
 import net.doole.doolestools.logistics.switchboard.SwitchboardLinkData;
 import net.doole.doolestools.logistics.switchboard.SwitchboardNodePositionData;
 import net.doole.doolestools.network.payload.ClearScanPayload;
+import net.doole.doolestools.network.payload.ClearSwitchboardCachePayload;
 import net.doole.doolestools.network.payload.RequestComputerSyncPayload;
 import net.doole.doolestools.network.payload.RequestMonitorSyncPayload;
 import net.doole.doolestools.network.payload.RequestSwitchboardStatePayload;
@@ -86,6 +87,10 @@ public final class ClientNetworkSender {
 
     public static void saveSwitchboard(BlockPos pos, List<SwitchboardLinkData> links, List<SwitchboardNodePositionData> nodePositions) {
         ClientPacketDistributor.sendToServer(new SaveSwitchboardPayload(pos, links, nodePositions));
+    }
+
+    public static void clearSwitchboardCache(BlockPos pos) {
+        ClientPacketDistributor.sendToServer(new ClearSwitchboardCachePayload(pos));
     }
 
 }

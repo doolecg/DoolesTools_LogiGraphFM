@@ -16,10 +16,12 @@ import net.doole.doolestools.logistics.data.GraphNodeData;
 import net.doole.doolestools.logistics.data.GraphPortData;
 import net.doole.doolestools.logistics.data.GraphTextData;
 import net.doole.doolestools.logistics.data.LogisticsGraphData;
+import net.doole.doolestools.logistics.switchboard.SwitchboardLinkData;
 import net.doole.doolestools.menu.LogisticsComputerMenu;
 import net.doole.doolestools.menu.LogisticsMonitorMenu;
 import net.doole.doolestools.menu.NetworkSwitchboardMenu;
 import net.doole.doolestools.network.payload.ClearScanPayload;
+import net.doole.doolestools.network.payload.ClearSwitchboardCachePayload;
 import net.doole.doolestools.network.payload.ComputerStatePayload;
 import net.doole.doolestools.network.payload.MonitorStatePayload;
 import net.doole.doolestools.network.payload.NearbyLabelsPayload;
@@ -55,6 +57,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Server-side payload handlers. Every handler validates that the sending player actually has the
@@ -326,9 +329,80 @@ public final class ServerPayloadHandlers {
         }));
     }
 
+    public static void handleClearSwitchboardCache(ClearSwitchboardCachePayload payload, IPayloadContext ctx) {
+        ctx.enqueueWork(() -> withSwitchboard(ctx, payload.pos(), (player, be) -> {
+            if (player.level() instanceof ServerLevel level) be.retainNetworks(liveNetworkIds(level, payload.pos(), player));
+            sendSwitchboardState(player, payload.pos(), be);
+        }));
+    }
+
+    private static Set<String> liveNetworkIds(ServerLevel level, BlockPos center, ServerPlayer player) {
+        Set<String> ids = new java.util.HashSet<>();
+        int minY = center.getY() - 32;
+        int maxY = center.getY() + 32;
+        forEachLoadedBlockEntity(level, center, KNOWN_NETWORK_RADIUS, blockEntity -> {
+            if (!(blockEntity instanceof LogisticsComputerBlockEntity computer)) return;
+            BlockPos pos = blockEntity.getBlockPos();
+            if (pos.getY() < minY || pos.getY() > maxY) return;
+            if (Math.abs(pos.getX() - center.getX()) > KNOWN_NETWORK_RADIUS || Math.abs(pos.getZ() - center.getZ()) > KNOWN_NETWORK_RADIUS) return;
+            if (computer.canEdit(player) || !"private".equals(computer.accessMode())) ids.add(computer.networkId());
+        });
+        return ids;
+    }
+
     private static void sendSwitchboardState(ServerPlayer player, BlockPos pos, NetworkSwitchboardBlockEntity be) {
-        PacketDistributor.sendToPlayer(player, new SwitchboardStatePayload(pos, be.links(), be.nodePositions()));
+        SwitchboardTrafficSnapshot traffic = switchboardTraffic(player, pos, be.links());
+        PacketDistributor.sendToPlayer(player, new SwitchboardStatePayload(pos, be.links(), be.nodePositions(),
+                traffic.packetHistory(), traffic.powerHistory(), traffic.itemHistory(), traffic.activeRoutes()));
         sendKnownNetworks(player);
+    }
+
+    private static SwitchboardTrafficSnapshot switchboardTraffic(ServerPlayer player, BlockPos pos, List<SwitchboardLinkData> links) {
+        if (!(player.level() instanceof ServerLevel level)) return SwitchboardTrafficSnapshot.EMPTY;
+        java.util.Set<String> networkIds = new java.util.HashSet<>();
+        for (SwitchboardLinkData link : links) {
+            if (!link.sourceNetworkId().isBlank()) networkIds.add(link.sourceNetworkId());
+            if (!link.targetNetworkId().isBlank()) networkIds.add(link.targetNetworkId());
+        }
+        if (networkIds.isEmpty()) return SwitchboardTrafficSnapshot.EMPTY;
+        List<Integer> packetHistory = new ArrayList<>();
+        List<Integer> powerHistory = new ArrayList<>();
+        List<Integer> itemHistory = new ArrayList<>();
+        final int[] activeRoutes = {0};
+        forEachLoadedBlockEntity(level, pos, KNOWN_NETWORK_RADIUS, blockEntity -> {
+            if (!(blockEntity instanceof LogisticsComputerBlockEntity computer)) return;
+            if (!networkIds.contains(computer.networkId())) return;
+            activeRoutes[0] += computer.getActiveRouteIds().size();
+            addSeries(powerHistory, computer.getPowerDemandHistory());
+            List<Integer> computerPackets = sumThroughput(computer.getLinkThroughputHistory());
+            addSeries(packetHistory, computerPackets);
+            addSeries(itemHistory, computerPackets);
+        });
+        return new SwitchboardTrafficSnapshot(packetHistory, powerHistory, itemHistory, activeRoutes[0]);
+    }
+
+    private static List<Integer> sumThroughput(Map<String, List<Integer>> throughput) {
+        List<Integer> out = new ArrayList<>();
+        for (List<Integer> series : throughput.values()) addSeries(out, series);
+        return out;
+    }
+
+    private static void addSeries(List<Integer> target, List<Integer> source) {
+        if (source == null || source.isEmpty()) return;
+        int offset = Math.max(0, target.size() - source.size());
+        if (target.size() < source.size()) {
+            int missing = source.size() - target.size();
+            for (int i = 0; i < missing; i++) target.add(0);
+            offset = 0;
+        }
+        for (int i = 0; i < source.size(); i++) {
+            int targetIndex = i + offset;
+            if (targetIndex >= 0 && targetIndex < target.size()) target.set(targetIndex, target.get(targetIndex) + Math.max(0, source.get(i)));
+        }
+    }
+
+    private record SwitchboardTrafficSnapshot(List<Integer> packetHistory, List<Integer> powerHistory, List<Integer> itemHistory, int activeRoutes) {
+        private static final SwitchboardTrafficSnapshot EMPTY = new SwitchboardTrafficSnapshot(List.of(), List.of(), List.of(), 0);
     }
 
     public static void handleRequestMonitorSync(RequestMonitorSyncPayload payload, IPayloadContext ctx) {

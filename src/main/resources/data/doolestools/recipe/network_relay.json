@@ -1,13 +1,14 @@
 {
   "type": "minecraft:crafting_shaped",
   "pattern": [
-    " R ",
+    " E ",
     "IRI",
     "IGI"
   ],
   "key": {
     "I": "minecraft:iron_ingot",
     "R": "minecraft:redstone",
+    "E": "minecraft:ender_pearl",
     "G": "minecraft:glass"
   },
   "result": {

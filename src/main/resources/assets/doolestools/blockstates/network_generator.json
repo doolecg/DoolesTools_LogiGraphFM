@@ -1,5 +1,8 @@
 {
   "variants": {
-    "": { "model": "doolestools:block/network_generator" }
+    "facing=north": { "model": "doolestools:block/network_generator" },
+    "facing=east": { "model": "doolestools:block/network_generator", "y": 90 },
+    "facing=south": { "model": "doolestools:block/network_generator", "y": 180 },
+    "facing=west": { "model": "doolestools:block/network_generator", "y": 270 }
   }
 }

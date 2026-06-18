@@ -5,6 +5,7 @@ import net.doole.doolestools.blockentity.NetworkEndpointBlockEntity;
 import net.doole.doolestools.blockentity.NetworkWireBlockEntity;
 import net.doole.doolestools.item.UpgradeType;
 import net.doole.doolestools.registry.ModItems;
+import net.doole.doolestools.util.NetworkDismantle;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
@@ -108,6 +109,7 @@ public class NetworkWireBlock extends Block implements EntityBlock {
 
     @Override
     protected InteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
+        if (NetworkDismantle.tryDismantle(level, pos, player, stack)) return InteractionResult.SUCCESS;
         if (stack.getItem() == ModItems.NETWORK_WIRE.get() && !state.getValue(CABLE)) {
             if (!level.isClientSide()) {
                 BlockState next = withConnections(level, pos, state.setValue(CABLE, true));

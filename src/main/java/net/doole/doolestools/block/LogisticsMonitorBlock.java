@@ -2,11 +2,14 @@ package net.doole.doolestools.block;
 
 import com.mojang.serialization.MapCodec;
 import net.doole.doolestools.blockentity.LogisticsMonitorBlockEntity;
+import net.doole.doolestools.util.NetworkDismantle;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
@@ -54,7 +57,17 @@ public class LogisticsMonitorBlock extends HorizontalDirectionalBlock implements
     }
 
     @Override
+    protected InteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
+        if (NetworkDismantle.tryDismantle(level, pos, player, stack)) return InteractionResult.SUCCESS;
+        return open(level, pos, player);
+    }
+
+    @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
+        return open(level, pos, player);
+    }
+
+    private static InteractionResult open(Level level, BlockPos pos, Player player) {
         if (!level.isClientSide() && player instanceof ServerPlayer serverPlayer) {
             if (level.getBlockEntity(pos) instanceof LogisticsMonitorBlockEntity be) {
                 if (be.getLinkedComputer() == null) {

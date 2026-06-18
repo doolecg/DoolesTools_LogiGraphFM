@@ -1,18 +1,18 @@
 {
   "type": "minecraft:crafting_shaped",
   "pattern": [
-    "IEI",
-    "IFI",
+    "IRI",
+    "EGE",
     "IRI"
   ],
   "key": {
     "I": "minecraft:iron_ingot",
+    "R": "minecraft:redstone",
     "E": "minecraft:ender_pearl",
-    "F": "minecraft:furnace",
-    "R": "minecraft:redstone"
+    "G": "minecraft:gold_ingot"
   },
   "result": {
-    "id": "doolestools:network_generator",
+    "id": "doolestools:network_battery",
     "count": 1
   }
 }

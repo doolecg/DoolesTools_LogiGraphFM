@@ -1648,8 +1648,7 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
             return true;
         }
         if (page == PAGE_STATS) {
-            if (statsPanel.graphContains(mx, my)) {
-                statsPanel.scrollGraph(sy);
+            if (statsPanel.handleScroll(mx, my, sy)) {
                 return true;
             }
         }

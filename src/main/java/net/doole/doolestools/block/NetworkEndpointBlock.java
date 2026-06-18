@@ -5,6 +5,7 @@ import net.doole.doolestools.blockentity.NetworkEndpointBlockEntity;
 import net.doole.doolestools.blockentity.NetworkWireBlockEntity;
 import net.doole.doolestools.item.UpgradeType;
 import net.doole.doolestools.registry.ModItems;
+import net.doole.doolestools.util.NetworkDismantle;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
@@ -140,6 +141,7 @@ public abstract class NetworkEndpointBlock extends DirectionalBlock implements E
     // a card installs; plain right-click with the screwdriver removes; anything else opens the screen.
     @Override
     protected InteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
+        if (NetworkDismantle.tryDismantle(level, pos, player, stack)) return InteractionResult.SUCCESS;
         if (!(level.getBlockEntity(pos) instanceof NetworkEndpointBlockEntity endpoint)) return InteractionResult.PASS;
         if (stack.getItem() == ModItems.NETWORK_SCREWDRIVER.get()) {
             if (!level.isClientSide()) removeOneUpgrade(level, pos, player, endpoint);

@@ -29,6 +29,10 @@ public final class StatsPagePanel {
 
     private int timeScale = 0;
     private int graphScrollOffset = 0;
+    private int inventoryScrollOffset = 0;
+    private int batteryScrollOffset = 0;
+    private int inventoryX, inventoryY, inventoryW, inventoryH, inventoryMaxScroll;
+    private int capacityX, capacityY, capacityW, capacityH, batteryMaxScroll;
     private final TerminalButton[] scaleButtons = new TerminalButton[SCALE_LABELS.length];
 
     public StatsPagePanel(EditorContext ctx, Font font) {
@@ -75,6 +79,23 @@ public final class StatsPagePanel {
         graphScrollOffset = Math.max(0, graphScrollOffset - (int) Math.signum(delta));
     }
 
+    public boolean handleScroll(double mx, double my, double delta) {
+        int step = -(int) Math.signum(delta);
+        if (mx >= inventoryX && mx < inventoryX + inventoryW && my >= inventoryY && my < inventoryY + inventoryH && inventoryMaxScroll > 0) {
+            inventoryScrollOffset = Math.max(0, Math.min(inventoryMaxScroll, inventoryScrollOffset + step));
+            return true;
+        }
+        if (mx >= capacityX && mx < capacityX + capacityW && my >= capacityY && my < capacityY + capacityH && batteryMaxScroll > 0) {
+            batteryScrollOffset = Math.max(0, Math.min(batteryMaxScroll, batteryScrollOffset + step));
+            return true;
+        }
+        if (graphContains(mx, my)) {
+            scrollGraph(delta);
+            return true;
+        }
+        return false;
+    }
+
     public void render(GuiGraphicsExtractor g, int x, int y, int w, int h) {
         List<ScannedBlockData> scan = ctx.scan();
         int warnings = 0, errors = 0;
@@ -89,146 +110,136 @@ public final class StatsPagePanel {
         int cx = statsContentX();
         int fullContentW = (x + w) - cx - 16;
 
-        int leftColW  = fullContentW * 57 / 100;
-        int rightColX = cx + leftColW + 14;
-        int rightColW = fullContentW - leftColW - 14;
+        int gap = 8;
+        int quadW = (fullContentW - gap) / 2;
+        int quadH = Math.max(76, (h - 22 - gap) / 2);
+        int topY = contentY + 8;
+        int bottomY = topY + quadH + gap;
+        int leftX = cx;
+        int rightX = cx + quadW + gap;
 
-        // ── LEFT COLUMN ──────────────────────────────────────────────────────
+        // ── TOP LEFT: POWER GRAPH ────────────────────────────────────────────
+        DUTheme.panelWithHeader(g, font, leftX, topY, quadW, quadH, "POWER GRAPH");
+        renderPowerHistoryGraph(g, leftX + 8, topY + 16, quadW - 16, quadH - 24);
+
+        // ── TOP RIGHT: POWER STATS + BREAKDOWN ──────────────────────────────
+        DUTheme.panelWithHeader(g, font, rightX, topY, quadW, quadH, "POWER STATS / BREAKDOWN");
         int statusColor = power.starved() ? DUTheme.ERROR : power.degraded() ? DUTheme.WARN : DUTheme.OK;
         String statusText = power.starved() ? "NO POWER — STOPPED"
                 : power.degraded() ? "LOW POWER — " + Math.round(power.satisfaction() * 100) + "%"
                 : "NETWORK SATISFIED";
-        DUTheme.dot(g, cx, contentY + 6, statusColor);
-        g.text(font, statusText, cx + 8, contentY + 4, statusColor, false);
+        DUTheme.dot(g, rightX + 8, topY + 18, statusColor);
+        g.text(font, statusText, rightX + 18, topY + 16, statusColor, false);
 
-        int barsTop = statsBarsTop();
+        int barsTop = topY + 32;
         int peak = Math.max(1, Math.max(power.supplyCentiFe(), power.demandCentiFe()));
-        statBar(g, cx, barsTop,      leftColW, "Production",  powerRatio(power.supplyCentiFe(), peak), formatFe(power.supplyCentiFe()) + "/t", DUTheme.OK);
-        statBar(g, cx, barsTop + 12, leftColW, "Consumption", powerRatio(power.demandCentiFe(), peak), formatFe(power.demandCentiFe()) + "/t", DUTheme.ERROR);
-
-        int graphY = statsGraphTop();
-        int graphH = 58;
-        renderPowerHistoryGraph(g, cx, graphY, leftColW, graphH);
-
-        int breakY = graphY + graphH + 8;
-        g.text(font, "BREAKDOWN", cx, breakY, DUTheme.TEXT_GREEN, false);
-        int ly = breakY + 12;
-        ly = statSmall(g, cx, ly, leftColW, "Computer",   formatFe(power.computerCentiFe())  + " cF/t");
-        ly = statSmall(g, cx, ly, leftColW, "Sockets",    formatFe(power.endpointCentiFe())  + " cF/t");
-        ly = statSmall(g, cx, ly, leftColW, "Cable",      formatFe(power.wireCentiFe())       + " cF/t");
-        ly = statSmall(g, cx, ly, leftColW, "Devices",    formatFe(power.deviceCentiFe())    + " cF/t");
-        ly = statSmall(g, cx, ly, leftColW, "Routes",     formatFe(power.routeCentiFe())     + " cF/t");
-        ly = statSmall(g, cx, ly, leftColW, "Batteries",  formatFe(power.batteryCentiFe())   + " cF/t");
-
-        // ── RIGHT COLUMN ─────────────────────────────────────────────────────
-        int ry = contentY + 4;
-
-        g.text(font, "CAPACITIES", rightColX, ry, DUTheme.TEXT_GREEN, false); ry += 12;
-        if (power.batteryCapacity() > 0) {
-            float storedFrac = Math.max(0f, Math.min(1f, (float) power.batteryStored() / power.batteryCapacity()));
-            int battColor = storedFrac > 0.6f ? 0xFF3af0a0 : storedFrac >= 0.3f ? 0xFFf09030 : 0xFFf03030;
-            DUTheme.horizBattery(g, rightColX, ry, rightColW - 2, 14, storedFrac, battColor);
-            int pctVal = Math.round(storedFrac * 100f);
-            g.text(font, pctVal + "%  " + formatMfe(power.batteryStored()) + " / " + formatMfe(power.batteryCapacity()),
-                    rightColX, ry + 16, DUTheme.TEXT_DIM, false);
-            ry += 30;
-            if (power.batteryCount() > 0) {
-                int miniW = 12, miniH = 24, miniGap = 3;
-                int perRow = Math.max(1, (rightColW - 2) / (miniW + miniGap));
-                int gridRows = (power.batteryCount() + perRow - 1) / perRow;
-                for (int bi = 0; bi < power.batteryCount() && bi < 24; bi++) {
-                    DUTheme.vertBattery(g,
-                            rightColX + (bi % perRow) * (miniW + miniGap),
-                            ry + (bi / perRow) * (miniH + 4),
-                            miniW, miniH, storedFrac, battColor);
-                }
-                ry += gridRows * (miniH + 4) + 4;
-            }
-        } else {
-            g.text(font, "No batteries", rightColX, ry, DUTheme.TEXT_DIM, false); ry += 14;
-        }
-
-        ry += 2;
-        g.text(font, "NETWORK", rightColX, ry, DUTheme.TEXT_GREEN, false); ry += 12;
-        ry = stat(g, rightColX, ry, "Generators", String.valueOf(power.generatorCount()));
-        ry = stat(g, rightColX, ry, "Batteries",  String.valueOf(power.batteryCount()));
-        ry = stat(g, rightColX, ry, "Sockets",    String.valueOf(power.endpointCount()));
-        ry = stat(g, rightColX, ry, "Devices",    String.valueOf(power.deviceCount()));
-
-        ry += 4;
-        g.text(font, "ALERTS", rightColX, ry, DUTheme.TEXT_GREEN, false); ry += 12;
-        if (warnings == 0 && errors == 0) {
-            DUTheme.dot(g, rightColX, ry + 2, DUTheme.OK);
-            g.text(font, "No issues", rightColX + 8, ry + 1, DUTheme.TEXT_DIM, false);
-            ry += 12;
-        } else {
-            if (warnings > 0) { Glyphs.warning(g, rightColX, ry, DUTheme.WARN);  g.text(font, warnings + " warnings", rightColX + 12, ry + 1, DUTheme.WARN, false);  ry += 11; }
-            if (errors > 0)   { Glyphs.warning(g, rightColX, ry, DUTheme.ERROR); g.text(font, errors   + " errors",   rightColX + 12, ry + 1, DUTheme.ERROR, false); ry += 11; }
-        }
-
-        ry += 2;
-        g.text(font, "ACTIVITY", rightColX, ry, DUTheme.TEXT_GREEN, false); ry += 12;
-        boolean routing = power.powered() && ClientPrefs.autoRefresh;
-        g.text(font, "Routes",  rightColX,      ry, DUTheme.TEXT_DIM,  false);
-        g.text(font, String.valueOf(power.routeCount()), rightColX + 60, ry, DUTheme.TEXT, false);
-        g.text(font, routing ? "● LIVE" : "○ IDLE", rightColX + 80, ry, routing ? DUTheme.OK : DUTheme.DISABLED, false);
-        ry += 10;
-        g.text(font, "Devices", rightColX,      ry, DUTheme.TEXT_DIM,  false);
-        g.text(font, String.valueOf(power.deviceCount()), rightColX + 60, ry, DUTheme.TEXT, false);
-        ry += 14;
-
+        statBar(g, rightX + 8, barsTop, quadW - 16, "Production", powerRatio(power.supplyCentiFe(), peak), formatFe(power.supplyCentiFe()) + "/t", DUTheme.OK);
+        statBar(g, rightX + 8, barsTop + 14, quadW - 16, "Consumption", powerRatio(power.demandCentiFe(), peak), formatFe(power.demandCentiFe()) + "/t", DUTheme.ERROR);
+        int ly = barsTop + 33;
+        ly = statSmall(g, rightX + 8, ly, quadW - 16, "Computer", formatFe(power.computerCentiFe()) + " cF/t");
+        ly = statSmall(g, rightX + 8, ly, quadW - 16, "Sockets", formatFe(power.endpointCentiFe()) + " cF/t");
+        ly = statSmall(g, rightX + 8, ly, quadW - 16, "Cable", formatFe(power.wireCentiFe()) + " cF/t");
+        ly = statSmall(g, rightX + 8, ly, quadW - 16, "Devices", formatFe(power.deviceCentiFe()) + " cF/t");
+        ly = statSmall(g, rightX + 8, ly, quadW - 16, "Routes", formatFe(power.routeCentiFe()) + " cF/t");
+        ly = statSmall(g, rightX + 8, ly, quadW - 16, "Batteries", formatFe(power.batteryCentiFe()) + " cF/t");
         ThroughputPlanner.PlannerResult plan = ThroughputPlanner.analyse(ctx.graph(), scan);
-        g.text(font, "PLANNER", rightColX, ry, DUTheme.TEXT_GREEN, false); ry += 12;
-        ry = stat(g, rightColX, ry, "Bottlenecks", String.valueOf(plan.totalBottlenecks()));
-        ry = stat(g, rightColX, ry, "Starved",     String.valueOf(plan.totalStarved()));
-        if (!plan.links().isEmpty()) {
-            ThroughputPlanner.LinkAnalysis first = plan.links().get(0);
-            String summary = first.sourceName() + " -> " + first.targetName() + " " + first.capacityPerMin() + "/min";
-            g.text(font, trim(font, summary, rightColW), rightColX, ry, first.isBottleneck() ? DUTheme.WARN : DUTheme.TEXT_DIM, false);
+        if (ly + 10 < topY + quadH) {
+            g.text(font, "Routes " + power.routeCount() + (power.powered() && ClientPrefs.autoRefresh ? "  LIVE" : "  IDLE"), rightX + 8, ly, power.powered() ? DUTheme.OK : DUTheme.DISABLED, false);
+            g.text(font, "Bottlenecks " + plan.totalBottlenecks() + "  Starved " + plan.totalStarved(), rightX + 112, ly, plan.totalBottlenecks() > 0 || plan.totalStarved() > 0 ? DUTheme.WARN : DUTheme.TEXT_DIM, false);
         }
 
-        // ── INVENTORY WATCH (full-width, below both columns) ─────────────────
-        int sepY = Math.max(ly, ry) + 8;
-        g.fill(cx, sepY, x + w - 16, sepY + 1, DUTheme.PANEL_BORDER);
-        sepY += 6;
-
+        // ── BOTTOM LEFT: INVENTORY WATCH ─────────────────────────────────────
+        DUTheme.panelWithHeader(g, font, leftX, bottomY, quadW, quadH, "INVENTORY WATCH");
+        inventoryX = leftX;
+        inventoryY = bottomY;
+        inventoryW = quadW;
+        inventoryH = quadH;
         List<ScannedBlockData> invBlocks = new ArrayList<>();
         for (ScannedBlockData s : scan) if (s.inventory().hasData()) invBlocks.add(s);
         invBlocks.sort(java.util.Comparator.comparingInt(s -> -s.inventory().fillPercent()));
-
-        if (!invBlocks.isEmpty()) {
-            g.text(font, "INVENTORY WATCH", cx, sepY, DUTheme.TEXT_GREEN, false); sepY += 12;
-            int colGap = 8;
-            int entryW = (fullContentW - colGap) / 2;
-            int nameW = 80, suffixW = 30;
-            int invBarW = Math.max(20, entryW - nameW - suffixW - 6);
-            int panelBottom = y + h - 4;
-            int col0Y = sepY, col1Y = sepY;
-            for (int i = 0; i < invBlocks.size(); i++) {
+        if (invBlocks.isEmpty()) {
+            inventoryScrollOffset = 0;
+            inventoryMaxScroll = 0;
+            g.centeredText(font, "NO INVENTORY DATA", leftX + quadW / 2, bottomY + quadH / 2 - 4, DUTheme.TEXT_DIM);
+        } else {
+            int rowY = bottomY + 18;
+            int nameW = Math.max(70, quadW / 4);
+            int suffixW = 34;
+            int barW = Math.max(28, quadW - nameW - suffixW - 24);
+            int visibleRows = Math.max(1, (quadH - 24) / 13);
+            inventoryMaxScroll = Math.max(0, invBlocks.size() - visibleRows);
+            inventoryScrollOffset = Math.min(inventoryScrollOffset, inventoryMaxScroll);
+            for (int i = inventoryScrollOffset; i < invBlocks.size(); i++) {
                 ScannedBlockData s = invBlocks.get(i);
-                boolean rightSide = (i % 2 == 1);
-                int entX = rightSide ? cx + entryW + colGap : cx;
-                int entY = rightSide ? col1Y : col0Y;
-                if (entY + 9 > panelBottom) break;
+                if (rowY + 10 > bottomY + quadH - 6) break;
                 int pct = s.inventory().fillPercent();
                 boolean isFull = s.inventory().usedSlots() >= s.inventory().totalSlots();
                 boolean isStorage = s.isStorageLike();
-                int barColor  = isFull ? DUTheme.ERROR : pct >= WarningGenerator.NEARLY_FULL_PERCENT ? DUTheme.WARN : DUTheme.OK;
+                int barColor = isFull ? DUTheme.ERROR : pct >= WarningGenerator.NEARLY_FULL_PERCENT ? DUTheme.WARN : DUTheme.OK;
                 int nameColor = isFull && isStorage ? DUTheme.WARN : DUTheme.TEXT_DIM;
-                String name = s.blockName();
-                while (font.width(name) > nameW && name.length() > 3) name = name.substring(0, name.length() - 1);
-                g.text(font, name, entX, entY, nameColor, false);
-                int bx = entX + nameW + 2;
-                DUTheme.progress(g, bx, entY, invBarW, 7, pct / 100f, barColor);
-                for (int seg = 1; seg < 5; seg++) {
-                    int sx = bx + 1 + (invBarW - 2) * seg / 5;
-                    g.fill(sx, entY + 1, sx + 1, entY + 6, 0x66000000);
-                }
+                String name = trim(font, s.blockName(), nameW);
+                g.text(font, name, leftX + 8, rowY, nameColor, false);
+                int bx = leftX + 10 + nameW;
+                DUTheme.progress(g, bx, rowY, barW, 7, pct / 100f, barColor);
                 String suffix = isFull ? "FULL" : pct + "%";
-                g.text(font, suffix, bx + invBarW + 3, entY, isFull && isStorage ? DUTheme.WARN : DUTheme.TEXT_DIM, false);
-                if (rightSide) col1Y += 10; else col0Y += 10;
+                g.text(font, suffix, bx + barW + 5, rowY, isFull && isStorage ? DUTheme.WARN : DUTheme.TEXT_DIM, false);
+                rowY += 13;
             }
+            renderScrollbar(g, leftX + quadW - 5, bottomY + 14, quadH - 20, inventoryScrollOffset, inventoryMaxScroll);
         }
+
+        // ── BOTTOM RIGHT: CAPACITIES ─────────────────────────────────────────
+        DUTheme.panelWithHeader(g, font, rightX, bottomY, quadW, quadH, "CAPACITIES");
+        capacityX = rightX;
+        capacityY = bottomY;
+        capacityW = quadW;
+        capacityH = quadH;
+        int ry = bottomY + 18;
+        if (power.batteryCapacity() > 0) {
+            float storedFrac = Math.max(0f, Math.min(1f, (float) power.batteryStored() / power.batteryCapacity()));
+            int battColor = storedFrac > 0.6f ? 0xFF3af0a0 : storedFrac >= 0.3f ? 0xFFf09030 : 0xFFf03030;
+            DUTheme.horizBattery(g, rightX + 8, ry, quadW - 16, 14, storedFrac, battColor);
+            int pctVal = Math.round(storedFrac * 100f);
+            g.text(font, pctVal + "%  " + formatMfe(power.batteryStored()) + " / " + formatMfe(power.batteryCapacity()),
+                    rightX + 8, ry + 17, DUTheme.TEXT_DIM, false);
+            ry += 34;
+            if (power.batteryCount() > 0) {
+                int gridH = Math.max(16, bottomY + quadH - ry - 26);
+                int count = power.batteryCount();
+                int miniGap = count <= 32 ? 3 : 2;
+                int maxCols = Math.max(1, (quadW - 16) / 9);
+                int cols = Math.max(1, Math.min(count, maxCols));
+                int rows = Math.max(1, (count + cols - 1) / cols);
+                int miniW = Math.max(4, Math.min(12, (quadW - 16 - miniGap * (cols - 1)) / cols));
+                int miniH = Math.max(8, Math.min(24, (gridH - miniGap * (rows - 1)) / rows));
+                int visibleRows = Math.max(1, gridH / Math.max(1, miniH + miniGap));
+                batteryMaxScroll = Math.max(0, rows - visibleRows);
+                batteryScrollOffset = Math.min(batteryScrollOffset, batteryMaxScroll);
+                int visible = Math.min(count, cols * visibleRows);
+                int start = batteryScrollOffset * cols;
+                for (int local = 0; local < visible && start + local < count; local++) {
+                    DUTheme.vertBattery(g,
+                            rightX + 8 + (local % cols) * (miniW + miniGap),
+                            ry + (local / cols) * (miniH + miniGap) + 2,
+                            miniW, miniH, storedFrac, battColor);
+                }
+                if (start + visible < count) {
+                    String more = "+" + (count - start - visible);
+                    g.text(font, more, rightX + quadW - 8 - font.width(more), bottomY + quadH - 34, DUTheme.TEXT_GREEN_DIM, false);
+                }
+                renderScrollbar(g, rightX + quadW - 5, ry, gridH, batteryScrollOffset, batteryMaxScroll);
+            }
+        } else {
+            batteryScrollOffset = 0;
+            batteryMaxScroll = 0;
+            g.text(font, "No batteries", rightX + 8, ry, DUTheme.TEXT_DIM, false); ry += 14;
+        }
+        int netY = bottomY + quadH - 24;
+        g.fill(rightX + 8, netY - 4, rightX + quadW - 8, netY - 3, DUTheme.PANEL_BORDER);
+        g.text(font, "GEN " + power.generatorCount(), rightX + 8, netY, DUTheme.TEXT_DIM, false);
+        g.text(font, "BAT " + power.batteryCount(), rightX + 60, netY, DUTheme.TEXT_DIM, false);
+        g.text(font, "SOCKETS " + power.endpointCount(), rightX + 112, netY, DUTheme.TEXT_DIM, false);
+        g.text(font, warnings + "W " + errors + "E", rightX + quadW - 52, netY, errors > 0 ? DUTheme.ERROR : warnings > 0 ? DUTheme.WARN : DUTheme.OK, false);
     }
 
     // --- Private helpers ---
@@ -298,6 +309,15 @@ public final class StatsPagePanel {
         return y + 11;
     }
 
+    private void renderScrollbar(GuiGraphicsExtractor g, int x, int y, int h, int offset, int maxOffset) {
+        if (maxOffset <= 0 || h <= 10) return;
+        g.fill(x, y, x + 2, y + h, 0x6632452f);
+        int thumbH = Math.max(8, h / (maxOffset + 1));
+        int travel = Math.max(1, h - thumbH);
+        int thumbY = y + Math.round(travel * (offset / (float) maxOffset));
+        g.fill(x - 1, thumbY, x + 3, thumbY + thumbH, DUTheme.SELECTED);
+    }
+
     private int statSmall(GuiGraphicsExtractor g, int x, int y, int w, String key, String value) {
         g.text(font, key, x, y, DUTheme.TEXT_DIM, false);
         g.text(font, value, x + w - font.width(value), y, DUTheme.TEXT, false);
@@ -313,14 +333,19 @@ public final class StatsPagePanel {
 
     /** The scroll-graph area spans from statsGraphTop to bottom of the graph rect. */
     public boolean graphContains(double mx, double my) {
-        int gx = statsContentX(), gy = statsGraphTop();
-        return mx >= gx && mx < gx + panelW && my >= gy && my < gy + 58;
+        int cx = statsContentX();
+        int fullContentW = panelW - 32;
+        int gap = 8;
+        int quadW = (fullContentW - gap) / 2;
+        int gx = cx + 8;
+        int gy = contentY + 8 + 16;
+        return mx >= gx && mx < gx + quadW - 16 && my >= gy && my < gy + 96;
     }
 
     // --- Series helpers ---
 
     private List<? extends Number> supplySeries() {
-        return switch (timeScale) {
+        List<? extends Number> selected = switch (timeScale) {
             case 1 -> ctx.supply30m();
             case 2 -> ctx.supply1h();
             case 3 -> ctx.supply12h();
@@ -328,10 +353,11 @@ public final class StatsPagePanel {
             case 5 -> ctx.supplyAllTime();
             default -> ctx.powerSupplyHistory();
         };
+        return selected.size() >= 2 || timeScale == 0 ? selected : downsample(ctx.powerSupplyHistory(), 32);
     }
 
     private List<? extends Number> demandSeries() {
-        return switch (timeScale) {
+        List<? extends Number> selected = switch (timeScale) {
             case 1 -> ctx.demand30m();
             case 2 -> ctx.demand1h();
             case 3 -> ctx.demand12h();
@@ -339,6 +365,23 @@ public final class StatsPagePanel {
             case 5 -> ctx.demandAllTime();
             default -> ctx.powerDemandHistory();
         };
+        return selected.size() >= 2 || timeScale == 0 ? selected : downsample(ctx.powerDemandHistory(), 32);
+    }
+
+    private static List<Integer> downsample(List<Integer> source, int targetPoints) {
+        if (source == null || source.size() <= targetPoints) return source == null ? List.of() : source;
+        List<Integer> out = new ArrayList<>();
+        int bucket = Math.max(1, source.size() / targetPoints);
+        for (int i = 0; i < source.size(); i += bucket) {
+            long sum = 0;
+            int count = 0;
+            for (int j = i; j < source.size() && j < i + bucket; j++) {
+                sum += source.get(j);
+                count++;
+            }
+            out.add(count == 0 ? 0 : (int) (sum / count));
+        }
+        return out;
     }
 
     private int powerColor() { return ctx.power().powered() ? DUTheme.PROGRESS_ORANGE : DUTheme.ERROR; }

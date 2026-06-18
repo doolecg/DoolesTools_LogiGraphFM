@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "ERE",
+    "CNC",
+    "ESE"
+  ],
+  "key": {
+    "E": "minecraft:ender_pearl",
+    "R": "doolestools:wireless_router",
+    "C": "minecraft:comparator",
+    "N": "minecraft:nether_star",
+    "S": "doolestools:logistics_computer"
+  },
+  "result": {
+    "id": "doolestools:network_switchboard",
+    "count": 1
+  }
+}

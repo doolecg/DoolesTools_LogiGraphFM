@@ -26,14 +26,14 @@ public final class ModBlocks {
 
     // --- Block property tiers ---
 
-    /** Heavy machine: survives explosions, pickaxe required. */
+    /** Heavy machine: survives explosions, but can still be broken by hand. */
     private static Supplier<BlockBehaviour.Properties> heavyMachine() {
-        return () -> BlockBehaviour.Properties.of().strength(3.0F, 6.0F).sound(SoundType.METAL).requiresCorrectToolForDrops();
+        return () -> BlockBehaviour.Properties.of().strength(3.0F, 6.0F).sound(SoundType.METAL);
     }
 
     /** Monitor panel: slightly lighter than a full machine block. */
     private static Supplier<BlockBehaviour.Properties> monitorPanel() {
-        return () -> BlockBehaviour.Properties.of().strength(2.5F, 6.0F).sound(SoundType.METAL).requiresCorrectToolForDrops();
+        return () -> BlockBehaviour.Properties.of().strength(2.5F, 6.0F).sound(SoundType.METAL);
     }
 
     /** Light device: small peripheral, no tool requirement. */

@@ -4,6 +4,7 @@ import net.doole.doolestools.DoolesTools;
 import net.doole.doolestools.item.LabelGunItem;
 import net.doole.doolestools.item.LinkingCardItem;
 import net.doole.doolestools.item.NetworkEndpointBlockItem;
+import net.doole.doolestools.item.NetworkScrewdriverItem;
 import net.doole.doolestools.item.NetworkWireBlockItem;
 import net.doole.doolestools.item.UpgradeType;
 import net.neoforged.neoforge.registries.DeferredItem;
@@ -28,7 +29,7 @@ public final class ModItems {
             ITEMS.registerItem("label_gun", LabelGunItem::new);
 
     public static final DeferredItem<Item> NETWORK_SCREWDRIVER =
-            ITEMS.registerSimpleItem("network_screwdriver");
+            ITEMS.registerItem("network_screwdriver", NetworkScrewdriverItem::new);
 
     public static final DeferredItem<Item> LINKING_CARD =
             ITEMS.registerItem("linking_card", LinkingCardItem::new);

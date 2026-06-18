@@ -2,6 +2,7 @@ package net.doole.doolestools.network;
 
 import net.doole.doolestools.client.ClientPayloadHandlers;
 import net.doole.doolestools.network.payload.ClearScanPayload;
+import net.doole.doolestools.network.payload.ClearSwitchboardCachePayload;
 import net.doole.doolestools.network.payload.ComputerStatePayload;
 import net.doole.doolestools.network.payload.LinkedComputersPayload;
 import net.doole.doolestools.network.payload.LinkComputerPayload;
@@ -66,6 +67,8 @@ public final class ModNetworking {
                 ServerPayloadHandlers::handleRequestSwitchboardState);
         registrar.playToServer(SaveSwitchboardPayload.TYPE, SaveSwitchboardPayload.STREAM_CODEC,
                 ServerPayloadHandlers::handleSaveSwitchboard);
+        registrar.playToServer(ClearSwitchboardCachePayload.TYPE, ClearSwitchboardCachePayload.STREAM_CODEC,
+                ServerPayloadHandlers::handleClearSwitchboardCache);
         // Server -> Client. Handlers live in a client-only class; the lambda bodies only class-load
         // ClientPayloadHandlers when actually executed on the physical client.
         registrar.playToClient(ComputerStatePayload.TYPE, ComputerStatePayload.STREAM_CODEC,

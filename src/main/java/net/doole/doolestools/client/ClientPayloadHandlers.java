@@ -69,7 +69,7 @@ public final class ClientPayloadHandlers {
     public static void handleSwitchboardState(SwitchboardStatePayload payload, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
             if (Minecraft.getInstance().screen instanceof net.doole.doolestools.client.screen.NetworkSwitchboardScreen screen) {
-                screen.applyState(payload.links(), payload.nodePositions());
+                screen.applyState(payload.links(), payload.nodePositions(), payload.packetHistory(), payload.powerHistory(), payload.itemHistory(), payload.activeRoutes());
             }
         });
     }
