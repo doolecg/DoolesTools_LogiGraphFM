@@ -2,6 +2,8 @@ package net.doole.doolestools.block;
 
 import com.mojang.serialization.MapCodec;
 import net.doole.doolestools.blockentity.NetworkEndpointBlockEntity;
+import net.doole.doolestools.blockentity.NetworkWireBlockEntity;
+import net.doole.doolestools.item.UpgradeType;
 import net.doole.doolestools.registry.ModItems;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -26,8 +28,8 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.level.block.state.properties.EnumProperty;
-import net.minecraft.world.level.material.Fluids;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.shapes.CollisionContext;
@@ -39,16 +41,29 @@ import java.lang.reflect.Method;
 
 public abstract class NetworkEndpointBlock extends DirectionalBlock implements EntityBlock {
     public static final EnumProperty<Direction> FACING = BlockStateProperties.FACING;
-    private static final VoxelShape DOWN_SHAPE = Block.box(3, 0, 3, 13, 2, 13);
-    private static final VoxelShape UP_SHAPE = Block.box(3, 14, 3, 13, 16, 13);
-    private static final VoxelShape NORTH_SHAPE = Block.box(3, 3, 0, 13, 13, 2);
+    public static final BooleanProperty WIRE_CONNECTED = BooleanProperty.create("wire_connected");
+
+    // Plain pad shapes (no wire hub)
+    private static final VoxelShape DOWN_SHAPE  = Block.box(3, 0,  3, 13,  2, 13);
+    private static final VoxelShape UP_SHAPE    = Block.box(3, 14, 3, 13, 16, 13);
+    private static final VoxelShape NORTH_SHAPE = Block.box(3, 3,  0, 13, 13,  2);
     private static final VoxelShape SOUTH_SHAPE = Block.box(3, 3, 14, 13, 13, 16);
-    private static final VoxelShape WEST_SHAPE = Block.box(0, 3, 3, 2, 13, 13);
-    private static final VoxelShape EAST_SHAPE = Block.box(14, 3, 3, 16, 13, 13);
+    private static final VoxelShape WEST_SHAPE  = Block.box(0, 3,  3,  2, 13, 13);
+    private static final VoxelShape EAST_SHAPE  = Block.box(14, 3, 3, 16, 13, 13);
+
+    // Connected shapes: pad + 4×4×4 hub knob pointing away from the attached surface (toward the wire)
+    private static final VoxelShape DOWN_CONNECTED  = Shapes.or(DOWN_SHAPE,  Block.box(6,  2, 6, 10,  6, 10));
+    private static final VoxelShape UP_CONNECTED    = Shapes.or(UP_SHAPE,    Block.box(6, 10, 6, 10, 14, 10));
+    private static final VoxelShape NORTH_CONNECTED = Shapes.or(NORTH_SHAPE, Block.box(6,  6, 2, 10, 10,  6));
+    private static final VoxelShape SOUTH_CONNECTED = Shapes.or(SOUTH_SHAPE, Block.box(6,  6, 10, 10, 10, 14));
+    private static final VoxelShape WEST_CONNECTED  = Shapes.or(WEST_SHAPE,  Block.box(2,  6, 6,  6, 10, 10));
+    private static final VoxelShape EAST_CONNECTED  = Shapes.or(EAST_SHAPE,  Block.box(10, 6, 6, 14, 10, 10));
 
     protected NetworkEndpointBlock(Properties properties) {
         super(properties);
-        this.registerDefaultState(this.stateDefinition.any().setValue(FACING, Direction.NORTH));
+        this.registerDefaultState(this.stateDefinition.any()
+                .setValue(FACING, Direction.NORTH)
+                .setValue(WIRE_CONNECTED, false));
     }
 
     @Override
@@ -56,13 +71,26 @@ public abstract class NetworkEndpointBlock extends DirectionalBlock implements E
 
     @Override
     protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
-        builder.add(FACING);
+        builder.add(FACING, WIRE_CONNECTED);
     }
 
     @Override
     public BlockState getStateForPlacement(BlockPlaceContext context) {
-        BlockState state = this.defaultBlockState().setValue(FACING, context.getClickedFace());
-        return state.canSurvive(context.getLevel(), context.getClickedPos()) ? state : null;
+        BlockPos pos = context.getClickedPos();
+        BlockState state = this.defaultBlockState()
+                .setValue(FACING, context.getClickedFace())
+                .setValue(WIRE_CONNECTED, hasAdjacentWire(context.getLevel(), pos));
+        return state.canSurvive(context.getLevel(), pos) ? state : null;
+    }
+
+    @Override
+    public void neighborChanged(BlockState state, Level level, BlockPos pos,
+            Block neighborBlock, net.minecraft.world.level.redstone.Orientation orientation, boolean movedByPiston) {
+        if (!level.isClientSide()) {
+            boolean wired = hasAdjacentWire(level, pos);
+            if (state.getValue(WIRE_CONNECTED) != wired)
+                level.setBlock(pos, state.setValue(WIRE_CONNECTED, wired), 3);
+        }
     }
 
     public static BlockPos attachedPos(BlockPos pos, BlockState state) {
@@ -90,13 +118,15 @@ public abstract class NetworkEndpointBlock extends DirectionalBlock implements E
 
     @Override
     protected VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
+        boolean connected = state.getValue(WIRE_CONNECTED);
+        // getShape uses FACING.getOpposite() to select the side the pad sits on
         return switch (state.getValue(FACING).getOpposite()) {
-            case DOWN -> DOWN_SHAPE;
-            case UP -> UP_SHAPE;
-            case NORTH -> NORTH_SHAPE;
-            case SOUTH -> SOUTH_SHAPE;
-            case WEST -> WEST_SHAPE;
-            case EAST -> EAST_SHAPE;
+            case DOWN  -> connected ? DOWN_CONNECTED  : DOWN_SHAPE;
+            case UP    -> connected ? UP_CONNECTED    : UP_SHAPE;
+            case NORTH -> connected ? NORTH_CONNECTED : NORTH_SHAPE;
+            case SOUTH -> connected ? SOUTH_CONNECTED : SOUTH_SHAPE;
+            case WEST  -> connected ? WEST_CONNECTED  : WEST_SHAPE;
+            case EAST  -> connected ? EAST_CONNECTED  : EAST_SHAPE;
         };
     }
 
@@ -115,12 +145,12 @@ public abstract class NetworkEndpointBlock extends DirectionalBlock implements E
             if (!level.isClientSide()) removeOneUpgrade(level, pos, player, endpoint);
             return InteractionResult.SUCCESS;
         }
-        String upgradeType = ModItems.upgradeType(stack);
-        if (!upgradeType.isBlank()) {
+        UpgradeType upgradeType = ModItems.upgradeType(stack);
+        if (upgradeType != null) {
             if (!level.isClientSide() && endpoint.installUpgrade(upgradeType)) {
                 if (!player.getAbilities().instabuild) stack.shrink(1);
                 level.sendBlockUpdated(pos, state, state, 3);
-                player.sendSystemMessage(Component.literal(ModItems.upgradeLabel(upgradeType) + " upgrade installed ("
+                player.sendSystemMessage(Component.literal(upgradeType.label + " upgrade installed ("
                         + endpoint.upgradeCount(upgradeType) + "/" + NetworkEndpointBlockEntity.MAX_UPGRADES_PER_TYPE + ")"));
             }
             return InteractionResult.SUCCESS;
@@ -132,16 +162,16 @@ public abstract class NetworkEndpointBlock extends DirectionalBlock implements E
     }
 
     private static void removeOneUpgrade(Level level, BlockPos pos, Player player, NetworkEndpointBlockEntity endpoint) {
-        for (String type : new String[] { "efficiency", "range", "stack", "speed" }) {
+        for (UpgradeType type : UpgradeType.values()) {
             if (!endpoint.removeUpgrade(type)) continue;
             giveOrDrop(level, pos, player, type);
-            player.sendSystemMessage(Component.literal(ModItems.upgradeLabel(type) + " upgrade removed"));
+            player.sendSystemMessage(Component.literal(type.label + " upgrade removed"));
             return;
         }
         player.sendSystemMessage(Component.literal("No upgrades installed"));
     }
 
-    private static void giveOrDrop(Level level, BlockPos pos, Player player, String type) {
+    private static void giveOrDrop(Level level, BlockPos pos, Player player, UpgradeType type) {
         Item item = ModItems.upgradeCard(type);
         if (item == null) return;
         ItemStack removed = new ItemStack(item);
@@ -176,5 +206,12 @@ public abstract class NetworkEndpointBlock extends DirectionalBlock implements E
         return (tickLevel, pos, tickState, blockEntity) -> {
             if (!tickState.canSurvive(tickLevel, pos)) tickLevel.destroyBlock(pos, true);
         };
+    }
+
+    private static boolean hasAdjacentWire(BlockGetter level, BlockPos pos) {
+        for (Direction d : Direction.values())
+            if (level.getBlockEntity(pos.relative(d)) instanceof NetworkWireBlockEntity)
+                return true;
+        return false;
     }
 }

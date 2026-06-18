@@ -3,6 +3,7 @@ package net.doole.doolestools.block;
 import com.mojang.serialization.MapCodec;
 import net.doole.doolestools.blockentity.NetworkEndpointBlockEntity;
 import net.doole.doolestools.blockentity.NetworkWireBlockEntity;
+import net.doole.doolestools.item.UpgradeType;
 import net.doole.doolestools.registry.ModItems;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -86,12 +87,19 @@ public class NetworkWireBlock extends Block implements EntityBlock {
         return new NetworkWireBlockEntity(pos, state);
     }
 
+    @Override
+    public void neighborChanged(BlockState state, Level level, BlockPos pos,
+            Block neighborBlock, net.minecraft.world.level.redstone.Orientation orientation, boolean movedByPiston) {
+        if (!level.isClientSide() && level.getBlockEntity(pos) instanceof NetworkWireBlockEntity wire)
+            wire.refreshConnections();
+    }
+
     @Nullable
     @Override
     public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState state, BlockEntityType<T> type) {
         if (level.isClientSide()) return null;
         return (tickLevel, pos, tickState, blockEntity) -> {
-            if (blockEntity instanceof NetworkWireBlockEntity wire) wire.refreshConnections();
+            if (blockEntity instanceof NetworkWireBlockEntity wire) wire.tick40();
         };
     }
 
@@ -104,8 +112,8 @@ public class NetworkWireBlock extends Block implements EntityBlock {
                 if (!level.isClientSide()) removeOneUpgrade(level, pos, player, wire);
                 return InteractionResult.SUCCESS;
             }
-            String upgradeType = ModItems.upgradeType(stack);
-            if (!upgradeType.isBlank()) {
+            UpgradeType upgradeType = ModItems.upgradeType(stack);
+            if (upgradeType != null) {
                 if (!level.isClientSide() && wire.installUpgrade(upgradeType)) {
                     if (!player.getAbilities().instabuild) stack.shrink(1);
                     level.sendBlockUpdated(pos, state, state, 3);
@@ -171,16 +179,16 @@ public class NetworkWireBlock extends Block implements EntityBlock {
     }
 
     private static void removeOneUpgrade(Level level, BlockPos pos, Player player, NetworkWireBlockEntity wire) {
-        for (String type : new String[] { "efficiency", "range", "stack", "speed" }) {
+        for (UpgradeType type : UpgradeType.values()) {
             if (!wire.removeUpgrade(type)) continue;
             giveOrDrop(level, pos, player, type);
-            player.sendSystemMessage(Component.literal(ModItems.upgradeLabel(type) + " upgrade removed"));
+            player.sendSystemMessage(Component.literal(type.label + " upgrade removed"));
             return;
         }
         player.sendSystemMessage(Component.literal("No upgrades installed"));
     }
 
-    private static void giveOrDrop(Level level, BlockPos pos, Player player, String type) {
+    private static void giveOrDrop(Level level, BlockPos pos, Player player, UpgradeType type) {
         Item item = ModItems.upgradeCard(type);
         if (item == null) return;
         ItemStack removed = new ItemStack(item);

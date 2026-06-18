@@ -6,7 +6,7 @@ import net.doole.doolestools.logistics.data.GraphNodeData;
 import net.doole.doolestools.logistics.data.LogisticsGraphData;
 import net.doole.doolestools.logistics.data.MachineProgressData;
 import net.doole.doolestools.logistics.data.ScannedBlockData;
-import net.doole.doolestools.logistics.lfm.LogiFactoryManager;
+import net.doole.doolestools.logistics.easyfactory.EasyFactoryManager;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -65,7 +65,7 @@ public final class ThroughputPlanner {
             if (sourceNode == null || targetNode == null) continue;
 
             // skip routing nodes - they dont have real capacity on their own
-            if (LogiFactoryManager.isRoutingNode(sourceNode.type()) || LogiFactoryManager.isRoutingNode(targetNode.type())) continue;
+            if (EasyFactoryManager.isRoutingNode(sourceNode.type()) || EasyFactoryManager.isRoutingNode(targetNode.type())) continue;
 
             String sourceName = sourceNode.displayName();
             String targetName = targetNode.displayName();

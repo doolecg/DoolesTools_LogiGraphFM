@@ -30,7 +30,11 @@ public class GraphCanvasWidget {
     private static final int SIDE_PILL_W = 48;
     private static final int SIDE_PILL_H = 12;
 
+    // One of these two is non-null depending on which constructor was used.
     private final EditorContext ctx;
+    private final CanvasAdapter adapter;
+    private final CanvasViewState adapterView;
+
     public int x, y, w, h;
 
     // Projected geometry cache. Link curves only move when the graph changes, so we bake them per
@@ -41,24 +45,42 @@ public class GraphCanvasWidget {
     private List<CachedLink> cachedLinks = List.of();
     private java.util.Set<String> cachedLinkedNodeIds = java.util.Set.of();
 
+    /** Standard constructor: logistics-graph mode backed by an {@link EditorContext}. */
     public GraphCanvasWidget(EditorContext ctx, int x, int y, int w, int h) {
         this.ctx = ctx;
+        this.adapter = null;
+        this.adapterView = null;
         this.x = x;
         this.y = y;
         this.w = w;
         this.h = h;
     }
 
+    /** Adapter constructor: generic canvas mode backed by a {@link CanvasAdapter}. */
+    public GraphCanvasWidget(CanvasAdapter adapter, CanvasViewState view, int x, int y, int w, int h) {
+        this.ctx = null;
+        this.adapter = adapter;
+        this.adapterView = view;
+        this.x = x;
+        this.y = y;
+        this.w = w;
+        this.h = h;
+    }
+
+    private float viewZoom() { return adapterView != null ? adapterView.zoom : ctx.zoom; }
+    private float viewPanX() { return adapterView != null ? adapterView.panX : ctx.panX; }
+    private float viewPanY() { return adapterView != null ? adapterView.panY : ctx.panY; }
+
     public boolean contains(double mx, double my) {
         return mx >= x && mx < x + w && my >= y && my < y + h;
     }
 
     public double toCanvasX(double mx) {
-        return (mx - x - ctx.panX) / ctx.zoom;
+        return (mx - x - viewPanX()) / viewZoom();
     }
 
     public double toCanvasY(double my) {
-        return (my - y - ctx.panY) / ctx.zoom;
+        return (my - y - viewPanY()) / viewZoom();
     }
 
     public GraphNodeData nodeAt(double mx, double my) {
@@ -280,6 +302,7 @@ public class GraphCanvasWidget {
     }
 
     public void render(GuiGraphicsExtractor g, Font font, double mouseX, double mouseY) {
+        if (adapter != null) { renderAdapter(g, font, mouseX, mouseY); return; }
         DUTheme.box(g, x, y, w, h, DUTheme.SCREEN, DUTheme.PANEL_BORDER);
         g.enableScissor(x + 1, y + 1, x + w - 1, y + h - 1);
         var canvas = ctx.graph().activeCanvas();
@@ -396,6 +419,123 @@ public class GraphCanvasWidget {
         if (canvas.nodes().isEmpty()) {
             g.centeredText(font, "DROP SCANNED BLOCKS HERE", x + w / 2, y + h / 2 - 4, DUTheme.TEXT_DIM);
         }
+    }
+
+    // --- Adapter mode (CanvasAdapter / CanvasViewState) ---
+
+    /** Renders the canvas using the generic adapter instead of the logistics-graph context. */
+    private void renderAdapter(GuiGraphicsExtractor g, Font font, double mouseX, double mouseY) {
+        DUTheme.box(g, x, y, w, h, DUTheme.SCREEN, DUTheme.PANEL_BORDER);
+        g.enableScissor(x + 1, y + 1, x + w - 1, y + h - 1);
+
+        if (net.doole.doolestools.client.ClientPrefs.showGrid) {
+            int spacing = Math.max(12, Math.round(24 * adapterView.zoom));
+            int ox = ((int) adapterView.panX % spacing + spacing) % spacing;
+            int oy = ((int) adapterView.panY % spacing + spacing) % spacing;
+            int maxLines = 96, count = 0;
+            for (int gx = x + ox; gx < x + w && count++ < maxLines; gx += spacing) g.fill(gx, y + 1, gx + 1, y + h - 1, 0x3632452f);
+            count = 0;
+            for (int gy = y + oy; gy < y + h && count++ < maxLines; gy += spacing) g.fill(x + 1, gy, x + w - 1, gy + 1, 0x3632452f);
+        }
+
+        org.joml.Matrix3x2fStack pose = g.pose();
+        pose.pushMatrix();
+        pose.translate(x + adapterView.panX, y + adapterView.panY);
+        pose.scale(adapterView.zoom, adapterView.zoom);
+
+        // Build node lookup for edge port lookups.
+        java.util.Map<String, CanvasAdapter.CanvasNode> nodesById = new java.util.HashMap<>();
+        for (CanvasAdapter.CanvasNode n : adapter.nodes()) nodesById.put(n.id(), n);
+
+        // Edges first (under nodes).
+        for (CanvasAdapter.CanvasEdge edge : adapter.edges()) {
+            CanvasAdapter.CanvasNode from = nodesById.get(edge.fromId());
+            CanvasAdapter.CanvasNode to = nodesById.get(edge.toId());
+            if (from == null || to == null) continue;
+            int x1 = adapter.portOutX(from), y1 = adapter.portOutY(from);
+            int x2 = adapter.portInX(to), y2 = adapter.portInY(to);
+            int bend = Math.max(24, Math.abs(x2 - x1) / 2);
+            int c1x = x1 + bend, c2x = x2 - bend;
+            int lx = x1, ly = y1;
+            for (int i = 1; i <= 18; i++) {
+                double t = i / 18.0;
+                int ex = (int) Math.round(DUTheme.cubicBezier(t, x1, c1x, c2x, x2));
+                int ey = (int) Math.round(DUTheme.cubicBezier(t, y1, y1, y2, y2));
+                DUTheme.line(g, lx, ly, ex, ey, edge.color());
+                if (edge.selected() && i % 5 == 0) g.fill(ex - 1, ey - 1, ex + 2, ey + 2, edge.color());
+                lx = ex; ly = ey;
+            }
+            int mx = (x1 + x2) / 2;
+            int my = (y1 + y2) / 2;
+            int labelW = font.width(edge.label()) + 8;
+            DUTheme.box(g, mx - labelW / 2, my - 6, labelW, 12, 0xE60b0f0a, edge.selected() ? edge.color() : DUTheme.PANEL_BORDER);
+            g.centeredText(font, edge.label(), mx, my - 4, edge.color());
+        }
+
+        // Nodes on top.
+        for (CanvasAdapter.CanvasNode node : adapter.nodes()) {
+            adapter.renderNode(g, font, node, adapter.isSelected(node.id()));
+        }
+
+        // Drag arm: line from source node's output port to the logical cursor position.
+        String dragSrc = adapter.dragSourceId();
+        if (!dragSrc.isBlank() && nodesById.containsKey(dragSrc)) {
+            CanvasAdapter.CanvasNode srcNode = nodesById.get(dragSrc);
+            int sx = adapter.portOutX(srcNode), sy = adapter.portOutY(srcNode);
+            int ex = (int) Math.round((mouseX - this.x - adapterView.panX) / adapterView.zoom);
+            int ey = (int) Math.round((mouseY - this.y - adapterView.panY) / adapterView.zoom);
+            int bend = Math.max(24, Math.abs(ex - sx) / 2);
+            int lx = sx, ly = sy, c1x = sx + bend, c2x = ex - bend;
+            for (int i = 1; i <= 18; i++) {
+                double t = i / 18.0;
+                int nx = (int) Math.round(DUTheme.cubicBezier(t, sx, c1x, c2x, ex));
+                int ny = (int) Math.round(DUTheme.cubicBezier(t, sy, sy, ey, ey));
+                DUTheme.line(g, lx, ly, nx, ny, DUTheme.PROGRESS_ORANGE);
+                if (i % 5 == 0) g.fill(nx - 1, ny - 1, nx + 2, ny + 2, DUTheme.PROGRESS_ORANGE);
+                lx = nx; ly = ny;
+            }
+        }
+
+        if (adapter.nodes().isEmpty()) {
+            g.centeredText(font, "WAITING FOR NETWORK INDEX", (int) toCanvasX(x + w / 2.0), (int) toCanvasY(y + h / 2.0), DUTheme.TEXT_DIM);
+        }
+
+        pose.popMatrix();
+        g.disableScissor();
+    }
+
+    /** Returns the CanvasNode id under the screen-space point (adapter mode only), or "" if none. */
+    public String adapterNodeAt(double mx, double my) {
+        if (adapter == null) return "";
+        double cx = toCanvasX(mx), cy = toCanvasY(my);
+        List<CanvasAdapter.CanvasNode> nodes = adapter.nodes();
+        for (int i = nodes.size() - 1; i >= 0; i--) {
+            CanvasAdapter.CanvasNode n = nodes.get(i);
+            if (cx >= n.x() && cx <= n.x() + n.w() && cy >= n.y() && cy <= n.y() + n.h()) return n.id();
+        }
+        return "";
+    }
+
+    /** Returns the CanvasEdge edgeId under the screen-space point (adapter mode only), or "" if none. */
+    public String adapterEdgeAt(double mx, double my) {
+        if (adapter == null) return "";
+        java.util.Map<String, CanvasAdapter.CanvasNode> nodesById = new java.util.HashMap<>();
+        for (CanvasAdapter.CanvasNode n : adapter.nodes()) nodesById.put(n.id(), n);
+        double cx = toCanvasX(mx), cy = toCanvasY(my);
+        List<CanvasAdapter.CanvasEdge> edges = adapter.edges();
+        for (int i = edges.size() - 1; i >= 0; i--) {
+            CanvasAdapter.CanvasEdge edge = edges.get(i);
+            CanvasAdapter.CanvasNode from = nodesById.get(edge.fromId());
+            CanvasAdapter.CanvasNode to = nodesById.get(edge.toId());
+            if (from == null || to == null) continue;
+            if (DUTheme.distanceToCurve(cx, cy, adapter.portOutX(from), adapter.portOutY(from), adapter.portInX(to), adapter.portInY(to)) <= 8.0 / viewZoom()) return edge.edgeId();
+        }
+        return "";
+    }
+
+    /** Notify the adapter that a node was moved (adapter mode only). */
+    public void adapterMoveNode(String id, int logicalX, int logicalY) {
+        if (adapter != null) adapter.onNodeMoved(id, logicalX, logicalY);
     }
 
     private static boolean rectIntersects(double x, double y, double w, double h, double minX, double minY, double maxX, double maxY) {

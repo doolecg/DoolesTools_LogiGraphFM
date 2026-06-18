@@ -1,10 +1,10 @@
-package net.doole.doolestools.logistics.lfm;
+package net.doole.doolestools.logistics.easyfactory;
 
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-class LogiFactoryManagerTest {
+class EasyFactoryManagerTest {
     @Test
     void legacyInPortStaysGenericSoFuelCanUseFuelSlot() {
         assertEquals(ItemTargetRole.GENERIC, ItemTargetRole.fromPort("in"));

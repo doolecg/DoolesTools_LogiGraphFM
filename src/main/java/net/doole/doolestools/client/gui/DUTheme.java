@@ -202,4 +202,90 @@ public final class DUTheme {
             default -> DISABLED;
         };
     }
+
+    /** Generic cubic Bezier point evaluation. */
+    public static double cubicBezier(double t, double p0, double p1, double p2, double p3) {
+        double u = 1.0 - t;
+        return u * u * u * p0 + 3.0 * u * u * t * p1 + 3.0 * u * t * t * p2 + t * t * t * p3;
+    }
+
+    /**
+     * Distance from (px,py) to a cubic Bezier link with horizontal S-curve control points.
+     * Control points are x1±bend/x2∓bend horizontally; y control points equal the endpoints
+     * (produces the characteristic S-shaped link used in both canvas screens).
+     */
+    public static double distanceToCurve(double px, double py, int x1, int y1, int x2, int y2) {
+        double best = Double.MAX_VALUE;
+        double lastX = x1, lastY = y1;
+        int bend = Math.max(24, Math.abs(x2 - x1) / 2);
+        int c1x = x1 + bend, c2x = x2 - bend;
+        for (int i = 1; i <= 18; i++) {
+            double t = i / 18.0;
+            double x = cubicBezier(t, x1, c1x, c2x, x2);
+            double y = cubicBezier(t, y1, y1, y2, y2);
+            double dx = x - lastX, dy = y - lastY;
+            double len = dx * dx + dy * dy;
+            double seg;
+            if (len <= 0.0) {
+                seg = Math.hypot(px - lastX, py - lastY);
+            } else {
+                double tt = Math.max(0.0, Math.min(1.0, ((px - lastX) * dx + (py - lastY) * dy) / len));
+                seg = Math.hypot(px - (lastX + tt * dx), py - (lastY + tt * dy));
+            }
+            if (seg < best) best = seg;
+            lastX = x;
+            lastY = y;
+        }
+        return best;
+    }
+
+    /** Horizontal battery bar: positive-terminal bump on the left, interior fill left→right, 4 segment dividers. */
+    public static void horizBattery(GuiGraphicsExtractor g, int x, int y, int w, int h, float frac, int color) {
+        int bumpH = 6, bumpW = 3;
+        int bumpY = y + (h - bumpH) / 2;
+        g.fill(x - bumpW, bumpY, x, bumpY + bumpH, PANEL_BORDER);
+        g.fill(x - bumpW + 1, bumpY + 1, x, bumpY + bumpH - 1, 0xFF1a221a);
+        g.fill(x, y, x + w, y + h, 0xFF070b08);
+        outline(g, x, y, w, h, PANEL_BORDER);
+        int inX = x + 1, inY = y + 1, inW = w - 2, inH = h - 2;
+        int fillW = Math.round(Math.max(0f, Math.min(1f, frac)) * inW);
+        if (fillW > 0) g.fill(inX, inY, inX + fillW, inY + inH, color);
+        for (int i = 1; i < 5; i++) {
+            int sx = inX + i * inW / 5;
+            g.fill(sx, inY, sx + 1, inY + inH, 0x55000000);
+        }
+    }
+
+    /** Vertical battery bar: positive-terminal bump on top, interior fill bottom→top, 2 segment dividers. */
+    public static void vertBattery(GuiGraphicsExtractor g, int bx, int by, int bw, int bh, float frac, int color) {
+        int bumpW = Math.max(2, bw / 2), bumpH = 2;
+        int bumpX = bx + (bw - bumpW) / 2;
+        g.fill(bumpX, by - bumpH, bumpX + bumpW, by, PANEL_BORDER);
+        g.fill(bumpX + 1, by - bumpH + 1, bumpX + bumpW - 1, by, 0xFF1a221a);
+        box(g, bx, by, bw, bh, 0xFF070b08, PANEL_BORDER);
+        int inX = bx + 1, inY = by + 1, inW = bw - 2, inH = bh - 2;
+        int fillH = Math.round(Math.max(0f, Math.min(1f, frac)) * inH);
+        if (fillH > 0) g.fill(inX, inY + inH - fillH, inX + inW, inY + inH, color);
+        for (int i = 1; i < 3; i++) {
+            int sy = inY + i * inH / 3;
+            g.fill(inX, sy, inX + inW, sy + 1, 0x55000000);
+        }
+    }
+
+    /** Panel box with a coloured header strip and glow-text title. */
+    public static void panelWithHeader(GuiGraphicsExtractor g, net.minecraft.client.gui.Font font, int x, int y, int w, int h, String title) {
+        box(g, x, y, w, h, PANEL, PANEL_BORDER);
+        g.fill(x + 1, y + 1, x + w - 1, y + 11, PANEL_HEADER);
+        glowText(g, font, title, x + 4, y + 2, TEXT_GREEN);
+    }
+
+    /** Full terminal frame: bezel, four corner screws, inner screen box. */
+    public static void frame(GuiGraphicsExtractor g, int x, int y, int w, int h) {
+        bezel(g, x, y, w, h);
+        screw(g, x + 8, y + 8);
+        screw(g, x + w - 8, y + 8);
+        screw(g, x + 8, y + h - 8);
+        screw(g, x + w - 8, y + h - 8);
+        box(g, x + 6, y + 6, w - 12, h - 12, SCREEN, PANEL_BORDER);
+    }
 }

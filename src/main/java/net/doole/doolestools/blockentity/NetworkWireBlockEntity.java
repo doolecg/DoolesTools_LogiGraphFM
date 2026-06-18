@@ -1,5 +1,6 @@
 package net.doole.doolestools.blockentity;
 
+import net.doole.doolestools.item.UpgradeType;
 import net.doole.doolestools.registry.ModBlockEntities;
 import net.doole.doolestools.block.NetworkWireBlock;
 import net.doole.doolestools.world.NetworkIdentitySavedData;
@@ -144,6 +145,11 @@ public class NetworkWireBlockEntity extends BlockEntity {
         setChanged();
     }
 
+    public boolean installUpgrade(UpgradeType type) {
+        if (type == null) return false;
+        return installUpgrade(type.id);
+    }
+
     public boolean installUpgrade(String type) {
         if (!hasEndpoint()) return false;
         int current = upgradeCount(type);
@@ -151,6 +157,10 @@ public class NetworkWireBlockEntity extends BlockEntity {
         setUpgradeCount(type, current + 1);
         setChanged();
         return true;
+    }
+
+    public int upgradeCount(UpgradeType type) {
+        return type == null ? 0 : upgradeCount(type.id);
     }
 
     public int upgradeCount(String type) {
@@ -161,6 +171,10 @@ public class NetworkWireBlockEntity extends BlockEntity {
             case "efficiency" -> efficiencyUpgrades;
             default -> 0;
         };
+    }
+
+    public boolean removeUpgrade(UpgradeType type) {
+        return type != null && removeUpgrade(type.id);
     }
 
     public boolean removeUpgrade(String type) {
@@ -215,6 +229,12 @@ public class NetworkWireBlockEntity extends BlockEntity {
             setChanged();
             // No sendBlockUpdated here; refreshBlockState on install and getUpdatePacket() handle sync.
         }
+    }
+
+    private int tickCounter;
+
+    public void tick40() {
+        if (++tickCounter >= 40) { tickCounter = 0; refreshConnections(); }
     }
 
     public void refreshConnections() {
