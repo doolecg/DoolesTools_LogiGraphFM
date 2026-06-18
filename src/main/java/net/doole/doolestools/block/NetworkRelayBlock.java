@@ -2,6 +2,7 @@ package net.doole.doolestools.block;
 
 import com.mojang.serialization.MapCodec;
 import net.doole.doolestools.blockentity.NetworkRelayBlockEntity;
+import net.doole.doolestools.item.UpgradeType;
 import net.doole.doolestools.registry.ModItems;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -44,11 +45,11 @@ public class NetworkRelayBlock extends Block implements EntityBlock {
             if (!level.isClientSide()) removeOneUpgrade(level, pos, player, relay);
             return InteractionResult.SUCCESS;
         }
-        String upgradeType = ModItems.upgradeType(stack);
-        if (!upgradeType.isBlank()) {
+        UpgradeType upgradeType = ModItems.upgradeType(stack);
+        if (upgradeType != null) {
             if (!level.isClientSide() && relay.installUpgrade(upgradeType)) {
                 if (!player.getAbilities().instabuild) stack.shrink(1);
-                player.sendSystemMessage(Component.literal("Relay " + upgradeType + " upgrade installed (" + relay.upgradeCount(upgradeType) + "/" + NetworkRelayBlockEntity.MAX_UPGRADES_PER_TYPE + ")"));
+                player.sendSystemMessage(Component.literal("Relay " + upgradeType.label + " upgrade installed (" + relay.upgradeCount(upgradeType) + "/" + NetworkRelayBlockEntity.MAX_UPGRADES_PER_TYPE + ")"));
             }
             return InteractionResult.SUCCESS;
         }
@@ -56,16 +57,16 @@ public class NetworkRelayBlock extends Block implements EntityBlock {
     }
 
     private static void removeOneUpgrade(Level level, BlockPos pos, Player player, NetworkRelayBlockEntity relay) {
-        for (String type : new String[] { "efficiency", "range", "speed" }) {
+        for (UpgradeType type : UpgradeType.values()) {
             if (!relay.removeUpgrade(type)) continue;
             giveOrDrop(level, pos, player, type);
-            player.sendSystemMessage(Component.literal(ModItems.upgradeLabel(type) + " upgrade removed"));
+            player.sendSystemMessage(Component.literal(type.label + " upgrade removed"));
             return;
         }
         player.sendSystemMessage(Component.literal("No upgrades installed"));
     }
 
-    private static void giveOrDrop(Level level, BlockPos pos, Player player, String type) {
+    private static void giveOrDrop(Level level, BlockPos pos, Player player, UpgradeType type) {
         Item item = ModItems.upgradeCard(type);
         if (item == null) return;
         ItemStack removed = new ItemStack(item);

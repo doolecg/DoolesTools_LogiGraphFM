@@ -4,11 +4,13 @@ import net.doole.doolestools.DoolesTools;
 import net.doole.doolestools.item.LabelGunItem;
 import net.doole.doolestools.item.LinkingCardItem;
 import net.doole.doolestools.item.NetworkEndpointBlockItem;
+import net.doole.doolestools.item.UpgradeType;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import org.jetbrains.annotations.Nullable;
 
 public final class ModItems {
     private ModItems() {}
@@ -57,45 +59,38 @@ public final class ModItems {
     public static final DeferredItem<BlockItem> NETWORK_SWITCHBOARD =
             ITEMS.registerSimpleBlockItem("network_switchboard", ModBlocks.NETWORK_SWITCHBOARD);
 
-    public static final DeferredItem<Item> SPEED_UPGRADE_CARD =
-            ITEMS.registerSimpleItem("speed_upgrade_card");
+    public static final DeferredItem<Item> SPEED_UPGRADE_CARD      = ITEMS.registerSimpleItem("speed_upgrade_card");
+    public static final DeferredItem<Item> STACK_UPGRADE_CARD      = ITEMS.registerSimpleItem("stack_upgrade_card");
+    public static final DeferredItem<Item> RANGE_UPGRADE_CARD      = ITEMS.registerSimpleItem("range_upgrade_card");
+    public static final DeferredItem<Item> EFFICIENCY_UPGRADE_CARD = ITEMS.registerSimpleItem("efficiency_upgrade_card");
 
-    public static final DeferredItem<Item> STACK_UPGRADE_CARD =
-            ITEMS.registerSimpleItem("stack_upgrade_card");
-
-    public static final DeferredItem<Item> RANGE_UPGRADE_CARD =
-            ITEMS.registerSimpleItem("range_upgrade_card");
-
-    public static final DeferredItem<Item> EFFICIENCY_UPGRADE_CARD =
-            ITEMS.registerSimpleItem("efficiency_upgrade_card");
-
-    public static String upgradeType(ItemStack stack) {
-        if (stack == null || stack.isEmpty()) return "";
+    /** Returns the {@link UpgradeType} for the held item, or {@code null} if not an upgrade card. */
+    @Nullable
+    public static UpgradeType upgradeType(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) return null;
         Item item = stack.getItem();
-        if (item == SPEED_UPGRADE_CARD.get()) return "speed";
-        if (item == STACK_UPGRADE_CARD.get()) return "stack";
-        if (item == RANGE_UPGRADE_CARD.get()) return "range";
-        if (item == EFFICIENCY_UPGRADE_CARD.get()) return "efficiency";
-        return "";
+        if (item == SPEED_UPGRADE_CARD.get())      return UpgradeType.SPEED;
+        if (item == STACK_UPGRADE_CARD.get())      return UpgradeType.STACK;
+        if (item == RANGE_UPGRADE_CARD.get())      return UpgradeType.RANGE;
+        if (item == EFFICIENCY_UPGRADE_CARD.get()) return UpgradeType.EFFICIENCY;
+        return null;
     }
 
-    public static Item upgradeCard(String type) {
-        return switch (type == null ? "" : type) {
-            case "speed" -> SPEED_UPGRADE_CARD.get();
-            case "stack" -> STACK_UPGRADE_CARD.get();
-            case "range" -> RANGE_UPGRADE_CARD.get();
-            case "efficiency" -> EFFICIENCY_UPGRADE_CARD.get();
-            default -> null;
+    /** Returns the upgrade card item for the given type, or {@code null} for an unknown type. */
+    @Nullable
+    public static Item upgradeCard(UpgradeType type) {
+        if (type == null) return null;
+        return switch (type) {
+            case SPEED      -> SPEED_UPGRADE_CARD.get();
+            case STACK      -> STACK_UPGRADE_CARD.get();
+            case RANGE      -> RANGE_UPGRADE_CARD.get();
+            case EFFICIENCY -> EFFICIENCY_UPGRADE_CARD.get();
         };
     }
 
-    public static String upgradeLabel(String type) {
-        return switch (type == null ? "" : type) {
-            case "speed" -> "Speed";
-            case "stack" -> "Stack";
-            case "range" -> "Range";
-            case "efficiency" -> "Efficiency";
-            default -> "Upgrade";
-        };
+    /** Returns the upgrade card item for the given id string. Kept for legacy callers. */
+    @Nullable
+    public static Item upgradeCard(String id) {
+        return upgradeCard(UpgradeType.byId(id));
     }
 }

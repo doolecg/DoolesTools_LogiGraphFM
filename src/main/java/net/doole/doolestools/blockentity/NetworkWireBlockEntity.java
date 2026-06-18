@@ -1,5 +1,6 @@
 package net.doole.doolestools.blockentity;
 
+import net.doole.doolestools.item.UpgradeType;
 import net.doole.doolestools.registry.ModBlockEntities;
 import net.doole.doolestools.block.NetworkWireBlock;
 import net.doole.doolestools.world.NetworkIdentitySavedData;
@@ -98,12 +99,16 @@ public class NetworkWireBlockEntity extends BlockEntity {
     }
 
     /** Sum of upgrade counts of the given type across all endpoint faces whose attached block is {@code pos}. */
-    public int upgradeCountForAttachedPos(BlockPos pos, String type) {
+    public int upgradeCountForAttachedPos(BlockPos pos, UpgradeType type) {
         int total = 0;
         for (Direction dir : Direction.values()) {
             if (hasEndpointAt(dir) && attachedPos(dir).equals(pos)) total += upgradeCount(dir, type);
         }
         return total;
+    }
+
+    public int upgradeCountForAttachedPos(BlockPos pos, String type) {
+        return upgradeCountForAttachedPos(pos, UpgradeType.byId(type));
     }
 
     /** Returns the first occupied face, or NORTH as fallback (backward compat). */
@@ -183,16 +188,18 @@ public class NetworkWireBlockEntity extends BlockEntity {
     /** Legacy – primary endpoint upgrade counts. */
     public int[] upgradeCounts() { return upgradeCounts(endpointFace()); }
 
-    public int upgradeCount(Direction face, String type) {
+    public int upgradeCount(Direction face, UpgradeType type) {
         EndpointSlot s = slots[face.ordinal()];
-        return switch (type == null ? "" : type) {
-            case "speed" -> s.speedUpgrades;
-            case "stack" -> s.stackUpgrades;
-            case "range" -> s.rangeUpgrades;
-            case "efficiency" -> s.efficiencyUpgrades;
-            default -> 0;
+        if (type == null) return 0;
+        return switch (type) {
+            case SPEED -> s.speedUpgrades;
+            case STACK -> s.stackUpgrades;
+            case RANGE -> s.rangeUpgrades;
+            case EFFICIENCY -> s.efficiencyUpgrades;
         };
     }
+
+    public int upgradeCount(Direction face, String type) { return upgradeCount(face, UpgradeType.byId(type)); }
 
     /** Legacy – primary endpoint upgrade count. */
     public int upgradeCount(String type) { return upgradeCount(endpointFace(), type); }
@@ -220,7 +227,8 @@ public class NetworkWireBlockEntity extends BlockEntity {
         return true;
     }
 
-    public boolean installUpgrade(String type, Direction face) {
+    public boolean installUpgrade(UpgradeType type, Direction face) {
+        if (type == null) return false;
         if (!hasEndpointAt(face)) return false;
         EndpointSlot slot = slots[face.ordinal()];
         int current = upgradeCount(face, type);
@@ -230,13 +238,23 @@ public class NetworkWireBlockEntity extends BlockEntity {
         return true;
     }
 
+    public boolean installUpgrade(String type, Direction face) {
+        return installUpgrade(UpgradeType.byId(type), face);
+    }
+
     /** Legacy – installs on first available endpoint face. */
-    public boolean installUpgrade(String type) {
+    public boolean installUpgrade(UpgradeType type) {
         Direction face = endpointFace();
         return hasEndpointAt(face) && installUpgrade(type, face);
     }
 
-    public boolean removeUpgrade(String type, Direction face) {
+    public boolean installUpgrade(String type) {
+        Direction face = endpointFace();
+        return hasEndpointAt(face) && installUpgrade(UpgradeType.byId(type), face);
+    }
+
+    public boolean removeUpgrade(UpgradeType type, Direction face) {
+        if (type == null) return false;
         if (!hasEndpointAt(face)) return false;
         EndpointSlot slot = slots[face.ordinal()];
         int current = upgradeCount(face, type);
@@ -246,20 +264,33 @@ public class NetworkWireBlockEntity extends BlockEntity {
         return true;
     }
 
+    public boolean removeUpgrade(String type, Direction face) {
+        return removeUpgrade(UpgradeType.byId(type), face);
+    }
+
     /** Legacy – removes from first available endpoint face. */
-    public boolean removeUpgrade(String type) {
+    public boolean removeUpgrade(UpgradeType type) {
         Direction face = endpointFace();
         return hasEndpointAt(face) && removeUpgrade(type, face);
     }
 
-    private static void setUpgradeCount(EndpointSlot slot, String type, int value) {
+    public boolean removeUpgrade(String type) {
+        Direction face = endpointFace();
+        return hasEndpointAt(face) && removeUpgrade(UpgradeType.byId(type), face);
+    }
+
+    public int upgradeCount(UpgradeType type) {
+        return type == null ? 0 : upgradeCount(endpointFace(), type);
+    }
+
+    private static void setUpgradeCount(EndpointSlot slot, UpgradeType type, int value) {
         int capped = Math.max(0, Math.min(NetworkEndpointBlockEntity.MAX_UPGRADES_PER_TYPE, value));
-        switch (type == null ? "" : type) {
-            case "speed" -> slot.speedUpgrades = capped;
-            case "stack" -> slot.stackUpgrades = capped;
-            case "range" -> slot.rangeUpgrades = capped;
-            case "efficiency" -> slot.efficiencyUpgrades = capped;
-            default -> { }
+        if (type == null) return;
+        switch (type) {
+            case SPEED -> slot.speedUpgrades = capped;
+            case STACK -> slot.stackUpgrades = capped;
+            case RANGE -> slot.rangeUpgrades = capped;
+            case EFFICIENCY -> slot.efficiencyUpgrades = capped;
         }
     }
 
@@ -307,6 +338,12 @@ public class NetworkWireBlockEntity extends BlockEntity {
     }
 
     // ── Connection refresh ────────────────────────────────────────────────────
+
+    private int tickCounter;
+
+    public void tick40() {
+        if (++tickCounter >= 40) { tickCounter = 0; refreshConnections(); }
+    }
 
     public void refreshConnections() {
         if (level == null) return;

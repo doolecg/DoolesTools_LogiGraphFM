@@ -4,7 +4,7 @@ import net.doole.doolestools.DoolesTools;
 import net.doole.doolestools.config.ModServerConfig;
 import net.doole.doolestools.logistics.NetworkPowerCalculator;
 import net.doole.doolestools.logistics.LogisticsScanner;
-import net.doole.doolestools.logistics.lfm.LogiFactoryManager;
+import net.doole.doolestools.logistics.easyfactory.EasyFactoryManager;
 import net.doole.doolestools.logistics.data.LogisticsGraphData;
 import net.doole.doolestools.logistics.data.NetworkPowerData;
 import net.doole.doolestools.logistics.data.ScannedBlockData;
@@ -130,31 +130,36 @@ public class LogisticsComputerBlockEntity extends BlockEntity implements MenuPro
     }
 
     public void serverTick(ServerLevel level) {
-        // auto-scan: rescan the area on a configurable interval, no player needed
-        int autoInterval = ModServerConfig.AUTO_SCAN_INTERVAL_TICKS.get();
-        if (autoInterval > 0) {
-            if (--autoScanCountdown <= 0) {
-                autoScanCountdown = autoInterval;
-                performScan();
-                recomputeWarnings(level);
-            }
-        }
-
+        tickAutoScan(level);
         if (!ModServerConfig.ENABLE_LFM_TRANSPORT.get() || graph == LogisticsGraphData.EMPTY) return;
-        int interval = ModServerConfig.LFM_TICK_INTERVAL.get();
-        if (level.getGameTime() % interval != 0L) return;
-        NetworkPowerData power = getNetworkPower();
-        samplePower(power);
-        bufferBatteries(level, power);
+        if (level.getGameTime() % ModServerConfig.LFM_TICK_INTERVAL.get() != 0L) return;
+        NetworkPowerData power = sampleAndBufferPower(level);
         // Brownout model: pull what power we can and run scaled to how satisfied the network is.
         // No usable power → automation stops (the dashboard shows "NOT ENOUGH POWER"); partial power
         // → routes throttle down so transport visibly slows rather than hard-stopping.
         float satisfaction = NetworkPowerCalculator.consumePower(level, worldPosition, power);
-        if (satisfaction <= 0f) {
-            activeRouteIds = java.util.Set.of();
-            return;
+        if (satisfaction > 0f) tickRouting(level, satisfaction);
+        else activeRouteIds = java.util.Set.of();
+    }
+
+    private void tickAutoScan(ServerLevel level) {
+        int autoInterval = ModServerConfig.AUTO_SCAN_INTERVAL_TICKS.get();
+        if (autoInterval > 0 && --autoScanCountdown <= 0) {
+            autoScanCountdown = autoInterval;
+            performScan();
+            recomputeWarnings(level);
         }
-        java.util.Map<String, Integer> tickCounts = LogiFactoryManager.tickWithCounts(graph, level, lastScan, satisfaction, linkBirthTimes);
+    }
+
+    private NetworkPowerData sampleAndBufferPower(ServerLevel level) {
+        NetworkPowerData power = getNetworkPower();
+        samplePower(power);
+        bufferBatteries(level, power);
+        return power;
+    }
+
+    private void tickRouting(ServerLevel level, float satisfaction) {
+        java.util.Map<String, Integer> tickCounts = EasyFactoryManager.tickWithCounts(graph, level, lastScan, satisfaction, linkBirthTimes);
         activeRouteIds = tickCounts.keySet();
         updateThroughputHistory(tickCounts);
     }

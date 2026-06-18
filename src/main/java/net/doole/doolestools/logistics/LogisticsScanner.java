@@ -170,21 +170,19 @@ public final class LogisticsScanner {
         if (state.is(ModBlockTags.SCANNER_BLACKLIST) || block instanceof ScannerHiddenBlock) {
             return null;
         }
-        BlockPos displayPos = canonicalScanPos(pos, state);
-        if (!displayPos.equals(pos)) return null;
-        String label = labels.getLabel(level.dimension().identifier(), displayPos);
+        String label = labels.getLabel(level.dimension().identifier(), pos);
         boolean largeChest = block instanceof ChestBlock && state.getValue(ChestBlock.TYPE) != ChestType.SINGLE;
         String blockName = label != null && !label.isBlank() ? label : largeChest ? "Large Chest" : block.getName().getString();
         String registryId = BuiltInRegistries.BLOCK.getKey(block).toString();
-        double distance = Math.sqrt(center.distSqr(displayPos));
+        double distance = Math.sqrt(center.distSqr(pos));
         String dimension = level.dimension().identifier().toString();
-        String id = blockId(displayPos);
+        String id = blockId(pos);
 
         ScannedType type;
         InventorySummary inventory = InventorySummary.EMPTY;
         FurnaceSummary furnace = FurnaceSummary.EMPTY;
-        FluidSummary fluids = readFluidCapability(level, displayPos, state, be);
-        EnergySummary energy = readEnergyCapability(level, displayPos, state, be);
+        FluidSummary fluids = readFluidCapability(level, pos, state, be);
+        EnergySummary energy = readEnergyCapability(level, pos, state, be);
 
         if (block instanceof ChestBlock chestBlock) {
             Container chestContainer = ChestBlock.getContainer(chestBlock, state, level, pos, false);
@@ -203,7 +201,7 @@ public final class LogisticsScanner {
                 type = ScannedType.STORAGE;
             }
         } else {
-            inventory = readItemCapability(level, displayPos, state, be);
+            inventory = readItemCapability(level, pos, state, be);
             if (energy.hasData() || fluids.hasData()) {
                 type = ScannedType.MACHINE;
             } else if (inventory.hasData()) {
@@ -249,7 +247,7 @@ public final class LogisticsScanner {
 
         List<WarningData> warnings = WarningGenerator.forScannedBlock(type, inventory, furnace);
 
-        ScannedBlockData snapshot = new ScannedBlockData(id, displayPos, dimension, blockName, registryId, type, distance,
+        ScannedBlockData snapshot = new ScannedBlockData(id, pos, dimension, blockName, registryId, type, distance,
                 inventory, fluids, energy, furnace, warnings, gameTime);
         return liveProgress.present() ? snapshot.withProgress(liveProgress) : snapshot;
     }

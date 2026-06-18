@@ -1,6 +1,7 @@
-package net.doole.doolestools.logistics.lfm;
+package net.doole.doolestools.logistics.easyfactory;
 
 import net.doole.doolestools.config.ModServerConfig;
+import net.doole.doolestools.item.UpgradeType;
 import net.doole.doolestools.logistics.FilterSettings;
 import net.doole.doolestools.logistics.LinkType;
 import net.doole.doolestools.logistics.NodeType;
@@ -30,10 +31,10 @@ import net.neoforged.neoforge.transfer.item.VanillaContainerWrapper;
 import net.neoforged.neoforge.transfer.item.WorldlyContainerWrapper;
 import net.neoforged.neoforge.transfer.transaction.Transaction;
 
-public final class LogiFactoryManager {
+public final class EasyFactoryManager {
     private record ItemTargetSlot(ResourceHandler<ItemResource> handler, int slot) {}
 
-    private LogiFactoryManager() {}
+    private EasyFactoryManager() {}
 
     public static java.util.Set<String> tick(LogisticsGraphData graph, ServerLevel level, java.util.List<ScannedBlockData> scan) {
         return tick(graph, level, scan, 1f);
@@ -109,8 +110,8 @@ public final class LogiFactoryManager {
         long birthTime = linkBirthTimes.getOrDefault(linkId, gameTime);
         long warmupTicks = Math.min(200L, gameTime - birthTime);
         int efficiency = 0;
-        if (sourcePos != null) efficiency = Math.max(efficiency, endpointUpgradeCount(level, sourcePos, "efficiency"));
-        if (targetPos != null) efficiency = Math.max(efficiency, endpointUpgradeCount(level, targetPos, "efficiency"));
+        if (sourcePos != null) efficiency = Math.max(efficiency, endpointUpgradeCount(level, sourcePos, UpgradeType.EFFICIENCY));
+        if (targetPos != null) efficiency = Math.max(efficiency, endpointUpgradeCount(level, targetPos, UpgradeType.EFFICIENCY));
         int rampTicks = 200 * (4 - Math.min(4, Math.max(0, efficiency))) / 4; // 200, 150, 100, 50, 0
         if (rampTicks <= 0) return 1f;
         return Math.min(1f, warmupTicks / (float) rampTicks);
@@ -119,9 +120,7 @@ public final class LogiFactoryManager {
     private static java.util.Map<String, BlockPos> scannedPositions(java.util.List<ScannedBlockData> scan) {
         java.util.Map<String, BlockPos> positions = new java.util.HashMap<>();
         if (scan == null) return positions;
-        for (ScannedBlockData scanned : scan) {
-            positions.put(scanned.id(), scanned.pos());
-        }
+        for (ScannedBlockData scanned : scan) positions.put(scanned.id(), scanned.pos());
         return positions;
     }
 
@@ -156,7 +155,7 @@ public final class LogiFactoryManager {
         return scannedById.get(node.scannedBlockId());
     }
 
-    private static BlockPos targetPosOf(GraphNodeData node, java.util.Map<String, BlockPos> scannedPositions) {
+    static BlockPos targetPosOf(GraphNodeData node, java.util.Map<String, BlockPos> scannedPositions) {
         if (node == null || node.scannedBlockId() == null) return null;
         BlockPos scanned = scannedPositions.get(node.scannedBlockId());
         if (scanned != null) return scanned;
@@ -214,9 +213,8 @@ public final class LogiFactoryManager {
             GraphLinkData route = new GraphLinkData(inbound.linkId(), inbound.sourceNodeId(), inbound.sourcePortId(),
                     r.finalLink().targetNodeId(), r.finalLink().targetPortId(), r.finalLink().label(),
                     LinkType.ITEMS, r.finalLink().sideOverride());
-            java.util.List<Gate> gates = r.gates();
             int moved = transferItemsCount(level, route, sourceNode, r.targetNode(), sourcePos, r.targetPos(),
-                    resource -> gatesAllow(gates, resource), gateLimit(gates), rampFraction);
+                    resource -> gatesAllow(r.gates(), resource), gateLimit(r.gates()), rampFraction);
             if (moved > 0) {
                 for (String linkId : r.linkPath()) movedByLink.merge(linkId, moved, Integer::sum);
                 movedTotal += moved;
@@ -306,10 +304,6 @@ public final class LogiFactoryManager {
             Container chestContainer = ChestBlock.getContainer(chestBlock, state, level, pos, false);
             if (chestContainer != null) return VanillaContainerWrapper.of(chestContainer);
         }
-        // A WorldlyContainerWrapper bound to a null side can't extract or insert anything (its face
-        // gating has no face), which is why machine sources never moved unless physically adjacent.
-        // Only use the face-gated wrapper when we actually have a side; otherwise fall back to the
-        // plain wrapper and let canExtractItemFromSlot / target-slot selection enforce face rules.
         if (be instanceof WorldlyContainer container && side != null) return new WorldlyContainerWrapper(container, side);
         if (be instanceof Container container) return VanillaContainerWrapper.of(container);
         return Capabilities.Item.BLOCK.getCapability(level, pos, state, be, side);
@@ -401,22 +395,14 @@ public final class LogiFactoryManager {
         if (!(be instanceof WorldlyContainer container)) {
             return !machineSource || !source.isValid(handlerSlot, resource);
         }
-
         if (!machineSource) return true;
-
         int containerSlot = containerSlotForHandlerSlot(container, side, handlerSlot);
         if (containerSlot < 0) return false;
         if (container.canPlaceItem(containerSlot, resource.toStack())) return false;
-
-        if (side != null) {
-            return container.canTakeItemThroughFace(containerSlot, resource.toStack(), side);
-        }
-
+        if (side != null) return container.canTakeItemThroughFace(containerSlot, resource.toStack(), side);
         for (Direction face : Direction.values()) {
             for (int slot : container.getSlotsForFace(face)) {
-                if (slot == containerSlot && container.canTakeItemThroughFace(slot, resource.toStack(), face)) {
-                    return true;
-                }
+                if (slot == containerSlot && container.canTakeItemThroughFace(slot, resource.toStack(), face)) return true;
             }
         }
         return false;
@@ -430,15 +416,10 @@ public final class LogiFactoryManager {
     }
 
     private static ItemTargetSlot[] targetSlots(ServerLevel level, GraphLinkData link, BlockPos pos, Direction side, ResourceHandler<ItemResource> target, ItemResource resource, boolean manualSide) {
-        ItemTargetRole role = targetRole(link.targetPortId());
-
+        ItemTargetRole role = ItemTargetRole.fromPort(link.targetPortId());
         BlockEntity be = level.getBlockEntity(pos);
-        if (!(be instanceof WorldlyContainer container)) {
-            return capabilityTargetSlotOrder(level, target, resource, role);
-        }
-
+        if (!(be instanceof WorldlyContainer container)) return capabilityTargetSlotOrder(level, target, resource, role);
         if (side != null) return sideTargetSlots(level, container, side, resource, role, manualSide);
-
         return worldlyTargetSlots(level, container, resource, role);
     }
 
@@ -506,10 +487,6 @@ public final class LogiFactoryManager {
         return out;
     }
 
-    private static ItemTargetRole targetRole(String targetPortId) {
-        return ItemTargetRole.fromPort(targetPortId);
-    }
-
     private static boolean isOutputPort(String sourcePortId) {
         String port = sourcePortId == null ? "" : sourcePortId.toLowerCase(java.util.Locale.ROOT);
         return port.contains("out") || port.equals("output");
@@ -517,12 +494,12 @@ public final class LogiFactoryManager {
 
     private static Direction sideOverride(String sideOverride) {
         return switch (sideOverride == null ? "auto" : sideOverride.toLowerCase(java.util.Locale.ROOT)) {
-            case "up" -> Direction.UP;
-            case "down" -> Direction.DOWN;
+            case "up"    -> Direction.UP;
+            case "down"  -> Direction.DOWN;
             case "north" -> Direction.NORTH;
             case "south" -> Direction.SOUTH;
-            case "east" -> Direction.EAST;
-            case "west" -> Direction.WEST;
+            case "east"  -> Direction.EAST;
+            case "west"  -> Direction.WEST;
             default -> null;
         };
     }
@@ -535,7 +512,7 @@ public final class LogiFactoryManager {
         for (GraphNodeData node : graph.activeCanvas().nodes()) {
             BlockPos pos = targetPosOf(node, scannedPositions);
             if (pos == null || !level.hasChunkAt(pos)) continue;
-            int speed = upgradeCache.computeIfAbsent(pos, p -> endpointUpgradeCount(level, p, "speed"));
+            int speed = upgradeCache.computeIfAbsent(pos, p -> endpointUpgradeCount(level, p, UpgradeType.SPEED));
             bonus += WirelessNetworkPolicy.routeBudgetBonus(speed, hasWirelessEndpoint(level, pos));
         }
         return Math.max(1, Math.min(512, base + bonus));
@@ -556,8 +533,8 @@ public final class LogiFactoryManager {
 
     private static int itemLimit(ServerLevel level, BlockPos sourcePos, BlockPos targetPos) {
         int base = ModServerConfig.MAX_ITEMS_MOVED_PER_ROUTE.get();
-        int speed = Math.max(endpointUpgradeCount(level, sourcePos, "speed"), endpointUpgradeCount(level, targetPos, "speed"));
-        int stack = Math.max(endpointUpgradeCount(level, sourcePos, "stack"), endpointUpgradeCount(level, targetPos, "stack"));
+        int speed = Math.max(endpointUpgradeCount(level, sourcePos, UpgradeType.SPEED), endpointUpgradeCount(level, targetPos, UpgradeType.SPEED));
+        int stack = Math.max(endpointUpgradeCount(level, sourcePos, UpgradeType.STACK), endpointUpgradeCount(level, targetPos, UpgradeType.STACK));
         return WirelessNetworkPolicy.speedItemLimit(base, speed, stack);
     }
 
@@ -572,7 +549,7 @@ public final class LogiFactoryManager {
         return false;
     }
 
-    private static int endpointUpgradeCount(ServerLevel level, BlockPos attachedPos, String type) {
+    private static int endpointUpgradeCount(ServerLevel level, BlockPos attachedPos, UpgradeType type) {
         int total = 0;
         for (Direction direction : Direction.values()) {
             BlockPos neighbor = attachedPos.relative(direction);
@@ -617,10 +594,6 @@ public final class LogiFactoryManager {
         return resource != null && !resource.isEmpty() && level.fuelValues().isFuel(resource.toStack());
     }
 
-    private static boolean transferFluids(ServerLevel level, BlockPos sourcePos, BlockPos targetPos) {
-        return transferFluidsCount(level, sourcePos, targetPos) > 0;
-    }
-
     private static int transferFluidsCount(ServerLevel level, BlockPos sourcePos, BlockPos targetPos) {
         Direction sourceSide = sideFrom(sourcePos, targetPos);
         Direction targetSide = sourceSide == null ? null : sourceSide.getOpposite();
@@ -647,10 +620,6 @@ public final class LogiFactoryManager {
             }
         }
         return 0;
-    }
-
-    private static boolean transferEnergy(ServerLevel level, BlockPos sourcePos, BlockPos targetPos) {
-        return transferEnergyCount(level, sourcePos, targetPos) > 0;
     }
 
     private static int transferEnergyCount(ServerLevel level, BlockPos sourcePos, BlockPos targetPos) {

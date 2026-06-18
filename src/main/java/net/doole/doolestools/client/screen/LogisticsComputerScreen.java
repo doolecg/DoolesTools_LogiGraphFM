@@ -87,9 +87,6 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
     private static final int[] PAGE_ORDER = {PAGE_SCANNED, PAGE_GRAPH, PAGE_STATS, PAGE_SETTINGS};
     private static final String[] PAGE_TABS = {"NETWORK", "FACTORY", "STATS", "SETTINGS"};
     private static final int SNAP = 12;
-    private static final int PICKER_RECENT_LIMIT = 24;
-    private static final List<String> FILTER_PICKER_RECENTS = new ArrayList<>();
-
     private final EditorContext ctx;
 
     private ScannedBlockListWidget listWidget;
@@ -102,6 +99,10 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
     private TerminalButton filterButton;
     /** Tool-palette buttons paired with their two-line hover tooltip. */
     private final List<ToolTip> toolButtons = new ArrayList<>();
+
+    private net.doole.doolestools.client.gui.StatsPagePanel statsPanel;
+    private net.doole.doolestools.client.gui.FilterItemPickerPopup filterPickerPopup;
+    private net.doole.doolestools.client.gui.FilterNodeEditorPanel filterNodeEditor;
 
     private record ToolTip(TerminalButton button, String title, String desc) {}
 
@@ -116,11 +117,6 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
 
     private int page = PAGE_GRAPH;
     private int scannedScroll;
-    /** Stats page time-scale selection: 0=NOW, 1=30M, 2=1H, 3=12H, 4=1D, 5=ALL. */
-    private int statsTimeScale = 0;
-    private int statsGraphScrollOffset = 0;
-    private final TerminalButton[] statsScaleButtons = new TerminalButton[6];
-    private static final String[] STATS_SCALE_LABELS = {"NOW", "30M", "1H", "12H", "1D", "ALL"};
     private final TerminalButton[] tabButtons = new TerminalButton[4];
     private final List<AbstractWidget>[] pageWidgets = new List[]{
             new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>()};
@@ -150,22 +146,19 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
     private boolean editingGraphName;
     private boolean startMenuOpen;
     private int autoRefreshTicks;
-    private boolean filterPickerOpen;
-    private int filterPickerSlot = -1;
-    private int filterPickerScroll;
-    private String filterPickerSearch = "";
-    private boolean filterPickerRecentTab;
     /** Set when the user shift-clicks a node — shows the copy/instance modal. */
     private String shiftModalNodeId = null;
     private double shiftModalX, shiftModalY;
     private String pendingShiftModalNodeId = null;
-    private List<PickerEntry> filterPickerEntries;
 
     public LogisticsComputerScreen(LogisticsComputerMenu menu, Inventory inv, Component title) {
         // Pass an oversized imageWidth/imageHeight so JEI/REI/EMI calculate no available
         // margin and keep their panels off-screen. Our rendering uses guiW/guiH, not these.
         super(menu, inv, title, 10000, 10000);
         this.ctx = new EditorContext(menu.getPos());
+        this.statsPanel = new net.doole.doolestools.client.gui.StatsPagePanel(ctx, font);
+        this.filterPickerPopup = new net.doole.doolestools.client.gui.FilterItemPickerPopup(ctx, font);
+        this.filterNodeEditor = new net.doole.doolestools.client.gui.FilterNodeEditorPanel(ctx, font);
     }
 
     public EditorContext context() {
@@ -229,7 +222,11 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
                 .accent(DUTheme.OK));
 
         initGraphPage(lx, ty);
-        initStatsPage();
+        int panelX = leftPos + 10, panelW = guiW - 20;
+        statsPanel.updateLayout(leftPos, contentY, panelX, panelW);
+        statsPanel.initButtons(scale -> {}, b -> paged(PAGE_STATS, b));
+        filterPickerPopup.updateLayout(guiW, guiH, contentY);
+        filterNodeEditor.updateLayout(rightX, rightW, contentY, this::openFilterPicker);
         initSettingsPage();
 
         setPage(page);
@@ -311,58 +308,6 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
                 Component.literal(tr("doolestools.computer.button.remove")), () -> ctx.deleteSelectedNode()).sprite(GuiSprites.CLEAR).accent(DUTheme.ERROR));
     }
 
-    // --- Stats page layout (shared by init + render so the scale tabs line up) ---
-    private int statsContentX() { return leftPos + 10 + 16; }
-    private int statsBarsTop() { return contentY + 18; }
-    /** Y of the time-scale tab strip (below the Row-1 production/consumption bars). */
-    private int statsTabStripY() { return statsBarsTop() + 2 * 12 + 6; }
-    private int statsGraphTop() { return statsTabStripY() + 16; }
-
-    private void initStatsPage() {
-        int x = statsContentX();
-        int y = statsTabStripY();
-        int bw = 34, gap = 3, h = 12;
-        for (int i = 0; i < STATS_SCALE_LABELS.length; i++) {
-            final int idx = i;
-            TerminalButton b = new TerminalButton(x + i * (bw + gap), y, bw, h,
-                    Component.literal(STATS_SCALE_LABELS[i]), () -> setStatsTimeScale(idx))
-                    .accent(DUTheme.SELECTED);
-            b.setToggled(i == statsTimeScale);
-            statsScaleButtons[i] = b;
-            paged(PAGE_STATS, b);
-        }
-    }
-
-    private void setStatsTimeScale(int scale) {
-        statsTimeScale = Math.max(0, Math.min(STATS_SCALE_LABELS.length - 1, scale));
-        statsGraphScrollOffset = 0;
-        for (int i = 0; i < statsScaleButtons.length; i++) {
-            if (statsScaleButtons[i] != null) statsScaleButtons[i].setToggled(i == statsTimeScale);
-        }
-    }
-
-    /** Supply/demand history series for the currently selected stats time-scale. */
-    private List<? extends Number> statsSupplySeries() {
-        return switch (statsTimeScale) {
-            case 1 -> ctx.supply30m();
-            case 2 -> ctx.supply1h();
-            case 3 -> ctx.supply12h();
-            case 4 -> ctx.supply1d();
-            case 5 -> ctx.supplyAllTime();
-            default -> ctx.powerSupplyHistory();
-        };
-    }
-
-    private List<? extends Number> statsDemandSeries() {
-        return switch (statsTimeScale) {
-            case 1 -> ctx.demand30m();
-            case 2 -> ctx.demand1h();
-            case 3 -> ctx.demand12h();
-            case 4 -> ctx.demand1d();
-            case 5 -> ctx.demandAllTime();
-            default -> ctx.powerDemandHistory();
-        };
-    }
 
     private static final int SETTINGS_COL_W = 168;
 
@@ -451,7 +396,7 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         }
         contextMenu = null;
         inventoryPopup = null;
-        closeFilterPicker();
+        filterPickerPopup.close();
         startMenuOpen = false;
     }
 
@@ -673,11 +618,11 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         pushUi(g);
         int designMouseX = designX(mouseX), designMouseY = designY(mouseY);
         super.extractRenderState(g, designMouseX, designMouseY, a);
-        if (page == PAGE_GRAPH && !startMenuOpen && !filterPickerOpen && contextMenu == null && inventoryPopup == null) {
+        if (page == PAGE_GRAPH && !startMenuOpen && !filterPickerPopup.isOpen() && contextMenu == null && inventoryPopup == null) {
             renderToolTooltips(g, designMouseX, designMouseY);
         }
         if (startMenuOpen) renderStartMenu(g, leftPos, topPos, designMouseX, designMouseY);
-        if (filterPickerOpen) renderFilterPicker(g, designMouseX, designMouseY);
+        filterPickerPopup.render(g, designMouseX, designMouseY);
         g.pose().popMatrix();
     }
 
@@ -689,12 +634,7 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         int mouseX = designX(rawMouseX), mouseY = designY(rawMouseY);
         int lx = leftPos, ty = topPos;
 
-        DUTheme.bezel(g, lx, ty, guiW, guiH);
-        DUTheme.screw(g, lx + 7, ty + 7);
-        DUTheme.screw(g, lx + guiW - 7, ty + 7);
-        DUTheme.screw(g, lx + 7, ty + guiH - 7);
-        DUTheme.screw(g, lx + guiW - 7, ty + guiH - 7);
-        DUTheme.box(g, lx + 5, ty + 5, guiW - 10, guiH - 10, DUTheme.SCREEN, DUTheme.PANEL_BORDER);
+        DUTheme.frame(g, lx, ty, guiW, guiH);
 
         renderHeader(g, lx, ty);
 
@@ -734,16 +674,7 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         syncNameField();
         GraphNodeData sel = ctx.selectedNode();
         g.text(font, sel != null ? sel.displayName() : "—", rightX + 4, contentY + 14, DUTheme.TEXT, false);
-        int detailsTop = contentY + 28;
-        if (sel != null) {
-            switch (sel.type()) {
-                case FILTER -> detailsTop = renderFilterEditor(g, sel);
-                case CHANNEL -> detailsTop = renderChannelEditor(g, sel);
-                case SPLITTER -> detailsTop = renderRoutingInfo(g, "SPLITTER", "Round-robins the input", "across every output link.");
-                case COMBINE -> detailsTop = renderRoutingInfo(g, "COMBINE", "Merges every input link", "into one output stream.");
-                default -> { }
-            }
-        }
+        int detailsTop = filterNodeEditor.render(g);
         detailsPanel.render(g, font, detailsTop);
 
         DUTheme.box(g, lx + 10, warningY, guiW - 20, 20, DUTheme.PANEL_ALT, DUTheme.PANEL_BORDER);
@@ -809,707 +740,15 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
     private void renderStatsPage(GuiGraphicsExtractor g, int lx, int ty) {
         int x = lx + 10, y = contentY, w = guiW - 20, h = tabBarY - contentY - 8;
         panel(g, x, y, w, h, tr("doolestools.computer.page.power"));
-
-        List<ScannedBlockData> scan = ctx.scan();
-        int warnings = 0, errors = 0;
-        for (ScannedBlockData s : scan) {
-            for (var wd : s.warnings()) {
-                if (wd.severity() == net.doole.doolestools.logistics.data.WarningData.Severity.ERROR) errors++;
-                else if (wd.severity() == net.doole.doolestools.logistics.data.WarningData.Severity.WARNING) warnings++;
-            }
-        }
-
-        NetworkPowerData power = ctx.power();
-        int cx = statsContentX();
-        int fullContentW = (x + w) - cx - 16;
-
-        // Two-column split: left 57% (power/graph/breakdown), right 43% (caps/network/alerts).
-        int leftColW = fullContentW * 57 / 100;
-        int rightColX = cx + leftColW + 14;
-        int rightColW = fullContentW - leftColW - 14;
-
-        // ── LEFT COLUMN ──────────────────────────────────────────
-        // Status line
-        int statusColor = power.starved() ? DUTheme.ERROR : power.degraded() ? DUTheme.WARN : DUTheme.OK;
-        String statusText = power.starved() ? "NO POWER — STOPPED"
-                : power.degraded() ? "LOW POWER — " + Math.round(power.satisfaction() * 100) + "%"
-                : "NETWORK SATISFIED";
-        DUTheme.dot(g, cx, contentY + 6, statusColor);
-        g.text(font, statusText, cx + 8, contentY + 4, statusColor, false);
-        int routeCount = ctx.activeRouteCount();
-        if (routeCount > 0) {
-            String pktText = routeCount + " PKT";
-            g.text(font, pktText, cx + 8 + font.width(statusText) + 6, contentY + 4, DUTheme.TEXT_DIM, false);
-        }
-
-        // Production / Consumption segmented bars
-        int barsTop = statsBarsTop();
-        int peak = Math.max(1, Math.max(power.supplyCentiFe(), power.demandCentiFe()));
-        statBar(g, cx, barsTop, leftColW, "Production", powerRatio(power.supplyCentiFe(), peak),
-                formatFe(power.supplyCentiFe()) + "/t", DUTheme.OK);
-        statBar(g, cx, barsTop + 12, leftColW, "Consumption", powerRatio(power.demandCentiFe(), peak),
-                formatFe(power.demandCentiFe()) + "/t", DUTheme.ERROR);
-
-        // Time-scale tab strip (widgets) + power history graph
-        int graphY = statsGraphTop();
-        int graphH = 58;
-        renderPowerHistoryGraph(g, cx, graphY, leftColW, graphH);
-
-        // BREAKDOWN
-        int breakY = graphY + graphH + 8;
-        g.text(font, "BREAKDOWN", cx, breakY, DUTheme.TEXT_GREEN, false);
-        int ly = breakY + 12;
-        ly = statSmall(g, cx, ly, leftColW, "Computer", formatFe(power.computerCentiFe()) + " cF/t");
-        ly = statSmall(g, cx, ly, leftColW, "Sockets", formatFe(power.endpointCentiFe()) + " cF/t");
-        ly = statSmall(g, cx, ly, leftColW, "Cable", formatFe(power.wireCentiFe()) + " cF/t");
-        ly = statSmall(g, cx, ly, leftColW, "Devices", formatFe(power.deviceCentiFe()) + " cF/t");
-        ly = statSmall(g, cx, ly, leftColW, "Routes", formatFe(power.routeCentiFe()) + " cF/t");
-        ly = statSmall(g, cx, ly, leftColW, "Batteries", formatFe(power.batteryCentiFe()) + " cF/t");
-
-        // ── RIGHT COLUMN ─────────────────────────────────────────
-        int ry = contentY + 4;
-
-        // CAPACITIES section
-        g.text(font, "CAPACITIES", rightColX, ry, DUTheme.TEXT_GREEN, false); ry += 12;
-        if (power.batteryCapacity() > 0) {
-            float storedFrac = Math.max(0f, Math.min(1f, (float) power.batteryStored() / power.batteryCapacity()));
-            int battColor = storedFrac > 0.6f ? 0xFF3af0a0 : storedFrac >= 0.3f ? 0xFFf09030 : 0xFFf03030;
-            // Wide horizontal battery bar
-            renderHorizBattery(g, rightColX, ry, rightColW - 2, 14, storedFrac, battColor);
-            // Small readout text below the bar
-            int pctVal = Math.round(storedFrac * 100f);
-            String readout = pctVal + "%  " + formatMfe(power.batteryStored()) + " / " + formatMfe(power.batteryCapacity());
-            g.text(font, readout, rightColX, ry + 16, DUTheme.TEXT_DIM, false);
-            ry += 30;
-            // Mini vertical battery grid — one icon per battery, all sharing the same aggregate fill
-            if (power.batteryCount() > 0) {
-                int miniW = 12, miniH = 24, miniGap = 3;
-                int perRow = Math.max(1, (rightColW - 2) / (miniW + miniGap));
-                int gridRows = (power.batteryCount() + perRow - 1) / perRow;
-                for (int bi = 0; bi < power.batteryCount() && bi < 24; bi++) {
-                    int col = bi % perRow;
-                    int row = bi / perRow;
-                    renderMiniVertBattery(g,
-                            rightColX + col * (miniW + miniGap),
-                            ry + row * (miniH + 4),
-                            miniW, miniH, storedFrac, battColor);
-                }
-                ry += gridRows * (miniH + 4) + 4;
-            }
-        } else {
-            g.text(font, "No batteries", rightColX, ry, DUTheme.TEXT_DIM, false); ry += 14;
-        }
-
-        // NETWORK
-        ry += 2;
-        g.text(font, "NETWORK", rightColX, ry, DUTheme.TEXT_GREEN, false); ry += 12;
-        ry = stat(g, rightColX, ry, "Generators", String.valueOf(power.generatorCount()));
-        ry = stat(g, rightColX, ry, "Batteries", String.valueOf(power.batteryCount()));
-        ry = stat(g, rightColX, ry, "Sockets", String.valueOf(power.endpointCount()));
-        ry = stat(g, rightColX, ry, "Devices", String.valueOf(power.deviceCount()));
-
-        // ALERTS
-        ry += 4;
-        g.text(font, "ALERTS", rightColX, ry, DUTheme.TEXT_GREEN, false); ry += 12;
-        if (warnings == 0 && errors == 0) {
-            DUTheme.dot(g, rightColX, ry + 2, DUTheme.OK);
-            g.text(font, "No issues", rightColX + 8, ry + 1, DUTheme.TEXT_DIM, false);
-            ry += 12;
-        } else {
-            if (warnings > 0) {
-                Glyphs.warning(g, rightColX, ry, DUTheme.WARN);
-                g.text(font, warnings + " warnings", rightColX + 12, ry + 1, DUTheme.WARN, false);
-                ry += 11;
-            }
-            if (errors > 0) {
-                Glyphs.warning(g, rightColX, ry, DUTheme.ERROR);
-                g.text(font, errors + " errors", rightColX + 12, ry + 1, DUTheme.ERROR, false);
-                ry += 11;
-            }
-        }
-
-        // ACTIVITY
-        ry += 2;
-        g.text(font, "ACTIVITY", rightColX, ry, DUTheme.TEXT_GREEN, false); ry += 12;
-        boolean routing = power.powered() && ClientPrefs.autoRefresh;
-        g.text(font, "Routes", rightColX, ry, DUTheme.TEXT_DIM, false);
-        g.text(font, String.valueOf(power.routeCount()), rightColX + 60, ry, DUTheme.TEXT, false);
-        g.text(font, routing ? "● LIVE" : "○ IDLE", rightColX + 80, ry, routing ? DUTheme.OK : DUTheme.DISABLED, false);
-        ry += 10;
-        g.text(font, "Devices", rightColX, ry, DUTheme.TEXT_DIM, false);
-        g.text(font, String.valueOf(power.deviceCount()), rightColX + 60, ry, DUTheme.TEXT, false);
-        ry += 14;
-
-        ThroughputPlanner.PlannerResult plan = ThroughputPlanner.analyse(ctx.graph(), scan);
-        g.text(font, "PLANNER", rightColX, ry, DUTheme.TEXT_GREEN, false); ry += 12;
-        ry = stat(g, rightColX, ry, "Bottlenecks", String.valueOf(plan.totalBottlenecks()));
-        ry = stat(g, rightColX, ry, "Starved", String.valueOf(plan.totalStarved()));
-        if (!plan.links().isEmpty()) {
-            ThroughputPlanner.LinkAnalysis first = plan.links().get(0);
-            String summary = first.sourceName() + " -> " + first.targetName() + " " + first.capacityPerMin() + "/min";
-            g.text(font, trim(font, summary, rightColW), rightColX, ry, first.isBottleneck() ? DUTheme.WARN : DUTheme.TEXT_DIM, false);
-        }
-
-        // ── INVENTORY WATCH (full width, below both columns) ─────
-        int sepY = Math.max(ly, ry) + 8;
-        // Thin separator
-        g.fill(cx, sepY, x + w - 16, sepY + 1, DUTheme.PANEL_BORDER);
-        sepY += 6;
-
-        List<ScannedBlockData> invBlocks = new ArrayList<>();
-        for (ScannedBlockData s : scan) {
-            if (s.inventory().hasData()) invBlocks.add(s);
-        }
-        invBlocks.sort(java.util.Comparator.comparingInt(s -> -s.inventory().fillPercent()));
-
-        if (!invBlocks.isEmpty()) {
-            g.text(font, "INVENTORY WATCH", cx, sepY, DUTheme.TEXT_GREEN, false); sepY += 12;
-            // Two-column grid of inventory bars
-            int colGap = 8;
-            int entryW = (fullContentW - colGap) / 2;
-            int nameW = 80;
-            int suffixW = 30;
-            int invBarW = Math.max(20, entryW - nameW - suffixW - 6);
-            int panelBottom = y + h - 4;
-            int col0Y = sepY, col1Y = sepY;
-            for (int i = 0; i < invBlocks.size(); i++) {
-                ScannedBlockData s = invBlocks.get(i);
-                boolean rightSide = (i % 2 == 1);
-                int entX = rightSide ? cx + entryW + colGap : cx;
-                int entY = rightSide ? col1Y : col0Y;
-                if (entY + 9 > panelBottom) break;
-                int pct = s.inventory().fillPercent();
-                boolean isFull = s.inventory().usedSlots() >= s.inventory().totalSlots();
-                boolean isStorage = s.isStorageLike();
-                int barColor = isFull ? DUTheme.ERROR : pct >= WarningGenerator.NEARLY_FULL_PERCENT ? DUTheme.WARN : DUTheme.OK;
-                int nameColor = isFull && isStorage ? DUTheme.WARN : DUTheme.TEXT_DIM;
-                String name = s.blockName();
-                while (font.width(name) > nameW && name.length() > 3) name = name.substring(0, name.length() - 1);
-                g.text(font, name, entX, entY, nameColor, false);
-                int bx = entX + nameW + 2;
-                DUTheme.progress(g, bx, entY, invBarW, 7, pct / 100f, barColor);
-                // 4 segment dividers inside the bar
-                for (int seg = 1; seg < 5; seg++) {
-                    int sx = bx + 1 + (invBarW - 2) * seg / 5;
-                    g.fill(sx, entY + 1, sx + 1, entY + 6, 0x66000000);
-                }
-                String suffix = isFull ? "FULL" : pct + "%";
-                g.text(font, suffix, bx + invBarW + 3, entY, isFull && isStorage ? DUTheme.WARN : DUTheme.TEXT_DIM, false);
-                if (rightSide) col1Y += 10; else col0Y += 10;
-            }
-        }
+        statsPanel.render(g, x, y, w, h);
     }
 
-    /** Thin segmented bar: label left, bar centre, value right. Segment lines at 25/50/75%. */
-    private void statBar(GuiGraphicsExtractor g, int x, int y, int w, String label, float frac, String value, int color) {
-        g.text(font, label, x, y, DUTheme.TEXT_DIM, false);
-        int labelW = 80;
-        int valW = font.width(value) + 4;
-        int barW = Math.max(30, w - labelW - valW - 4);
-        int barX = x + labelW;
-        DUTheme.progress(g, barX, y, barW, 8, frac, color);
-        for (int i = 1; i < 4; i++) {
-            int sx = barX + 1 + (barW - 2) * i / 4;
-            g.fill(sx, y + 1, sx + 1, y + 7, 0x66000000);
-        }
-        g.text(font, value, barX + barW + 4, y, DUTheme.TEXT, false);
-    }
-
-    /** Horizontal battery bar: bump on left, interior fill left→right, 4 segment dividers. */
-    private void renderHorizBattery(GuiGraphicsExtractor g, int x, int y, int w, int h, float frac, int color) {
-        // Positive terminal bump on the left
-        int bumpH = 6, bumpW = 3;
-        int bumpY = y + (h - bumpH) / 2;
-        g.fill(x - bumpW, bumpY, x, bumpY + bumpH, DUTheme.PANEL_BORDER);
-        g.fill(x - bumpW + 1, bumpY + 1, x, bumpY + bumpH - 1, 0xFF1a221a);
-        // Container
-        g.fill(x, y, x + w, y + h, 0xFF070b08);
-        DUTheme.outline(g, x, y, w, h, DUTheme.PANEL_BORDER);
-        int inX = x + 1, inY = y + 1, inW = w - 2, inH = h - 2;
-        int fillW = Math.round(frac * inW);
-        if (fillW > 0) g.fill(inX, inY, inX + fillW, inY + inH, color);
-        // 4 dividers at 20/40/60/80%
-        for (int i = 1; i < 5; i++) {
-            int sx = inX + i * inW / 5;
-            g.fill(sx, inY, sx + 1, inY + inH, 0x55000000);
-        }
-    }
-
-    /** Small vertical battery icon for the capacity grid. Bump on top, fills from bottom, 2 segment lines. */
-    private void renderMiniVertBattery(GuiGraphicsExtractor g, int bx, int by, int bw, int bh, float frac, int color) {
-        // Positive terminal bump on top
-        int bumpW = Math.max(2, bw / 2), bumpH = 2;
-        int bumpX = bx + (bw - bumpW) / 2;
-        g.fill(bumpX, by - bumpH, bumpX + bumpW, by, DUTheme.PANEL_BORDER);
-        g.fill(bumpX + 1, by - bumpH + 1, bumpX + bumpW - 1, by, 0xFF1a221a);
-        // Container
-        DUTheme.box(g, bx, by, bw, bh, 0xFF070b08, DUTheme.PANEL_BORDER);
-        int inX = bx + 1, inY = by + 1, inW = bw - 2, inH = bh - 2;
-        int fillH = Math.round(frac * inH);
-        if (fillH > 0) g.fill(inX, inY + inH - fillH, inX + inW, inY + inH, color);
-        // 2 dividers at 33/66%
-        for (int i = 1; i < 3; i++) {
-            int sy = inY + i * inH / 3;
-            g.fill(inX, sy, inX + inW, sy + 1, 0x55000000);
-        }
-    }
-
-    /** Formats a raw-FE amount as megaFE/kiloFE with one decimal. */
-    private static String formatMfe(long fe) {
-        if (fe >= 1_000_000L) return String.format(java.util.Locale.ROOT, "%.1f MFE", fe / 1_000_000.0);
-        if (fe >= 1_000L) return String.format(java.util.Locale.ROOT, "%.1f kFE", fe / 1_000.0);
-        return fe + " FE";
-    }
-
-    private int stat(GuiGraphicsExtractor g, int x, int y, String key, String value) {
-        g.text(font, key, x, y, DUTheme.TEXT_DIM, false);
-        g.text(font, value, x + 80, y, DUTheme.TEXT, false);
-        return y + 11;
-    }
-
-    /** Compact two-value row for the BREAKDOWN column: key left, value right-aligned within w. */
-    private int statSmall(GuiGraphicsExtractor g, int x, int y, int w, String key, String value) {
-        g.text(font, key, x, y, DUTheme.TEXT_DIM, false);
-        int vw = font.width(value);
-        g.text(font, value, x + w - vw, y, DUTheme.TEXT, false);
-        return y + 10;
-    }
-
-    private void renderPowerHistoryGraph(GuiGraphicsExtractor g, int x, int y, int w, int h) {
-        DUTheme.box(g, x, y, w, h, DUTheme.PANEL_ALT, DUTheme.PANEL_BORDER);
-        g.text(font, "POWER HISTORY (" + STATS_SCALE_LABELS[statsTimeScale] + ")", x + 5, y + 5, DUTheme.TEXT_GREEN, false);
-        List<? extends Number> supply = statsSupplySeries();
-        List<? extends Number> demand = statsDemandSeries();
-        int max = 1;
-        for (Number value : supply) max = Math.max(max, value.intValue());
-        for (Number value : demand) max = Math.max(max, value.intValue());
-        int gx = x + 5;
-        int gy = y + 18;
-        int gw = w - 10;
-        int gh = h - 26;
-        g.fill(gx, gy, gx + gw, gy + gh, 0xFF070b08);
-        for (int i = 1; i < 4; i++) {
-            int ly = gy + i * gh / 4;
-            g.fill(gx, ly, gx + gw, ly + 1, 0x332c3a2a);
-        }
-        // For non-NOW scales, the accumulated series may not have enough samples yet.
-        int seriesMax = Math.max(supply == null ? 0 : supply.size(), demand == null ? 0 : demand.size());
-        if (statsTimeScale != 0 && seriesMax < 2) {
-            g.centeredText(font, "Accumulating data…", gx + gw / 2, gy + gh / 2 - 4, DUTheme.TEXT_DIM);
-            return;
-        }
-        // Clamp the scroll offset to the current series length so it can't run past the start.
-        int maxOffset = Math.max(0, seriesMax - 1);
-        if (statsGraphScrollOffset > maxOffset) statsGraphScrollOffset = maxOffset;
-        drawPowerSeries(g, supply, gx, gy, gw, gh, max, DUTheme.OK);
-        drawPowerSeries(g, demand, gx, gy, gw, gh, max, powerColor());
-        // Mini-arrow scroll hints at the graph edges.
-        if (statsGraphScrollOffset < maxOffset) {
-            g.text(font, "◀", gx + 1, gy + gh / 2 - 4, DUTheme.TEXT_DIM, false);
-        }
-        if (statsGraphScrollOffset > 0) {
-            g.text(font, "▶", gx + gw - 7, gy + gh / 2 - 4, DUTheme.TEXT_DIM, false);
-        }
-        g.text(font, "Prod", x + 5, y + h - 8, DUTheme.OK, false);
-        g.text(font, "Cons", x + 44, y + h - 8, powerColor(), false);
-        String top = formatFe(max) + "/t";
-        g.text(font, top, x + w - 5 - font.width(top), y + 5, DUTheme.TEXT_DIM, false);
-    }
-
-    private int powerColor() {
-        return ctx.power().powered() ? DUTheme.PROGRESS_ORANGE : DUTheme.ERROR;
-    }
-
-    private void drawPowerSeries(GuiGraphicsExtractor g, List<? extends Number> values, int x, int y, int w, int h, int max, int color) {
-        if (values == null || values.size() < 2) return;
-        int count = Math.min(values.size(), w);
-        int start = Math.max(0, values.size() - count - statsGraphScrollOffset);
-        int lastX = x;
-        int lastY = y + h - Math.round(values.get(start).intValue() / (float) max * h);
-        for (int i = 1; i < count; i++) {
-            int index = start + i;
-            int px = x + Math.round(i * (w - 1) / (float) Math.max(1, count - 1));
-            int py = y + h - Math.round(values.get(index).intValue() / (float) max * h);
-            DUTheme.line(g, lastX, lastY, px, py, color);
-            lastX = px;
-            lastY = py;
-        }
-    }
-
-    private static float powerRatio(int value, int max) {
-        return max <= 0 ? 0f : Math.max(0f, Math.min(1f, value / (float) max));
-    }
-
-    private static String formatFe(int centiFe) {
-        int whole = centiFe / 100;
-        int frac = Math.abs(centiFe % 100);
-        if (frac == 0) return whole + " FE";
-        if (frac % 10 == 0) return whole + "." + (frac / 10) + " FE";
-        return whole + "." + (frac < 10 ? "0" : "") + frac + " FE";
-    }
-
-    private int bar(GuiGraphicsExtractor g, int x, int y, int w, String label, int value, int max, int color) {
-        g.text(font, label, x, y, DUTheme.TEXT_DIM, false);
-        int barX = x + 70, barW = w - 100;
-        DUTheme.progress(g, barX, y - 1, barW, 9, value / (float) max, color);
-        g.text(font, String.valueOf(value), barX + barW + 4, y, DUTheme.TEXT, false);
-        return y + 14;
-    }
-
-    private int renderFilterEditor(GuiGraphicsExtractor g, GraphNodeData node) {
-        FilterSettings settings = FilterSettings.parse(node.notes());
-        int x = rightX + 4;
-        int y = contentY + 30;
-        int slot = 15;
-        int gap = 2;
-        g.text(font, "FILTER", x, y, DUTheme.TEXT_GREEN, false);
-        y += 11;
-
-        String[] modes = {"PASS", "ALLOW", "BLOCK"};
-        for (int i = 0; i < modes.length; i++) {
-            int bx = x + i * 42;
-            boolean on = (i == 0 && settings.mode() == FilterSettings.Mode.PASS_ALL)
-                    || (i == 1 && settings.mode() == FilterSettings.Mode.WHITELIST)
-                    || (i == 2 && settings.mode() == FilterSettings.Mode.BLACKLIST);
-            DUTheme.box(g, bx, y, 39, 12, on ? 0xFF14303a : DUTheme.PANEL_ALT, on ? DUTheme.SELECTED : DUTheme.PANEL_BORDER);
-            g.text(font, modes[i], bx + 4, y + 3, on ? DUTheme.SELECTED : DUTheme.TEXT_DIM, false);
-        }
-        y += 16;
-
-        var items = settings.paddedItems();
-        for (int i = 0; i < FilterSettings.GHOST_SLOTS; i++) {
-            int gx = x + (i % 3) * (slot + gap);
-            int gy = y + (i / 3) * (slot + gap);
-            DUTheme.box(g, gx, gy, slot, slot, DUTheme.PANEL_ALT, DUTheme.PANEL_BORDER);
-            String id = items.get(i);
-            if (!id.isBlank()) ItemIcons.render(g, id, gx, gy, ItemIcons.SIZE, DUTheme.PANEL_ALT);
-        }
-        int controlX = x + 58;
-        int cy = y;
-        cy = filterChannelControl(g, controlX, cy, settings.channel());
-        cy = filterControl(g, controlX, cy, "Priority", String.valueOf(settings.priority()));
-        cy = filterControl(g, controlX, cy, "Limit", String.valueOf(settings.limit()));
-        cy = filterControl(g, controlX, cy, "Tick", settings.tickSpeed() + "t");
-        cy = filterControl(g, controlX, cy, "Route", settings.routing() == FilterSettings.Routing.ROUND_ROBIN ? "Round" : "First");
-        return Math.max(y + 54, cy) + 4;
-    }
-
-    /** Channel node editor: a single channel swatch control (pass-all routing onto matching links). */
-    private int renderChannelEditor(GuiGraphicsExtractor g, GraphNodeData node) {
-        FilterSettings settings = FilterSettings.parse(node.notes());
-        int x = rightX + 4;
-        int y = contentY + 30;
-        g.text(font, "CHANNEL", x, y, DUTheme.TEXT_GREEN, false);
-        g.text(font, "Routes onto outputs of this channel", x, y + 11, DUTheme.TEXT_DIM, false);
-        filterChannelControl(g, x, y + 23, settings.channel());
-        return y + 39;
-    }
-
-    /** Small informational panel for nodes that have no configurable settings (Splitter/Combine). */
-    private int renderRoutingInfo(GuiGraphicsExtractor g, String title, String line1, String line2) {
-        int x = rightX + 4;
-        int y = contentY + 30;
-        g.text(font, title, x, y, DUTheme.TEXT_GREEN, false);
-        g.text(font, line1, x, y + 11, DUTheme.TEXT_DIM, false);
-        g.text(font, line2, x, y + 21, DUTheme.TEXT_DIM, false);
-        return y + 35;
-    }
-
-    private int filterControl(GuiGraphicsExtractor g, int x, int y, String key, String value) {
-        DUTheme.box(g, x, y, rightX + rightW - x - 4, 10, DUTheme.PANEL_ALT, DUTheme.PANEL_BORDER);
-        g.text(font, key, x + 3, y + 2, DUTheme.TEXT_DIM, false);
-        g.text(font, value, x + 56, y + 2, DUTheme.TEXT, false);
-        return y + 12;
-    }
-
-    /** Channel row: shows the dye colour as a swatch rather than spelling out the colour name. */
-    private int filterChannelControl(GuiGraphicsExtractor g, int x, int y, String channel) {
-        DUTheme.box(g, x, y, rightX + rightW - x - 4, 10, DUTheme.PANEL_ALT, DUTheme.PANEL_BORDER);
-        g.text(font, "Channel", x + 3, y + 2, DUTheme.TEXT_DIM, false);
-        int color = FilterSettings.channelColor(channel);
-        if (color == 0) {
-            g.text(font, "None", x + 56, y + 2, DUTheme.TEXT_DIM, false);
-        } else {
-            g.fill(x + 56, y + 2, x + 66, y + 9, 0xFF0B0F0A);
-            g.fill(x + 57, y + 3, x + 65, y + 8, color);
-        }
-        return y + 12;
-    }
-
-    private boolean handleFilterEditorClick(double mx, double my) {
-        GraphNodeData node = ctx.selectedNode();
-        if (node == null) return false;
-        if (node.type() == NodeType.CHANNEL) {
-            int cxr = rightX + 4;
-            int cyr = contentY + 53;
-            if (mx >= cxr && mx <= rightX + rightW - 4 && my >= cyr && my <= cyr + 10) {
-                return updateFilter(node, FilterSettings.parse(node.notes()).nextChannel());
-            }
-            return false;
-        }
-        if (node.type() != NodeType.FILTER) return false;
-        FilterSettings settings = FilterSettings.parse(node.notes());
-        int x = rightX + 4;
-        int y = contentY + 41;
-        if (my >= y && my <= y + 12) {
-            if (mx >= x && mx < x + 39) return updateFilter(node, settings.withMode(FilterSettings.Mode.PASS_ALL));
-            if (mx >= x + 42 && mx < x + 81) return updateFilter(node, settings.withMode(FilterSettings.Mode.WHITELIST));
-            if (mx >= x + 84 && mx < x + 123) return updateFilter(node, settings.withMode(FilterSettings.Mode.BLACKLIST));
-        }
-        y += 16;
-        int slot = 15;
-        int gap = 2;
-        for (int i = 0; i < FilterSettings.GHOST_SLOTS; i++) {
-            int gx = x + (i % 3) * (slot + gap);
-            int gy = y + (i / 3) * (slot + gap);
-            if (mx >= gx && mx <= gx + slot && my >= gy && my <= gy + slot) {
-                openFilterPicker(i);
-                return true;
-            }
-        }
-        int controlX = x + 58;
-        int controlW = rightX + rightW - controlX - 4;
-        String hit = filterControlHit(mx, my, controlX, y, controlW);
-        if (hit == null) return false;
-        return switch (hit) {
-            case "Channel" -> updateFilter(node, settings.nextChannel());
-            case "Priority" -> updateFilter(node, settings.nextPriority());
-            case "Limit" -> updateFilter(node, settings.nextLimit());
-            case "Tick" -> updateFilter(node, settings.nextTickSpeed());
-            case "Route" -> updateFilter(node, settings.nextRouting());
-            default -> false;
-        };
-    }
-
-    private static String filterControlHit(double mx, double my, int x, int y, int w) {
-        String[] keys = {"Channel", "Priority", "Limit", "Tick", "Route"};
-        for (int i = 0; i < keys.length; i++) {
-            int cy = y + i * 12;
-            if (mx >= x && mx <= x + w && my >= cy && my <= cy + 10) return keys[i];
-        }
-        return null;
-    }
-
-    private boolean updateFilter(GraphNodeData node, FilterSettings settings) {
-        ctx.setGraph(LogisticsGraph.updateNode(ctx.graph(), node.withNotes(settings.serialize())));
-        return true;
-    }
 
     private void openFilterPicker(int slot) {
-        filterPickerOpen = true;
-        filterPickerSlot = slot;
-        filterPickerScroll = 0;
-        filterPickerSearch = "";
-        filterPickerRecentTab = !FILTER_PICKER_RECENTS.isEmpty();
+        filterPickerPopup.open(slot);
         contextMenu = null;
         inventoryPopup = null;
     }
-
-    private void closeFilterPicker() {
-        filterPickerOpen = false;
-        filterPickerSlot = -1;
-        filterPickerScroll = 0;
-        filterPickerSearch = "";
-        filterPickerRecentTab = false;
-    }
-
-    private List<PickerEntry> filterPickerEntries() {
-        if (filterPickerEntries == null) {
-            List<PickerEntry> entries = new ArrayList<>();
-            for (Item item : BuiltInRegistries.ITEM) {
-                if (item == Items.AIR) continue;
-                Identifier id = BuiltInRegistries.ITEM.getKey(item);
-                if (id == null) continue;
-                String registryId = id.toString();
-                String name = new ItemStack(item).getHoverName().getString();
-                entries.add(new PickerEntry(registryId, name, (name + " " + registryId).toLowerCase(Locale.ROOT)));
-            }
-            entries.sort(Comparator.comparing(PickerEntry::name, String.CASE_INSENSITIVE_ORDER)
-                    .thenComparing(PickerEntry::registryId));
-            filterPickerEntries = List.copyOf(entries);
-        }
-        return filterPickerEntries;
-    }
-
-    private List<PickerEntry> filteredPickerEntries() {
-        if (filterPickerRecentTab) {
-            List<PickerEntry> recent = new ArrayList<>();
-            for (String id : FILTER_PICKER_RECENTS) {
-                PickerEntry entry = pickerEntry(id);
-                if (entry != null) recent.add(entry);
-            }
-            return recent;
-        }
-        String query = filterPickerSearch.trim().toLowerCase(Locale.ROOT);
-        if (query.isBlank()) return filterPickerEntries();
-        List<PickerEntry> matches = new ArrayList<>();
-        for (PickerEntry entry : filterPickerEntries()) {
-            if (entry.searchText().contains(query)) matches.add(entry);
-        }
-        return matches;
-    }
-
-    private PickerEntry pickerEntry(String registryId) {
-        for (PickerEntry entry : filterPickerEntries()) {
-            if (entry.registryId().equals(registryId)) return entry;
-        }
-        return null;
-    }
-
-    private void renderFilterPicker(GuiGraphicsExtractor g, int mouseX, int mouseY) {
-        int w = Math.min(360, guiW - 40);
-        int h = Math.min(250, guiH - 70);
-        int x = (guiW - w) / 2;
-        int y = contentY + 10;
-        DUTheme.box(g, x - 3, y - 3, w + 6, h + 6, 0xF01b3320, DUTheme.SELECTED);
-        DUTheme.box(g, x, y, w, h, 0xFF111b14, DUTheme.SELECTED);
-        g.text(font, "CHOOSE FILTER ITEM", x + 8, y + 8, DUTheme.TEXT_GREEN, false);
-        String slotText = filterPickerSlot >= 0 ? "Slot " + (filterPickerSlot + 1) : "Slot";
-        g.text(font, slotText, x + w - 8 - font.width(slotText), y + 8, DUTheme.TEXT_DIM, false);
-
-        int tabY = y + 22;
-        pickerTab(g, x + 8, tabY, 44, "ALL", !filterPickerRecentTab);
-        pickerTab(g, x + 56, tabY, 58, "RECENT", filterPickerRecentTab);
-
-        int searchY = y + 39;
-        DUTheme.box(g, x + 8, searchY, w - 16, 16, DUTheme.PANEL_ALT, DUTheme.PANEL_BORDER);
-        String search = filterPickerRecentTab ? "Recent picks" : filterPickerSearch.isBlank() ? "Search item/block name or id..." : filterPickerSearch;
-        g.text(font, trim(font, search, w - 26), x + 12, searchY + 5, filterPickerSearch.isBlank() || filterPickerRecentTab ? DUTheme.TEXT_DIM : DUTheme.TEXT, false);
-        if (!filterPickerRecentTab && (System.currentTimeMillis() / 450L) % 2L == 0L) {
-            int cursorX = x + 12 + font.width(trim(font, filterPickerSearch, w - 34));
-            g.fill(cursorX, searchY + 4, cursorX + 1, searchY + 13, DUTheme.SELECTED);
-        }
-
-        int listY = y + 61;
-        int listH = h - 85;
-        int rowH = 20;
-        List<PickerEntry> entries = filteredPickerEntries();
-        int visibleRows = Math.max(1, listH / rowH);
-        filterPickerScroll = Math.max(0, Math.min(filterPickerScroll, Math.max(0, entries.size() - visibleRows)));
-        g.enableScissor(x + 8, listY, x + w - 8, listY + listH);
-        for (int row = 0; row < visibleRows && filterPickerScroll + row < entries.size(); row++) {
-            PickerEntry entry = entries.get(filterPickerScroll + row);
-            int ry = listY + row * rowH;
-            boolean hover = mouseX >= x + 8 && mouseX <= x + w - 8 && mouseY >= ry && mouseY < ry + rowH;
-            DUTheme.box(g, x + 8, ry, w - 16, rowH - 1, hover ? 0xFF1f4a32 : (row % 2 == 0 ? 0xFF152018 : 0xFF101710), hover ? DUTheme.SELECTED : DUTheme.PANEL_BORDER);
-            ItemIcons.render(g, entry.registryId(), x + 10, ry + 2, ItemIcons.SIZE, DUTheme.PANEL_ALT);
-            g.text(font, trim(font, entry.name(), w - 54), x + 30, ry + 3, hover ? DUTheme.SELECTED : DUTheme.TEXT, false);
-            g.text(font, trim(font, entry.registryId(), w - 54), x + 30, ry + 12, DUTheme.TEXT_DIM, false);
-        }
-        g.disableScissor();
-        if (entries.isEmpty()) {
-            g.centeredText(font, filterPickerRecentTab ? "No recent items yet" : "No matching items", x + w / 2, listY + listH / 2, DUTheme.TEXT_DIM);
-        }
-
-        int footerY = y + h - 18;
-        DUTheme.box(g, x + 8, footerY, 58, 12, DUTheme.PANEL_ALT, DUTheme.WARN);
-        g.centeredText(font, "CLEAR", x + 37, footerY + 3, DUTheme.WARN);
-        g.text(font, "Esc closes", x + 74, footerY + 3, DUTheme.TEXT_DIM, false);
-    }
-
-    private void pickerTab(GuiGraphicsExtractor g, int x, int y, int w, String label, boolean selected) {
-        DUTheme.box(g, x, y, w, 13, selected ? 0xFF1f4a32 : DUTheme.PANEL_ALT, selected ? DUTheme.SELECTED : DUTheme.PANEL_BORDER);
-        g.centeredText(font, label, x + w / 2, y + 3, selected ? DUTheme.SELECTED : DUTheme.TEXT_DIM);
-    }
-
-    private boolean handleFilterPickerClick(double mx, double my) {
-        if (!filterPickerOpen) return false;
-        int w = Math.min(360, guiW - 40);
-        int h = Math.min(250, guiH - 70);
-        int x = (guiW - w) / 2;
-        int y = contentY + 10;
-        if (mx < x || mx > x + w || my < y || my > y + h) {
-            closeFilterPicker();
-            return true;
-        }
-        int tabY = y + 22;
-        if (my >= tabY && my <= tabY + 13) {
-            if (mx >= x + 8 && mx <= x + 52) { filterPickerRecentTab = false; filterPickerScroll = 0; return true; }
-            if (mx >= x + 56 && mx <= x + 114) { filterPickerRecentTab = true; filterPickerScroll = 0; return true; }
-        }
-        int footerY = y + h - 18;
-        if (mx >= x + 8 && mx <= x + 66 && my >= footerY && my <= footerY + 12) {
-            setFilterPickerSlot("");
-            return true;
-        }
-        int listY = y + 61;
-        int listH = h - 85;
-        int rowH = 20;
-        if (mx >= x + 8 && mx <= x + w - 8 && my >= listY && my < listY + listH) {
-            int index = filterPickerScroll + (int) ((my - listY) / rowH);
-            List<PickerEntry> entries = filteredPickerEntries();
-            if (index >= 0 && index < entries.size()) setFilterPickerSlot(entries.get(index).registryId());
-            return true;
-        }
-        return true;
-    }
-
-    private void setFilterPickerSlot(String registryId) {
-        GraphNodeData node = ctx.selectedNode();
-        if (node != null && node.type() == NodeType.FILTER && filterPickerSlot >= 0) {
-            FilterSettings settings = FilterSettings.parse(node.notes()).withItem(filterPickerSlot, registryId);
-            updateFilter(node, settings);
-            addFilterPickerRecent(registryId);
-        }
-        closeFilterPicker();
-    }
-
-    private static void addFilterPickerRecent(String registryId) {
-        if (registryId == null || registryId.isBlank()) return;
-        FILTER_PICKER_RECENTS.remove(registryId);
-        FILTER_PICKER_RECENTS.add(0, registryId);
-        while (FILTER_PICKER_RECENTS.size() > PICKER_RECENT_LIMIT) FILTER_PICKER_RECENTS.remove(FILTER_PICKER_RECENTS.size() - 1);
-    }
-
-    private boolean handleFilterPickerKey(KeyEvent event) {
-        if (!filterPickerOpen) return false;
-        if (event.key() == KEY_ESCAPE) {
-            closeFilterPicker();
-            return true;
-        }
-        if (event.key() == 259) {
-            if (!filterPickerSearch.isEmpty()) {
-                filterPickerSearch = filterPickerSearch.substring(0, filterPickerSearch.length() - 1);
-                filterPickerScroll = 0;
-            }
-            return true;
-        }
-        if (filterPickerRecentTab) return true;
-        String typed = pickerKeyText(event);
-        if (!typed.isEmpty() && filterPickerSearch.length() < 64) {
-            filterPickerSearch += typed;
-            filterPickerScroll = 0;
-            return true;
-        }
-        return true;
-    }
-
-    private static String pickerKeyText(KeyEvent event) {
-        int key = event.key();
-        boolean shift = (event.modifiers() & 1) != 0;
-        if (key >= 65 && key <= 90) return String.valueOf((char) (shift ? key : key + 32));
-        if (key >= 48 && key <= 57) return String.valueOf((char) key);
-        return switch (key) {
-            case 32 -> " ";
-            case 45 -> "-";
-            case 46 -> ".";
-            case 47 -> "/";
-            case 59 -> ":";
-            case 95 -> "_";
-            default -> "";
-        };
-    }
-
-    private void scrollFilterPicker(double delta) {
-        if (!filterPickerOpen) return;
-        int w = Math.min(360, guiW - 40);
-        int h = Math.min(250, guiH - 70);
-        int visibleRows = Math.max(1, (h - 85) / 20);
-        int max = Math.max(0, filteredPickerEntries().size() - visibleRows);
-        filterPickerScroll = Math.max(0, Math.min(max, filterPickerScroll - (int) Math.signum(delta) * 3));
-    }
-
-    private record PickerEntry(String registryId, String name, String searchText) {}
 
     // --- Page 4: settings ---
 
@@ -1684,9 +923,7 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
     }
 
     private void panel(GuiGraphicsExtractor g, int x, int y, int w, int h, String title) {
-        DUTheme.box(g, x, y, w, h, DUTheme.PANEL, DUTheme.PANEL_BORDER);
-        g.fill(x + 1, y + 1, x + w - 1, y + 11, DUTheme.PANEL_HEADER);
-        DUTheme.glowText(g, font, title, x + 4, y + 2, DUTheme.TEXT_GREEN);
+        DUTheme.panelWithHeader(g, font, x, y, w, h, title);
     }
 
     private void renderCanvasLegend(GuiGraphicsExtractor g, int x, int yBottom) {
@@ -2046,8 +1283,8 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         boolean middle = event.button() == 2;
 
         if (shiftModalNodeId != null) { handleShiftModalClick(mx, my); return true; }
-        if (!right && handleFilterPickerClick(mx, my)) return true;
-        if (filterPickerOpen) return true;
+        if (!right && filterPickerPopup.handleClick(mx, my)) return true;
+        if (filterPickerPopup.isOpen()) return true;
 
         if (inventoryPopup != null) {
             boolean keep = inventoryPopup.mouseClicked(mx, my);
@@ -2085,7 +1322,7 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
 
         // Right-panel detail clicks (e.g. SHOW ALL inventory button)
         if (!right && mx >= rightX && mx <= rightX + rightW && my >= contentY && my <= contentY + contentH) {
-            if (handleFilterEditorClick(mx, my)) return true;
+            if (filterNodeEditor.handleClick(mx, my)) return true;
             if (detailsPanel.mouseClicked(mx, my)) return true;
         }
 
@@ -2403,7 +1640,7 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
     @Override
     public boolean mouseScrolled(double rawX, double rawY, double sx, double sy) {
         double mx = designX(rawX), my = designY(rawY);
-        if (filterPickerOpen) { scrollFilterPicker(sy); return true; }
+        if (filterPickerPopup.isOpen()) { filterPickerPopup.handleScroll(sy); return true; }
         if (inventoryPopup != null) { inventoryPopup.mouseScrolled(sy); return true; }
         contextMenu = null;
         if (page == PAGE_SCANNED) {
@@ -2411,15 +1648,8 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
             return true;
         }
         if (page == PAGE_STATS) {
-            // Scroll the power-history graph horizontally through time when hovering the stats area.
-            int graphTop = statsGraphTop();
-            if (my >= graphTop && my <= graphTop + 70) {
-                List<? extends Number> supply = statsSupplySeries();
-                List<? extends Number> demand = statsDemandSeries();
-                int seriesMax = Math.max(supply == null ? 0 : supply.size(), demand == null ? 0 : demand.size());
-                int maxOffset = Math.max(0, seriesMax - 1);
-                statsGraphScrollOffset = Math.max(0, Math.min(maxOffset,
-                        statsGraphScrollOffset + (int) Math.signum(sy) * 3));
+            if (statsPanel.graphContains(mx, my)) {
+                statsPanel.scrollGraph(sy);
                 return true;
             }
         }
@@ -2439,7 +1669,7 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
 
     @Override
     public boolean keyPressed(KeyEvent event) {
-        if (handleFilterPickerKey(event)) return true;
+        if (filterPickerPopup.handleKey(event)) return true;
         if (event.key() == KEY_ESCAPE) {
             if (pendingShiftModalNodeId != null) { pendingShiftModalNodeId = null; return true; }
             if (shiftModalNodeId != null) { shiftModalNodeId = null; return true; }

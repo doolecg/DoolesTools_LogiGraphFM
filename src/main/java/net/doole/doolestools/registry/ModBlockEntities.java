@@ -12,12 +12,17 @@ import net.doole.doolestools.blockentity.NetworkSwitchboardBlockEntity;
 import net.doole.doolestools.blockentity.NetworkWireBlockEntity;
 import net.doole.doolestools.blockentity.WirelessDongleBlockEntity;
 import net.doole.doolestools.blockentity.WirelessRouterBlockEntity;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
+import net.minecraft.world.level.block.state.BlockState;
+import net.neoforged.neoforge.registries.DeferredBlock;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
 import java.util.Set;
+import java.util.function.BiFunction;
 
 public final class ModBlockEntities {
     private ModBlockEntities() {}
@@ -25,47 +30,45 @@ public final class ModBlockEntities {
     public static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITY_TYPES =
             DeferredRegister.create(BuiltInRegistries.BLOCK_ENTITY_TYPE, DoolesTools.MOD_ID);
 
+    // --- Registration helper ---
+
+    private static <T extends BlockEntity> DeferredHolder<BlockEntityType<?>, BlockEntityType<T>>
+    register(String name, DeferredBlock<?> block, BiFunction<BlockPos, BlockState, T> factory) {
+        return BLOCK_ENTITY_TYPES.register(name, () -> new BlockEntityType<>(factory::apply, Set.of(block.get())));
+    }
+
+    // --- Block entity registrations ---
+
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<LogisticsComputerBlockEntity>> LOGISTICS_COMPUTER =
-            BLOCK_ENTITY_TYPES.register("logistics_computer", () ->
-                    new BlockEntityType<>(LogisticsComputerBlockEntity::new, Set.of(ModBlocks.LOGISTICS_COMPUTER.get())));
+            register("logistics_computer", ModBlocks.LOGISTICS_COMPUTER, LogisticsComputerBlockEntity::new);
 
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<LogisticsMonitorBlockEntity>> LOGISTICS_MONITOR =
-            BLOCK_ENTITY_TYPES.register("logistics_monitor", () ->
-                    new BlockEntityType<>(LogisticsMonitorBlockEntity::new, Set.of(ModBlocks.LOGISTICS_MONITOR.get())));
+            register("logistics_monitor", ModBlocks.LOGISTICS_MONITOR, LogisticsMonitorBlockEntity::new);
 
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<LogiGraphWallMonitorBlockEntity>> LOGIGRAPH_WALL_MONITOR =
-            BLOCK_ENTITY_TYPES.register("logigraph_wall_monitor", () ->
-                    new BlockEntityType<>(LogiGraphWallMonitorBlockEntity::new, Set.of(ModBlocks.LOGIGRAPH_WALL_MONITOR.get())));
+            register("logigraph_wall_monitor", ModBlocks.LOGIGRAPH_WALL_MONITOR, LogiGraphWallMonitorBlockEntity::new);
 
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<WirelessRouterBlockEntity>> WIRELESS_ROUTER =
-            BLOCK_ENTITY_TYPES.register("wireless_router", () ->
-                    new BlockEntityType<>(WirelessRouterBlockEntity::new, Set.of(ModBlocks.WIRELESS_ROUTER.get())));
+            register("wireless_router", ModBlocks.WIRELESS_ROUTER, WirelessRouterBlockEntity::new);
 
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<WirelessDongleBlockEntity>> WIRELESS_DONGLE =
-            BLOCK_ENTITY_TYPES.register("wireless_dongle", () ->
-                    new BlockEntityType<>(WirelessDongleBlockEntity::new, Set.of(ModBlocks.WIRELESS_DONGLE.get())));
+            register("wireless_dongle", ModBlocks.WIRELESS_DONGLE, WirelessDongleBlockEntity::new);
 
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<NetworkModemBlockEntity>> NETWORK_MODEM =
-            BLOCK_ENTITY_TYPES.register("network_modem", () ->
-                    new BlockEntityType<>(NetworkModemBlockEntity::new, Set.of(ModBlocks.NETWORK_MODEM.get())));
+            register("network_modem", ModBlocks.NETWORK_MODEM, NetworkModemBlockEntity::new);
 
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<NetworkWireBlockEntity>> NETWORK_WIRE =
-            BLOCK_ENTITY_TYPES.register("network_wire", () ->
-                    new BlockEntityType<>(NetworkWireBlockEntity::new, Set.of(ModBlocks.NETWORK_WIRE.get())));
+            register("network_wire", ModBlocks.NETWORK_WIRE, NetworkWireBlockEntity::new);
 
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<NetworkRelayBlockEntity>> NETWORK_RELAY =
-            BLOCK_ENTITY_TYPES.register("network_relay", () ->
-                    new BlockEntityType<>(NetworkRelayBlockEntity::new, Set.of(ModBlocks.NETWORK_RELAY.get())));
+            register("network_relay", ModBlocks.NETWORK_RELAY, NetworkRelayBlockEntity::new);
 
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<NetworkGeneratorBlockEntity>> NETWORK_GENERATOR =
-            BLOCK_ENTITY_TYPES.register("network_generator", () ->
-                    new BlockEntityType<>(NetworkGeneratorBlockEntity::new, Set.of(ModBlocks.NETWORK_GENERATOR.get())));
+            register("network_generator", ModBlocks.NETWORK_GENERATOR, NetworkGeneratorBlockEntity::new);
 
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<NetworkBatteryBlockEntity>> NETWORK_BATTERY =
-            BLOCK_ENTITY_TYPES.register("network_battery", () ->
-                    new BlockEntityType<>(NetworkBatteryBlockEntity::new, Set.of(ModBlocks.NETWORK_BATTERY.get())));
+            register("network_battery", ModBlocks.NETWORK_BATTERY, NetworkBatteryBlockEntity::new);
 
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<NetworkSwitchboardBlockEntity>> NETWORK_SWITCHBOARD =
-            BLOCK_ENTITY_TYPES.register("network_switchboard", () ->
-                    new BlockEntityType<>(NetworkSwitchboardBlockEntity::new, Set.of(ModBlocks.NETWORK_SWITCHBOARD.get())));
+            register("network_switchboard", ModBlocks.NETWORK_SWITCHBOARD, NetworkSwitchboardBlockEntity::new);
 }

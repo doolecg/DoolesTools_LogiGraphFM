@@ -1,10 +1,16 @@
 {
   "variants": {
-    "facing=up":    { "model": "doolestools:block/wireless_router", "x": 90 },
-    "facing=down":  { "model": "doolestools:block/wireless_router", "x": 270 },
-    "facing=north": { "model": "doolestools:block/wireless_router", "y": 180 },
-    "facing=east":  { "model": "doolestools:block/wireless_router", "y": 270 },
-    "facing=south": { "model": "doolestools:block/wireless_router" },
-    "facing=west":  { "model": "doolestools:block/wireless_router", "y": 90 }
+    "facing=up,wire_connected=false":    { "model": "doolestools:block/wireless_router", "x": 90 },
+    "facing=down,wire_connected=false":  { "model": "doolestools:block/wireless_router", "x": 270 },
+    "facing=north,wire_connected=false": { "model": "doolestools:block/wireless_router", "y": 180 },
+    "facing=east,wire_connected=false":  { "model": "doolestools:block/wireless_router", "y": 270 },
+    "facing=south,wire_connected=false": { "model": "doolestools:block/wireless_router" },
+    "facing=west,wire_connected=false":  { "model": "doolestools:block/wireless_router", "y": 90 },
+    "facing=up,wire_connected=true":    { "model": "doolestools:block/wireless_router_connected", "x": 90 },
+    "facing=down,wire_connected=true":  { "model": "doolestools:block/wireless_router_connected", "x": 270 },
+    "facing=north,wire_connected=true": { "model": "doolestools:block/wireless_router_connected", "y": 180 },
+    "facing=east,wire_connected=true":  { "model": "doolestools:block/wireless_router_connected", "y": 270 },
+    "facing=south,wire_connected=true": { "model": "doolestools:block/wireless_router_connected" },
+    "facing=west,wire_connected=true":  { "model": "doolestools:block/wireless_router_connected", "y": 90 }
   }
 }
