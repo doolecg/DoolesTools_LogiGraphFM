@@ -28,6 +28,7 @@ public class NetworkWireBlockEntity extends BlockEntity {
 
     private int laneCount = 1;
     private int connectionMask = 0;
+    private boolean cableInstalled = true;
 
     /** One slot per Direction.ordinal() (0=DOWN … 5=EAST). Null entries = no endpoint on that face. */
     private static class EndpointSlot {
@@ -74,6 +75,15 @@ public class NetworkWireBlockEntity extends BlockEntity {
     public int laneCount() { return Math.max(1, Math.min(MAX_LANES, laneCount)); }
     public int connectionMask() { return connectionMask; }
     public boolean connects(Direction direction) { return (connectionMask & bit(direction)) != 0; }
+    public boolean hasCable() { return cableInstalled; }
+
+    public void setCableInstalled(boolean cableInstalled) {
+        if (this.cableInstalled == cableInstalled) return;
+        this.cableInstalled = cableInstalled;
+        refreshConnections();
+        refreshBlockState();
+        setChanged();
+    }
 
     // ── Endpoint query ────────────────────────────────────────────────────────
 
@@ -348,10 +358,12 @@ public class NetworkWireBlockEntity extends BlockEntity {
     public void refreshConnections() {
         if (level == null) return;
         int next = 0;
-        for (Direction direction : Direction.values()) {
-            BlockEntity neighbor = level.getBlockEntity(worldPosition.relative(direction));
-            if (neighbor instanceof NetworkWireBlockEntity || neighbor instanceof NetworkModemBlockEntity) {
-                next |= bit(direction);
+        if (cableInstalled) {
+            for (Direction direction : Direction.values()) {
+                BlockEntity neighbor = level.getBlockEntity(worldPosition.relative(direction));
+                if (neighbor instanceof NetworkWireBlockEntity wire && wire.hasCable()) {
+                    next |= bit(direction);
+                }
             }
         }
         if (next != connectionMask) {
@@ -368,6 +380,7 @@ public class NetworkWireBlockEntity extends BlockEntity {
         super.saveAdditional(output);
         output.putInt("laneCount", laneCount());
         output.putInt("connectionMask", connectionMask);
+        output.putBoolean("cableInstalled", cableInstalled);
         // Save each occupied slot keyed by direction name.
         for (Direction dir : Direction.values()) {
             EndpointSlot slot = slots[dir.ordinal()];
@@ -390,6 +403,7 @@ public class NetworkWireBlockEntity extends BlockEntity {
         super.loadAdditional(input);
         laneCount = Math.max(1, Math.min(MAX_LANES, input.getIntOr("laneCount", 1)));
         connectionMask = input.getIntOr("connectionMask", 0);
+        cableInstalled = input.getBooleanOr("cableInstalled", true);
 
         // Load new multi-endpoint format.
         boolean anyLoaded = false;
@@ -435,7 +449,8 @@ public class NetworkWireBlockEntity extends BlockEntity {
 
     private void refreshBlockState() {
         if (level != null && getBlockState().getBlock() instanceof NetworkWireBlock) {
-            level.setBlock(worldPosition, NetworkWireBlock.withConnections(level, worldPosition, getBlockState()), 3);
+            BlockState state = getBlockState().setValue(NetworkWireBlock.CABLE, cableInstalled);
+            level.setBlock(worldPosition, NetworkWireBlock.withConnections(level, worldPosition, state), 3);
         }
     }
 

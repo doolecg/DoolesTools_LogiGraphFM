@@ -289,7 +289,7 @@ public final class LogisticsScanner {
     private static ScannedBlockData readWireHostedEndpointAtFace(ServerLevel level, BlockPos center, NetworkWireBlockEntity wire,
                                                                   Direction face, long gameTime, BlockLabelSavedData labels, List<RelayNode> relays) {
         if (!wire.hasEndpointAt(face)) return null;
-        if (wire.hasModem() && !isWiredEndpointOnline(level, wire.getBlockPos())) return null;
+        if (wire.hasModem() && (!wire.hasCable() || !isWiredEndpointOnline(level, wire.getBlockPos()))) return null;
         if (wire.hasRouter() && !wirelessReachable(center, wire.getBlockPos(), wire.upgradeCount(face, "range"), relays)) return null;
         BlockPos attached = wire.attachedPos(face);
         if (!level.hasChunkAt(attached)) return null;
@@ -305,8 +305,7 @@ public final class LogisticsScanner {
     }
 
     private static boolean isWiredModemOnline(ServerLevel level, NetworkModemBlockEntity start) {
-        if (level.getBlockEntity(start.attachedPos()) instanceof LogisticsComputerBlockEntity) return true;
-        return isWiredEndpointOnline(level, start.getBlockPos());
+        return level.getBlockEntity(start.attachedPos()) instanceof LogisticsComputerBlockEntity;
     }
 
     private static boolean wirelessInRange(BlockPos computerPos, BlockPos endpointPos, int rangeUpgrades) {
@@ -403,10 +402,7 @@ public final class LogisticsScanner {
                 BlockPos next = pos.relative(direction);
                 if (!seen.add(next) || !level.hasChunkAt(next)) continue;
                 BlockEntity be = level.getBlockEntity(next);
-                if (be instanceof NetworkModemBlockEntity modem) {
-                    if (!next.equals(startPos) && level.getBlockEntity(modem.attachedPos()) instanceof LogisticsComputerBlockEntity) return true;
-                    queue.add(next);
-                } else if (be instanceof NetworkWireBlockEntity wire) {
+                if (be instanceof NetworkWireBlockEntity wire) {
                     if (!next.equals(startPos) && wire.hasModem() && wireAttachedToComputer(level, wire)) return true;
                     queue.add(next);
                 }

@@ -2,6 +2,7 @@ package net.doole.doolestools.client.screen;
 
 import net.doole.doolestools.client.ClientKnownNetworks;
 import net.doole.doolestools.client.ClientNetworkSender;
+import net.doole.doolestools.client.ClientPrefs;
 import net.doole.doolestools.client.gui.CanvasAdapter;
 import net.doole.doolestools.client.gui.CanvasViewState;
 import net.doole.doolestools.client.gui.DUTheme;
@@ -25,8 +26,11 @@ import java.util.List;
 import java.util.Map;
 
 public class NetworkSwitchboardScreen extends AbstractContainerScreen<NetworkSwitchboardMenu> {
+    private static final int MIN_GUI_W = 420;
+    private static final int MIN_GUI_H = 246;
     private static final int NODE_W = 118;
     private static final int NODE_H = 48;
+    private static final int SNAP = 12;
     private static final DateTimeFormatter CLOCK = DateTimeFormatter.ofPattern("hh:mm a");
 
     private final List<SwitchboardLinkData> links = new ArrayList<>();
@@ -48,13 +52,21 @@ public class NetworkSwitchboardScreen extends AbstractContainerScreen<NetworkSwi
     private TerminalButton energyButton;
     private TerminalButton priorityButton;
     private TerminalButton saveButton;
+    private TerminalButton refreshButton;
+    private TerminalButton fitButton;
+
+    private int guiW = MIN_GUI_W;
+    private int guiH = MIN_GUI_H;
+    private float uiScale = 1f;
+    private int uiOffsetX, uiOffsetY;
 
     private int leftX, leftY, leftW, leftH;
     private int canvasX, canvasY, canvasW, canvasH;
     private int rightX, rightY, rightW, rightH;
+    private int warningY, tabBarY;
 
     public NetworkSwitchboardScreen(NetworkSwitchboardMenu menu, Inventory inv, Component title) {
-        super(menu, inv, title, 600, 400);
+        super(menu, inv, title, 10000, 10000);
     }
 
     @Override
@@ -65,34 +77,58 @@ public class NetworkSwitchboardScreen extends AbstractContainerScreen<NetworkSwi
         inventoryLabelX = -9999;
         inventoryLabelY = -9999;
 
+        float preferredScale = Math.max(0.75f, Math.min(1.5f, ClientPrefs.uiScale));
+        if (this.width - 24 >= MIN_GUI_W && this.height - 24 >= MIN_GUI_H) {
+            guiW = Math.max(MIN_GUI_W, Math.round((this.width - 24) / preferredScale));
+            guiH = Math.max(MIN_GUI_H, Math.round((this.height - 24) / preferredScale));
+            uiScale = Math.min(preferredScale, Math.min((this.width - 8f) / guiW, (this.height - 8f) / guiH));
+        } else {
+            guiW = MIN_GUI_W;
+            guiH = MIN_GUI_H;
+            uiScale = Math.min(1f, Math.min((this.width - 8f) / MIN_GUI_W, (this.height - 8f) / MIN_GUI_H));
+        }
+        uiOffsetX = Math.round((this.width - guiW * uiScale) / 2f);
+        uiOffsetY = Math.round((this.height - guiH * uiScale) / 2f);
+        this.leftPos = 0;
+        this.topPos = 0;
+
         leftX = leftPos + 10;
         leftY = topPos + 44;
-        leftW = 140;
-        leftH = imageHeight - 78;
-        rightW = 154;
-        rightX = leftPos + imageWidth - rightW - 10;
+        leftW = 132;
+        tabBarY = topPos + guiH - 24;
+        warningY = tabBarY - 24;
+        leftH = Math.max(96, warningY - leftY - 6);
+        rightW = Math.max(126, Math.min(176, guiW / 4));
+        rightX = leftPos + guiW - rightW - 10;
         rightY = leftY;
         rightH = leftH;
         canvasX = leftX + leftW + 8;
         canvasY = leftY;
-        canvasW = rightX - canvasX - 8;
+        canvasW = Math.max(140, rightX - canvasX - 8);
         canvasH = leftH;
 
-        canvasWidget = new GraphCanvasWidget(new SwitchboardCanvasAdapter(), canvasView, canvasX, canvasY + 15, canvasW, canvasH - 15);
+        canvasWidget = new GraphCanvasWidget(new SwitchboardCanvasAdapter(), canvasView, canvasX, canvasY, canvasW, canvasH);
 
         int bx = rightX + 8;
-        int by = rightY + rightH - 80;
+        int by = rightY + rightH - 84;
         int bw = (rightW - 22) / 2;
         itemButton = new TerminalButton(bx, by, bw, 14, Component.literal("ITEM"), this::toggleItems).accent(DUTheme.OK);
         fluidButton = new TerminalButton(bx + bw + 6, by, bw, 14, Component.literal("FLUID"), this::toggleFluids).accent(DUTheme.PROGRESS_BLUE);
         energyButton = new TerminalButton(bx, by + 18, bw, 14, Component.literal("FE"), this::toggleEnergy).accent(DUTheme.WARN);
         priorityButton = new TerminalButton(bx + bw + 6, by + 18, bw, 14, Component.literal("PRI+"), this::bumpPriority).accent(DUTheme.SELECTED);
         saveButton = new TerminalButton(bx, by + 42, rightW - 16, 16, Component.literal("SAVE SWITCHBOARD"), () -> ClientNetworkSender.saveSwitchboard(menu.pos(), links, positionData())).accent(DUTheme.TEXT_GREEN);
+        refreshButton = new TerminalButton(leftX, leftY + leftH - 38, leftW, 14, Component.literal("SCAN NETWORKS"), () -> {
+            ClientNetworkSender.requestKnownNetworks();
+            ClientNetworkSender.requestSwitchboardState(menu.pos());
+        }).accent(DUTheme.OK);
+        fitButton = new TerminalButton(canvasX + canvasW - 30, canvasY + 2, 26, 10, Component.literal("FIT"), this::fitCanvas).accent(DUTheme.PROGRESS_BLUE);
         addRenderableWidget(itemButton);
         addRenderableWidget(fluidButton);
         addRenderableWidget(energyButton);
         addRenderableWidget(priorityButton);
         addRenderableWidget(saveButton);
+        addRenderableWidget(refreshButton);
+        addRenderableWidget(fitButton);
 
         ClientNetworkSender.requestKnownNetworks();
         ClientNetworkSender.requestSwitchboardState(menu.pos());
@@ -113,50 +149,68 @@ public class NetworkSwitchboardScreen extends AbstractContainerScreen<NetworkSwi
 
     @Override
     public void extractBackground(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick) {
+        pushUi(g);
+        int designMouseX = designX(mouseX), designMouseY = designY(mouseY);
         syncButtons();
-        DUTheme.frame(g, leftPos, topPos, imageWidth, imageHeight);
+        DUTheme.frame(g, leftPos, topPos, guiW, guiH);
         renderHeader(g);
         renderNetworkList(g);
-        panel(g, canvasX, canvasY, canvasW, canvasH, "SWITCHING CANVAS");
-        canvasWidget.render(g, font, mouseX, mouseY);
+        panel(g, canvasX, canvasY, canvasW, canvasH, "FACTORY BRIDGE CANVAS");
+        canvasWidget.render(g, font, designMouseX, designMouseY);
         renderInfo(g);
+        renderTaskbar(g);
+        g.pose().popMatrix();
+    }
+
+    @Override
+    public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick) {
+        pushUi(g);
+        super.extractRenderState(g, designX(mouseX), designY(mouseY), partialTick);
+        g.pose().popMatrix();
     }
 
     private void renderHeader(GuiGraphicsExtractor g) {
         DUTheme.glowText(g, font, "LOGIGRAPH SWITCHBOARD", leftPos + 14, topPos + 12, DUTheme.TEXT_GREEN);
-        g.text(font, "LFM CROSS-NETWORK BRIDGE MATRIX", leftPos + 14, topPos + 25, DUTheme.TEXT_DIM, false);
-        g.text(font, LocalTime.now().format(CLOCK).toUpperCase(java.util.Locale.ROOT), leftPos + imageWidth - 74, topPos + 12, DUTheme.TEXT_DIM, false);
-        g.text(font, links.size() + " LINKS", leftPos + imageWidth - 74, topPos + 25, DUTheme.TEXT_GREEN_DIM, false);
+        g.text(font, "FACTORY PAGE NETWORK ROUTER", leftPos + 14, topPos + 25, DUTheme.TEXT_DIM, false);
+        g.text(font, LocalTime.now().format(CLOCK).toUpperCase(java.util.Locale.ROOT), leftPos + guiW - 74, topPos + 12, DUTheme.TEXT_DIM, false);
+        g.text(font, links.size() + " LINKS", leftPos + guiW - 74, topPos + 25, DUTheme.TEXT_GREEN_DIM, false);
+    }
+
+    private void renderTaskbar(GuiGraphicsExtractor g) {
+        DUTheme.box(g, leftPos + 8, tabBarY - 2, guiW - 16, 20, DUTheme.PANEL_ALT, DUTheme.PANEL_BORDER);
+        g.text(font, "SWITCHBOARD", leftPos + 16, tabBarY + 4, DUTheme.TEXT_GREEN, false);
+        g.text(font, "FACTORY CANVAS", leftPos + 100, tabBarY + 4, DUTheme.SELECTED, false);
+        g.text(font, "MOUSE3 PAN  |  WHEEL ZOOM  |  SAVE TO APPLY", leftPos + 220, tabBarY + 4, DUTheme.TEXT_DIM, false);
     }
 
     private void renderNetworkList(GuiGraphicsExtractor g) {
         panel(g, leftX, leftY, leftW, leftH, "SCANNED NETWORKS");
         List<ClientKnownNetworks.Entry> nets = networks();
         for (int i = 0; i < nets.size(); i++) {
-            int y = leftY + 24 + i * 22;
-            if (y > leftY + leftH - 20) break;
+            int y = leftY + 18 + i * 20;
+            if (y > leftY + leftH - 44) break;
             ClientKnownNetworks.Entry net = nets.get(i);
             boolean selected = net.id().equals(selectedNetworkId);
             boolean source = net.id().equals(linkSourceId);
             int fill = source ? 0xFF2a2514 : selected ? 0xFF14303a : DUTheme.PANEL_ALT;
             int border = source ? DUTheme.PROGRESS_ORANGE : selected ? DUTheme.SELECTED : DUTheme.PANEL_BORDER;
-            DUTheme.box(g, leftX + 5, y, leftW - 10, 18, fill, border);
+            DUTheme.box(g, leftX + 2, y, leftW - 4, 18, fill, border);
             DUTheme.dot(g, leftX + 9, y + 6, source ? DUTheme.PROGRESS_ORANGE : DUTheme.TEXT_GREEN);
             g.text(font, trim(net.name(), 16), leftX + 18, y + 4, selected || source ? DUTheme.TEXT : DUTheme.TEXT_DIM, false);
         }
         if (nets.isEmpty()) {
             g.text(font, "No loaded networks", leftX + 8, leftY + 30, DUTheme.TEXT_DIM, false);
         }
-        g.text(font, "Click two nodes to bridge", leftX + 8, leftY + leftH - 24, DUTheme.TEXT_DIM, false);
-        g.text(font, "Right-click link to cut", leftX + 8, leftY + leftH - 12, DUTheme.TEXT_DIM, false);
+        g.text(font, "Click two nodes to bridge", leftX + 8, leftY + leftH - 20, DUTheme.TEXT_DIM, false);
+        g.text(font, "Drag nodes like Factory", leftX + 8, leftY + leftH - 10, DUTheme.TEXT_DIM, false);
     }
 
     private void renderInfo(GuiGraphicsExtractor g) {
-        panel(g, rightX, rightY, rightW, rightH, "NETWORK INFO");
+        panel(g, rightX, rightY, rightW, rightH, "NODE SETTINGS");
         int y = rightY + 24;
         if (selectedLink >= 0 && selectedLink < links.size()) {
             SwitchboardLinkData link = links.get(selectedLink);
-            section(g, "ACTIVE BRIDGE", rightX + 8, y); y += 16;
+            section(g, "CONNECTION SETTINGS", rightX + 8, y); y += 16;
             y = labelValue(g, "FROM", nameFor(link.sourceNetworkId()), y);
             y = labelValue(g, "TO", nameFor(link.targetNetworkId()), y);
             y += 4;
@@ -164,27 +218,28 @@ public class NetworkSwitchboardScreen extends AbstractContainerScreen<NetworkSwi
             y = labelValue(g, "FLUIDS", onOff(link.fluids()), y);
             y = labelValue(g, "ENERGY", onOff(link.energy()), y);
             y = labelValue(g, "PRIORITY", String.valueOf(link.priority()), y);
-            g.text(font, "Right-click bridge to delete", rightX + 8, y + 6, DUTheme.TEXT_DIM, false);
+            g.text(font, "Use buttons below to edit", rightX + 8, y + 6, DUTheme.TEXT_DIM, false);
             return;
         }
         if (!selectedNetworkId.isBlank()) {
-            section(g, linkSourceId.isBlank() ? "SELECTED NETWORK" : "SOURCE ARMED", rightX + 8, y); y += 16;
+            section(g, linkSourceId.isBlank() ? "NETWORK NODE" : "SOURCE ARMED", rightX + 8, y); y += 16;
             y = labelValue(g, "NAME", nameFor(selectedNetworkId), y);
             y = labelValue(g, "ID", selectedNetworkId, y);
             y += 4;
-            g.text(font, linkSourceId.isBlank() ? "Click it again to arm," : "Click another network", rightX + 8, y, DUTheme.TEXT_DIM, false); y += 11;
-            g.text(font, linkSourceId.isBlank() ? "then click target." : "to create a bridge.", rightX + 8, y, DUTheme.TEXT_DIM, false);
+            g.text(font, linkSourceId.isBlank() ? "Click again to arm" : "Click target network", rightX + 8, y, DUTheme.TEXT_DIM, false); y += 11;
+            g.text(font, linkSourceId.isBlank() ? "as bridge source." : "to create bridge.", rightX + 8, y, DUTheme.TEXT_DIM, false);
             return;
         }
         section(g, "NO SELECTION", rightX + 8, y); y += 16;
         g.text(font, "Select a network node", rightX + 8, y, DUTheme.TEXT_DIM, false); y += 11;
-        g.text(font, "or bridge on canvas.", rightX + 8, y, DUTheme.TEXT_DIM, false);
+        g.text(font, "or connection line.", rightX + 8, y, DUTheme.TEXT_DIM, false);
     }
 
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-        double mx = event.x();
-        double my = event.y();
+        double mx = designX(event.x());
+        double my = designY(event.y());
+        MouseButtonEvent de = new MouseButtonEvent(mx, my, event.buttonInfo());
         boolean right = event.button() == 1;
         boolean middle = event.button() == 2;
         if (middle && canvasWidget.contains(mx, my)) {
@@ -226,14 +281,16 @@ public class NetworkSwitchboardScreen extends AbstractContainerScreen<NetworkSwi
             }
             return true;
         }
-        return super.mouseClicked(event, doubleClick);
+        return super.mouseClicked(de, doubleClick);
     }
 
     @Override
     public boolean mouseDragged(MouseButtonEvent event, double dx, double dy) {
+        double ddx = dx / uiScale;
+        double ddy = dy / uiScale;
         if (!draggingNetworkId.isBlank()) {
-            double mx = event.x();
-            double my = event.y();
+            double mx = designX(event.x());
+            double my = designY(event.y());
             int cdx = (int) Math.round((mx - lastMouseX) / canvasView.zoom);
             int cdy = (int) Math.round((my - lastMouseY) / canvasView.zoom);
             if (cdx != 0 || cdy != 0) {
@@ -246,22 +303,26 @@ public class NetworkSwitchboardScreen extends AbstractContainerScreen<NetworkSwi
             return true;
         }
         if (panning) {
-            double mx = event.x();
-            double my = event.y();
+            double mx = designX(event.x());
+            double my = designY(event.y());
             canvasView.panX += (float) (mx - lastMouseX);
             canvasView.panY += (float) (my - lastMouseY);
             lastMouseX = mx;
             lastMouseY = my;
             return true;
         }
-        return super.mouseDragged(event, dx, dy);
+        return super.mouseDragged(new MouseButtonEvent(designX(event.x()), designY(event.y()), event.buttonInfo()), ddx, ddy);
     }
 
     @Override
     public boolean mouseReleased(MouseButtonEvent event) {
+        MouseButtonEvent de = new MouseButtonEvent(designX(event.x()), designY(event.y()), event.buttonInfo());
         if (!draggingNetworkId.isBlank()) {
             if (!draggedNetwork && clickNetworkId.equals(draggingNetworkId)) {
                 handleNodeConnect(draggingNetworkId);
+            } else {
+                int[] pos = logicalPos(draggingNetworkId);
+                nodePositions.put(draggingNetworkId, clampLogical(snap(pos[0]), snap(pos[1])));
             }
             draggingNetworkId = "";
             clickNetworkId = "";
@@ -272,21 +333,29 @@ public class NetworkSwitchboardScreen extends AbstractContainerScreen<NetworkSwi
             panning = false;
             return true;
         }
-        return super.mouseReleased(event);
+        return super.mouseReleased(de);
     }
 
     @Override
     public boolean mouseScrolled(double rawX, double rawY, double sx, double sy) {
-        if (!canvasWidget.contains(rawX, rawY)) return super.mouseScrolled(rawX, rawY, sx, sy);
+        double mx = designX(rawX), my = designY(rawY);
+        if (!canvasWidget.contains(mx, my)) return super.mouseScrolled(mx, my, sx, sy);
         float oldZoom = canvasView.zoom;
-        float nextZoom = Math.max(0.5f, Math.min(2.5f, canvasView.zoom + (float) Math.signum(sy) * 0.15f));
+        float nextZoom = Math.max(0.1f, Math.min(2.0f, canvasView.zoom + (float) sy * 0.1f));
         if (nextZoom == oldZoom) return true;
-        double logicalX = (rawX - canvasX - canvasView.panX) / oldZoom;
-        double logicalY = (rawY - canvasY - canvasView.panY) / oldZoom;
         canvasView.zoom = nextZoom;
-        canvasView.panX = (float) (rawX - canvasX - logicalX * canvasView.zoom);
-        canvasView.panY = (float) (rawY - canvasY - logicalY * canvasView.zoom);
+        canvasView.panX -= (mx - canvasWidget.x - canvasView.panX) * (canvasView.zoom / oldZoom - 1f);
+        canvasView.panY -= (my - canvasWidget.y - canvasView.panY) * (canvasView.zoom / oldZoom - 1f);
         return true;
+    }
+
+    private int designX(double screenX) { return (int) Math.round((screenX - uiOffsetX) / uiScale); }
+    private int designY(double screenY) { return (int) Math.round((screenY - uiOffsetY) / uiScale); }
+
+    private void pushUi(GuiGraphicsExtractor g) {
+        g.pose().pushMatrix();
+        g.pose().translate(uiOffsetX, uiOffsetY);
+        g.pose().scale(uiScale, uiScale);
     }
 
     private void handleNodeConnect(String node) {
@@ -343,6 +412,12 @@ public class NetworkSwitchboardScreen extends AbstractContainerScreen<NetworkSwi
         priorityButton.setMessage(Component.literal("P" + link.priority() + "+"));
     }
 
+    private void fitCanvas() {
+        canvasView.zoom = 1f;
+        canvasView.panX = 0f;
+        canvasView.panY = 0f;
+    }
+
     private void panel(GuiGraphicsExtractor g, int x, int y, int w, int h, String title) {
         DUTheme.panelWithHeader(g, font, x, y, w, h, title);
     }
@@ -361,9 +436,9 @@ public class NetworkSwitchboardScreen extends AbstractContainerScreen<NetworkSwi
     private String listNodeAt(double mx, double my) {
         List<ClientKnownNetworks.Entry> nets = networks();
         for (int i = 0; i < nets.size(); i++) {
-            int y = leftY + 24 + i * 22;
-            if (y > leftY + leftH - 20) break;
-            if (mx >= leftX + 5 && mx <= leftX + leftW - 5 && my >= y && my <= y + 18) return nets.get(i).id();
+            int y = leftY + 18 + i * 20;
+            if (y > leftY + leftH - 44) break;
+            if (mx >= leftX + 2 && mx <= leftX + leftW - 2 && my >= y && my <= y + 18) return nets.get(i).id();
         }
         return "";
     }
@@ -379,9 +454,11 @@ public class NetworkSwitchboardScreen extends AbstractContainerScreen<NetworkSwi
     }
 
     private int[] clampLogical(int x, int y) {
-        int minX = 8, maxX = Math.max(minX, canvasW - NODE_W - 8);
-        int minY = 20, maxY = Math.max(minY, canvasH - NODE_H - 8);
-        return new int[]{ Math.max(minX, Math.min(maxX, x)), Math.max(minY, Math.min(maxY, y)) };
+        return new int[]{ Math.max(-10000, Math.min(10000, x)), Math.max(-10000, Math.min(10000, y)) };
+    }
+
+    private static int snap(int value) {
+        return Math.round(value / (float) SNAP) * SNAP;
     }
 
     private Map<String, int[]> logicalNodeMap() {
@@ -491,7 +568,7 @@ public class NetworkSwitchboardScreen extends AbstractContainerScreen<NetworkSwi
             int x = node.x(), y = node.y();
             DUTheme.box(g, x, y, NODE_W, NODE_H, DUTheme.PANEL_ALT, border);
             g.fill(x + 1, y + 1, x + NODE_W - 1, y + 13, header);
-            g.text(font, "NETWORK", x + 5, y + 4, source ? DUTheme.PROGRESS_ORANGE : DUTheme.TEXT_GREEN, false);
+            g.text(font, "NETWORK COMPUTER", x + 5, y + 4, source ? DUTheme.PROGRESS_ORANGE : DUTheme.TEXT_GREEN, false);
             g.text(font, trim(nameFor(id), 18), x + 6, y + 18, DUTheme.TEXT, false);
             g.text(font, trim(id, 20), x + 6, y + 31, DUTheme.TEXT_DIM, false);
             port(g, portInX(node), portInY(node), border);

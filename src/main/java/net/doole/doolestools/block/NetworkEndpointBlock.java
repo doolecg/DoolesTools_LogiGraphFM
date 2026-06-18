@@ -79,7 +79,7 @@ public abstract class NetworkEndpointBlock extends DirectionalBlock implements E
         BlockPos pos = context.getClickedPos();
         BlockState state = this.defaultBlockState()
                 .setValue(FACING, context.getClickedFace())
-                .setValue(WIRE_CONNECTED, hasAdjacentWire(context.getLevel(), pos));
+                .setValue(WIRE_CONNECTED, !(this instanceof NetworkModemBlock) && hasAdjacentWire(context.getLevel(), pos));
         return state.canSurvive(context.getLevel(), pos) ? state : null;
     }
 
@@ -87,7 +87,7 @@ public abstract class NetworkEndpointBlock extends DirectionalBlock implements E
     public void neighborChanged(BlockState state, Level level, BlockPos pos,
             Block neighborBlock, net.minecraft.world.level.redstone.Orientation orientation, boolean movedByPiston) {
         if (!level.isClientSide()) {
-            boolean wired = hasAdjacentWire(level, pos);
+            boolean wired = !(this instanceof NetworkModemBlock) && hasAdjacentWire(level, pos);
             if (state.getValue(WIRE_CONNECTED) != wired)
                 level.setBlock(pos, state.setValue(WIRE_CONNECTED, wired), 3);
         }

@@ -4,6 +4,7 @@ import net.doole.doolestools.DoolesTools;
 import net.doole.doolestools.item.LabelGunItem;
 import net.doole.doolestools.item.LinkingCardItem;
 import net.doole.doolestools.item.NetworkEndpointBlockItem;
+import net.doole.doolestools.item.NetworkWireBlockItem;
 import net.doole.doolestools.item.UpgradeType;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
@@ -44,8 +45,8 @@ public final class ModItems {
     public static final DeferredItem<NetworkEndpointBlockItem> WIRELESS_DONGLE =
             ITEMS.registerItem("wireless_dongle", props -> new NetworkEndpointBlockItem(ModBlocks.WIRELESS_DONGLE.get(), props, "dongle"));
 
-    public static final DeferredItem<BlockItem> NETWORK_WIRE =
-            ITEMS.registerSimpleBlockItem("network_wire", ModBlocks.NETWORK_WIRE);
+    public static final DeferredItem<NetworkWireBlockItem> NETWORK_WIRE =
+            ITEMS.registerItem("network_wire", props -> new NetworkWireBlockItem(ModBlocks.NETWORK_WIRE.get(), props));
 
     public static final DeferredItem<BlockItem> NETWORK_RELAY =
             ITEMS.registerSimpleBlockItem("network_relay", ModBlocks.NETWORK_RELAY);

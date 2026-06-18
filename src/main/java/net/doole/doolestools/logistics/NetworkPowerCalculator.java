@@ -215,7 +215,7 @@ public final class NetworkPowerCalculator {
             BlockEntity be = level.getBlockEntity(pos);
             if (be instanceof NetworkModemBlockEntity modem && modem.attachedPos().equals(computerPos)) {
                 queue.add(pos);
-            } else if (be instanceof NetworkWireBlockEntity wire && wire.hasModem() && wireAttachesToPos(wire, computerPos)) {
+            } else if (be instanceof NetworkWireBlockEntity wire && wire.hasCable() && wire.hasModem() && wireAttachesToPos(wire, computerPos)) {
                 queue.add(pos);
             }
         }
@@ -226,6 +226,7 @@ public final class NetworkPowerCalculator {
             if (!seen.add(pos)) continue;
             BlockEntity be = level.getBlockEntity(pos);
             if (be instanceof NetworkWireBlockEntity wire) {
+                if (!wire.hasCable()) continue;
                 counts.wires++;
                 // Each face may have its own endpoint — count each one.
                 for (Direction epDir : Direction.values()) {
@@ -239,7 +240,6 @@ public final class NetworkPowerCalculator {
                 counts.endpoints++;
                 counts.modemEndpoints++;
                 collectSources(level, pos, counts, sources);
-                for (Direction direction : Direction.values()) queue.add(pos.relative(direction));
             }
         }
         // warn once if we bailed early - raise maxWireTraversalSteps in server config if this fires often

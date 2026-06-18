@@ -29,6 +29,7 @@ import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
 public class NetworkWireBlock extends Block implements EntityBlock {
@@ -39,6 +40,7 @@ public class NetworkWireBlock extends Block implements EntityBlock {
     public static final BooleanProperty SOUTH = BlockStateProperties.SOUTH;
     public static final BooleanProperty WEST = BlockStateProperties.WEST;
     public static final BooleanProperty EAST = BlockStateProperties.EAST;
+    public static final BooleanProperty CABLE = BooleanProperty.create("cable");
     public static final BooleanProperty ENDPOINT_DOWN = BooleanProperty.create("endpoint_down");
     public static final BooleanProperty ENDPOINT_UP = BooleanProperty.create("endpoint_up");
     public static final BooleanProperty ENDPOINT_NORTH = BooleanProperty.create("endpoint_north");
@@ -62,6 +64,7 @@ public class NetworkWireBlock extends Block implements EntityBlock {
     public NetworkWireBlock(Properties properties) {
         super(properties);
         registerDefaultState(stateDefinition.any()
+                .setValue(CABLE, true)
                 .setValue(DOWN, false).setValue(UP, false)
                 .setValue(NORTH, false).setValue(SOUTH, false)
                 .setValue(WEST, false).setValue(EAST, false)
@@ -77,7 +80,7 @@ public class NetworkWireBlock extends Block implements EntityBlock {
 
     @Override
     protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
-        builder.add(DOWN, UP, NORTH, SOUTH, WEST, EAST,
+        builder.add(CABLE, DOWN, UP, NORTH, SOUTH, WEST, EAST,
                 ENDPOINT_DOWN, ENDPOINT_UP, ENDPOINT_NORTH, ENDPOINT_SOUTH, ENDPOINT_WEST, ENDPOINT_EAST);
     }
 
@@ -105,6 +108,16 @@ public class NetworkWireBlock extends Block implements EntityBlock {
 
     @Override
     protected InteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
+        if (stack.getItem() == ModItems.NETWORK_WIRE.get() && !state.getValue(CABLE)) {
+            if (!level.isClientSide()) {
+                BlockState next = withConnections(level, pos, state.setValue(CABLE, true));
+                level.setBlock(pos, next, 3);
+                if (level.getBlockEntity(pos) instanceof NetworkWireBlockEntity wire) wire.setCableInstalled(true);
+                if (!player.getAbilities().instabuild) stack.shrink(1);
+            }
+            return InteractionResult.SUCCESS;
+        }
+
         // Block items must pass through so wire-to-wire placement works even when an endpoint is mounted.
         if (stack.getItem() instanceof net.minecraft.world.item.BlockItem) return InteractionResult.PASS;
 
@@ -172,16 +185,33 @@ public class NetworkWireBlock extends Block implements EntityBlock {
     public boolean onDestroyedByPlayer(BlockState state, Level level, BlockPos pos, Player player, ItemStack toolStack, boolean willHarvest, FluidState fluid) {
         if (level.getBlockEntity(pos) instanceof NetworkWireBlockEntity wire && wire.hasEndpoint()) {
             if (!level.isClientSide()) {
-                // Drop one modem per installed endpoint, then leave the wire intact.
-                for (Direction face : wire.endpointFaces()) {
-                    if (player == null || !player.getAbilities().instabuild)
-                        popResource(level, pos, new ItemStack(ModItems.NETWORK_MODEM.get()));
-                }
-                wire.clearEndpoint();
+                Direction face = endpointFaceForBreak(pos, player, wire);
+                if (player == null || !player.getAbilities().instabuild)
+                    popResource(level, pos, new ItemStack(ModItems.NETWORK_MODEM.get()));
+                wire.clearEndpointAt(face);
+                if (!wire.hasCable() && !wire.hasEndpoint()) level.removeBlock(pos, false);
             }
             return false;
         }
         return super.onDestroyedByPlayer(state, level, pos, player, toolStack, willHarvest, fluid);
+    }
+
+    private static Direction endpointFaceForBreak(BlockPos pos, Player player, NetworkWireBlockEntity wire) {
+        if (player == null) return wire.endpointFace();
+        Vec3 start = player.getEyePosition();
+        Vec3 end = start.add(player.getLookAngle().scale(6.0D));
+        Direction bestFace = null;
+        double bestDistance = Double.MAX_VALUE;
+        for (Direction face : wire.endpointFaces()) {
+            BlockHitResult hit = endpointShapeFor(face).clip(start, end, pos);
+            if (hit == null) continue;
+            double distance = start.distanceToSqr(hit.getLocation());
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                bestFace = face;
+            }
+        }
+        return bestFace == null ? wire.endpointFace() : bestFace;
     }
 
     private static void removeOneUpgrade(Level level, BlockPos pos, Player player, NetworkWireBlockEntity wire, Direction hitFace) {
@@ -205,9 +235,9 @@ public class NetworkWireBlock extends Block implements EntityBlock {
 
     @Override
     protected VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
-        VoxelShape shape = CORE;
+        VoxelShape shape = state.getValue(CABLE) ? CORE : Shapes.empty();
         for (Direction direction : Direction.values()) {
-            if (state.getValue(propertyFor(direction))) shape = Shapes.or(shape, shapeFor(direction));
+            if (state.getValue(CABLE) && state.getValue(propertyFor(direction))) shape = Shapes.or(shape, shapeFor(direction));
             if (state.getValue(endpointPropertyFor(direction))) shape = Shapes.or(shape, endpointShapeFor(direction));
         }
         return shape;
@@ -242,7 +272,7 @@ public class NetworkWireBlock extends Block implements EntityBlock {
 
     public static BlockState withConnections(BlockGetter level, BlockPos pos, BlockState state) {
         for (Direction direction : Direction.values()) {
-            state = state.setValue(propertyFor(direction), connectsTo(level, pos.relative(direction)));
+            state = state.setValue(propertyFor(direction), state.getValue(CABLE) && connectsTo(level, pos.relative(direction)));
             state = state.setValue(endpointPropertyFor(direction), false);
         }
         if (level.getBlockEntity(pos) instanceof NetworkWireBlockEntity wire) {
@@ -255,7 +285,7 @@ public class NetworkWireBlock extends Block implements EntityBlock {
 
     public static boolean connectsTo(BlockGetter level, BlockPos pos) {
         BlockEntity be = level.getBlockEntity(pos);
-        return be instanceof NetworkWireBlockEntity || be instanceof net.doole.doolestools.blockentity.NetworkModemBlockEntity;
+        return be instanceof NetworkWireBlockEntity wire && wire.hasCable();
     }
 
     @Nullable

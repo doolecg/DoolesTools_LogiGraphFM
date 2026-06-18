@@ -1,5 +1,6 @@
 package net.doole.doolestools.item;
 
+import net.doole.doolestools.block.NetworkWireBlock;
 import net.doole.doolestools.blockentity.NetworkWireBlockEntity;
 import net.doole.doolestools.registry.ModBlocks;
 import net.minecraft.core.BlockPos;
@@ -8,7 +9,9 @@ import net.minecraft.world.InteractionResult;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.UseOnContext;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
 
 public class NetworkEndpointBlockItem extends BlockItem {
     private final String endpointKind;
@@ -29,6 +32,7 @@ public class NetworkEndpointBlockItem extends BlockItem {
 
         BlockPos wirePos = context.getClickedPos().relative(context.getClickedFace());
         if (installIntoWire(context, wirePos, context.getClickedFace().getOpposite())) return InteractionResult.SUCCESS;
+        if (createEndpointHost(context, wirePos, context.getClickedFace().getOpposite())) return InteractionResult.SUCCESS;
         return super.useOn(context);
     }
 
@@ -46,5 +50,25 @@ public class NetworkEndpointBlockItem extends BlockItem {
             context.getLevel().sendBlockUpdated(wirePos, wire.getBlockState(), wire.getBlockState(), 3);
         }
         return true;
+    }
+
+    private boolean createEndpointHost(UseOnContext context, BlockPos wirePos, Direction endpointFace) {
+        if (!"modem".equals(endpointKind)) return false;
+        Level level = context.getLevel();
+        if (!level.getBlockState(wirePos).isAir()) return false;
+        if (!level.getBlockState(wirePos.relative(endpointFace)).isAir()) {
+            if (!level.isClientSide()) {
+                BlockState hostState = ModBlocks.NETWORK_WIRE.get().defaultBlockState().setValue(NetworkWireBlock.CABLE, false);
+                level.setBlock(wirePos, hostState, 3);
+                if (level.getBlockEntity(wirePos) instanceof NetworkWireBlockEntity wire) {
+                    wire.setCableInstalled(false);
+                    if (!wire.installEndpoint(endpointKind, endpointFace, "")) return true;
+                    ItemStack stack = context.getItemInHand();
+                    if (context.getPlayer() != null && !context.getPlayer().getAbilities().instabuild) stack.shrink(1);
+                }
+            }
+            return true;
+        }
+        return false;
     }
 }
