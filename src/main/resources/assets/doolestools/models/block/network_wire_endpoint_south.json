@@ -1,9 +1,148 @@
-{
-  "parent": "minecraft:block/block",
-  "textures": { "plate": "doolestools:block/grey", "particle": "doolestools:block/grey" },
-  "elements": [
-    { "from": [3, 3, 14], "to": [13, 13, 16], "faces": { "down": { "texture": "#plate" }, "up": { "texture": "#plate" }, "north": { "texture": "#plate" }, "south": { "texture": "#plate" }, "east": { "texture": "#plate" }, "west": { "texture": "#plate" } } },
-    { "from": [5, 5, 12], "to": [11, 11, 14], "faces": { "down": { "texture": "#plate" }, "up": { "texture": "#plate" }, "north": { "texture": "#plate" }, "south": { "texture": "#plate" }, "east": { "texture": "#plate" }, "west": { "texture": "#plate" } } },
-    { "from": [6, 6, 10], "to": [10, 10, 12], "faces": { "down": { "texture": "#plate" }, "up": { "texture": "#plate" }, "north": { "texture": "#plate" }, "south": { "texture": "#plate" }, "east": { "texture": "#plate" }, "west": { "texture": "#plate" } } }
-  ]
+﻿{
+    "parent":  "minecraft:block/block",
+    "textures":  {
+                     "wire":  "doolestools:block/grey",
+                     "socket":  "doolestools:block/router_atlas",
+                     "particle":  "doolestools:block/router_atlas"
+                 },
+    "elements":  [
+                     {
+                         "from":  [
+                                      3,
+                                      3,
+                                      14
+                                  ],
+                         "to":  [
+                                    13,
+                                    13,
+                                    16
+                                ],
+                         "faces":  {
+                                       "north":  {
+                                                     "uv":  [
+                                                                0.21875,
+                                                                12.3711,
+                                                                3.51953,
+                                                                15.75
+                                                            ],
+                                                     "texture":  "#socket"
+                                                 },
+                                       "east":  {
+                                                    "uv":  [
+                                                               8.67188,
+                                                               0.48438,
+                                                               15.84375,
+                                                               1.5625
+                                                           ],
+                                                    "rotation":  90,
+                                                    "texture":  "#socket"
+                                                },
+                                       "south":  {
+                                                     "uv":  [
+                                                                0.25,
+                                                                8.23438,
+                                                                3.51563,
+                                                                11.67188
+                                                            ],
+                                                     "texture":  "#socket"
+                                                 },
+                                       "west":  {
+                                                    "uv":  [
+                                                               8.67188,
+                                                               0.46875,
+                                                               15.84375,
+                                                               1.57813
+                                                           ],
+                                                    "rotation":  90,
+                                                    "texture":  "#socket"
+                                                },
+                                       "up":  {
+                                                  "uv":  [
+                                                             0.17188,
+                                                             3.59375,
+                                                             8.0625,
+                                                             5.10938
+                                                         ],
+                                                  "rotation":  180,
+                                                  "texture":  "#socket"
+                                              },
+                                       "down":  {
+                                                    "uv":  [
+                                                               8.65625,
+                                                               0.48438,
+                                                               15.84375,
+                                                               1.57813
+                                                           ],
+                                                    "texture":  "#socket"
+                                                }
+                                   },
+                         "name":  "network_wire_endpoint_south_plate"
+                     },
+                     {
+                         "from":  [
+                                      4,
+                                      4,
+                                      13
+                                  ],
+                         "to":  [
+                                    12,
+                                    12,
+                                    14
+                                ],
+                         "faces":  {
+                                       "north":  {
+                                                     "texture":  "#wire"
+                                                 },
+                                       "south":  {
+                                                     "texture":  "#wire"
+                                                 },
+                                       "east":  {
+                                                    "texture":  "#wire"
+                                                },
+                                       "west":  {
+                                                    "texture":  "#wire"
+                                                },
+                                       "up":  {
+                                                  "texture":  "#wire"
+                                              },
+                                       "down":  {
+                                                    "texture":  "#wire"
+                                                }
+                                   },
+                         "name":  "network_wire_endpoint_south_base"
+                     },
+                     {
+                         "from":  [
+                                      6,
+                                      6,
+                                      10
+                                  ],
+                         "to":  [
+                                    10,
+                                    10,
+                                    13
+                                ],
+                         "faces":  {
+                                       "north":  {
+                                                     "texture":  "#wire"
+                                                 },
+                                       "south":  {
+                                                     "texture":  "#wire"
+                                                 },
+                                       "east":  {
+                                                    "texture":  "#wire"
+                                                },
+                                       "west":  {
+                                                    "texture":  "#wire"
+                                                },
+                                       "up":  {
+                                                  "texture":  "#wire"
+                                              },
+                                       "down":  {
+                                                    "texture":  "#wire"
+                                                }
+                                   },
+                         "name":  "network_wire_endpoint_south_stem"
+                     }
+                 ]
 }

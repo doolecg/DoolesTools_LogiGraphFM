@@ -354,10 +354,6 @@ public class NetworkWireBlockEntity extends BlockEntity {
                 next |= bit(direction);
             }
         }
-        // Add connection bits for all endpoint faces so the cable shows a "cap" toward the attached block.
-        for (Direction dir : Direction.values()) {
-            if (hasEndpointAt(dir)) next |= bit(dir);
-        }
         if (next != connectionMask) {
             connectionMask = next;
             refreshBlockState();

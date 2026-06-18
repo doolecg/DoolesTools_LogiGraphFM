@@ -36,7 +36,7 @@ public class NetworkEndpointBlockItem extends BlockItem {
         if (!"modem".equals(endpointKind)) return false;
         if (!context.getLevel().getBlockState(wirePos).is(ModBlocks.NETWORK_WIRE.get())) return false;
         if (!(context.getLevel().getBlockEntity(wirePos) instanceof NetworkWireBlockEntity wire)) return false;
-        if (wire.hasEndpoint()) return true;
+        if (wire.hasEndpointAt(endpointFace)) return true;
         if (!context.getLevel().isClientSide()) {
             ItemStack stack = context.getItemInHand();
             if (wire.installEndpoint(endpointKind, endpointFace, "")

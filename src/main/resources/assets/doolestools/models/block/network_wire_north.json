@@ -1,10 +1,42 @@
-{
-  "parent": "doolestools:block/network_wire_core",
-  "elements": [
-    { "from": [6, 6, 0], "to": [10, 10, 6], "faces": {
-      "north": { "texture": "#wire" }, "south": { "texture": "#wire" },
-      "east": { "texture": "#wire" }, "west": { "texture": "#wire" },
-      "up": { "texture": "#wire" }, "down": { "texture": "#wire" }
-    }}
-  ]
+﻿{
+    "parent":  "minecraft:block/block",
+    "textures":  {
+                     "wire":  "doolestools:block/grey",
+                     "particle":  "doolestools:block/grey"
+                 },
+    "elements":  [
+                     {
+                         "from":  [
+                                      6,
+                                      6,
+                                      0
+                                  ],
+                         "to":  [
+                                    10,
+                                    10,
+                                    6
+                                ],
+                         "faces":  {
+                                       "north":  {
+                                                     "texture":  "#wire"
+                                                 },
+                                       "south":  {
+                                                     "texture":  "#wire"
+                                                 },
+                                       "east":  {
+                                                    "texture":  "#wire"
+                                                },
+                                       "west":  {
+                                                    "texture":  "#wire"
+                                                },
+                                       "up":  {
+                                                  "texture":  "#wire"
+                                              },
+                                       "down":  {
+                                                    "texture":  "#wire"
+                                                }
+                                   },
+                         "name":  "network_wire_north"
+                     }
+                 ]
 }
