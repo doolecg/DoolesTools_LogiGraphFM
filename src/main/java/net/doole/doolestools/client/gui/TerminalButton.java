@@ -1,11 +1,10 @@
 package net.doole.doolestools.client.gui;
 
-import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractButton;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
-import net.minecraft.client.input.InputWithModifiers;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 
 /** A chunky terminal-styled button used throughout the LogiGraph GUI. */
 public class TerminalButton extends AbstractButton {
@@ -14,7 +13,7 @@ public class TerminalButton extends AbstractButton {
     private boolean toggled;
     private int accent = DUTheme.TEXT_GREEN;
     private Glyphs.Drawer icon;
-    private Identifier sprite;
+    private ResourceLocation sprite;
     private boolean iconOnly;
 
     public TerminalButton(int x, int y, int w, int h, Component label, Runnable onPress) {
@@ -35,7 +34,7 @@ public class TerminalButton extends AbstractButton {
     }
 
     /** Adds an image sprite to the left of the label. */
-    public TerminalButton sprite(Identifier sprite) {
+    public TerminalButton sprite(ResourceLocation sprite) {
         this.sprite = sprite;
         this.icon = null;
         return this;
@@ -49,7 +48,7 @@ public class TerminalButton extends AbstractButton {
         return this;
     }
 
-    public TerminalButton spriteOnly(Identifier sprite) {
+    public TerminalButton spriteOnly(ResourceLocation sprite) {
         this.sprite = sprite;
         this.icon = null;
         this.iconOnly = true;
@@ -65,12 +64,12 @@ public class TerminalButton extends AbstractButton {
     }
 
     @Override
-    public void onPress(InputWithModifiers input) {
+    public void onPress() {
         if (onPress != null) onPress.run();
     }
 
     @Override
-    protected void extractContents(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick) {
+    protected void renderWidget(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         boolean hover = isHoveredOrFocused();
         int fill = !active ? 0xFF161a14 : toggled ? 0xFF1c3320 : hover ? 0xFF1b2418 : DUTheme.PANEL;
         int border = !active ? DUTheme.PANEL_BORDER : (toggled || hover) ? accent : DUTheme.PANEL_BORDER;
@@ -88,11 +87,19 @@ public class TerminalButton extends AbstractButton {
         if (icon != null || sprite != null) {
             if (sprite != null) GuiSprites.draw(g, sprite, getX() + 3, getY() + (height - 12) / 2, 12);
             else icon.draw(g, getX() + 4, getY() + (height - 9) / 2, iconColor);
-            int textX = getX() + 16;
-            g.centeredText(font, getMessage(), (textX + getX() + width) / 2, ty, textColor);
+            drawBoundedLabel(g, font, getX() + 16, getY(), width - 19, ty, textColor);
         } else {
-            g.centeredText(font, getMessage(), getX() + width / 2, ty, textColor);
+            drawBoundedLabel(g, font, getX() + 3, getY(), width - 6, ty, textColor);
         }
+    }
+
+    private void drawBoundedLabel(GuiGraphics g, net.minecraft.client.gui.Font font, int x, int y, int maxWidth, int textY, int color) {
+        if (maxWidth <= 0) return;
+        String text = getMessage().getString();
+        if (font.width(text) > maxWidth) {
+            text = maxWidth <= font.width("...") ? font.plainSubstrByWidth(text, maxWidth) : font.plainSubstrByWidth(text, maxWidth - font.width("...")) + "...";
+        }
+        g.drawString(font, text, x + Math.max(0, (maxWidth - font.width(text)) / 2), textY, color, false);
     }
 
     @Override

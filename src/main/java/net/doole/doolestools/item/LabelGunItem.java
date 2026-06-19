@@ -7,6 +7,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.InteractionResultHolder;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -37,10 +38,10 @@ public class LabelGunItem extends Item {
             BlockPos pos = context.getClickedPos();
             if (context.getLevel() instanceof ServerLevel level) {
                 if (name.isBlank()) {
-                    player.sendOverlayMessage(Component.literal("Set a name on the Label Gun first."));
+                    player.displayClientMessage(Component.literal("Set a name on the Label Gun first."), true);
                 } else {
-                    BlockLabelSavedData.get(level).setLabel(level.dimension().identifier(), pos, name);
-                    player.sendOverlayMessage(Component.literal("Labelled: " + name));
+                    BlockLabelSavedData.get(level).setLabel(level.dimension().location(), pos, name);
+                    player.displayClientMessage(Component.literal("Labelled: " + name), true);
                 }
             } else if (!name.isBlank()) {
                 applyLocalLabel(pos, name); // optimistic hologram update on the client
@@ -56,12 +57,13 @@ public class LabelGunItem extends Item {
     }
 
     @Override
-    public InteractionResult use(Level level, Player player, InteractionHand hand) {
-        if (player.isShiftKeyDown()) return InteractionResult.PASS;
+    public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
+        ItemStack stack = player.getItemInHand(hand);
+        if (player.isShiftKeyDown()) return InteractionResultHolder.pass(stack);
         if (level.isClientSide()) {
-            openClientScreen(gunName(player.getItemInHand(hand)));
+            openClientScreen(gunName(stack));
         }
-        return InteractionResult.SUCCESS;
+        return InteractionResultHolder.success(stack);
     }
 
     private static String gunName(ItemStack stack) {

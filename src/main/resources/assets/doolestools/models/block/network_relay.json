@@ -2,7 +2,7 @@
   "parent": "minecraft:block/block",
   "textures": {
     "case": "doolestools:block/logistics_monitor_side",
-    "light": "doolestools:gui/status_ok",
+    "light": "doolestools:block/grey",
     "particle": "doolestools:block/logistics_monitor_side"
   },
   "elements": [

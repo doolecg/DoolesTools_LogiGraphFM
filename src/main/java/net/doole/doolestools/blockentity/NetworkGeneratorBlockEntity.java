@@ -3,7 +3,11 @@ package net.doole.doolestools.blockentity;
 import net.doole.doolestools.config.ModServerConfig;
 import net.doole.doolestools.menu.NetworkGeneratorMenu;
 import net.doole.doolestools.registry.ModBlockEntities;
+import net.doole.doolestools.util.ValueInput;
+import net.doole.doolestools.util.ValueOutput;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
@@ -12,15 +16,11 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.storage.ValueInput;
-import net.minecraft.world.level.storage.ValueOutput;
-import net.neoforged.neoforge.transfer.ResourceHandler;
-import net.neoforged.neoforge.transfer.energy.EnergyHandler;
-import net.neoforged.neoforge.transfer.item.ItemResource;
-import net.neoforged.neoforge.transfer.transaction.SnapshotJournal;
-import net.neoforged.neoforge.transfer.transaction.TransactionContext;
+import net.neoforged.neoforge.energy.IEnergyStorage;
+import net.neoforged.neoforge.items.IItemHandler;
 
 public class NetworkGeneratorBlockEntity extends BlockEntity implements Container, MenuProvider {
     private static final int ENERGY_CAPACITY = 100_000;
@@ -31,28 +31,8 @@ public class NetworkGeneratorBlockEntity extends BlockEntity implements Containe
     private int burnRemaining;
     private int burnTime;
 
-    private final SnapshotJournal<Snapshot> journal = new SnapshotJournal<>() {
-        @Override
-        protected Snapshot createSnapshot() {
-            return new Snapshot(fuel.copy(), energy, burnRemaining, burnTime);
-        }
-
-        @Override
-        protected void revertToSnapshot(Snapshot snapshot) {
-            fuel = snapshot.fuel().copy();
-            energy = snapshot.energy();
-            burnRemaining = snapshot.burnRemaining();
-            burnTime = snapshot.burnTime();
-        }
-
-        @Override
-        protected void onRootCommit(Snapshot snapshot) {
-            setChanged();
-        }
-    };
-
-    private final EnergyHandler energyHandler = new GeneratorEnergyHandler();
-    private final ResourceHandler<ItemResource> itemHandler = new FuelItemHandler();
+    private final IEnergyStorage energyStorage = new GeneratorEnergyStorage();
+    private final IItemHandler itemHandler = new FuelItemHandler();
 
     public NetworkGeneratorBlockEntity(BlockPos pos, BlockState state) {
         super(ModBlockEntities.NETWORK_GENERATOR.get(), pos, state);
@@ -81,11 +61,11 @@ public class NetworkGeneratorBlockEntity extends BlockEntity implements Containe
         if (changed) setChanged();
     }
 
-    public EnergyHandler energyHandler() {
-        return energyHandler;
+    public IEnergyStorage energyStorage() {
+        return energyStorage;
     }
 
-    public ResourceHandler<ItemResource> itemHandler() {
+    public IItemHandler itemHandler() {
         return itemHandler;
     }
 
@@ -192,12 +172,16 @@ public class NetworkGeneratorBlockEntity extends BlockEntity implements Containe
     }
 
     private int burnDuration(ItemStack stack) {
-        return level == null ? 0 : level.fuelValues().burnDuration(stack);
+        return stack.getBurnTime(RecipeType.SMELTING);
     }
 
     @Override
-    protected void saveAdditional(ValueOutput output) {
-        super.saveAdditional(output);
+    protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+        super.saveAdditional(tag, registries);
+        saveData(new ValueOutput(tag, registries));
+    }
+
+    private void saveData(ValueOutput output) {
         output.store("fuel", ItemStack.OPTIONAL_CODEC, fuel);
         output.putInt("energy", energy);
         output.putInt("burnRemaining", burnRemaining);
@@ -205,83 +189,92 @@ public class NetworkGeneratorBlockEntity extends BlockEntity implements Containe
     }
 
     @Override
-    protected void loadAdditional(ValueInput input) {
-        super.loadAdditional(input);
+    protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+        super.loadAdditional(tag, registries);
+        loadData(new ValueInput(tag, registries));
+    }
+
+    private void loadData(ValueInput input) {
         fuel = input.read("fuel", ItemStack.OPTIONAL_CODEC).orElse(ItemStack.EMPTY);
         energy = Math.max(0, Math.min(ENERGY_CAPACITY, input.getIntOr("energy", 0)));
         burnRemaining = Math.max(0, input.getIntOr("burnRemaining", 0));
         burnTime = Math.max(0, input.getIntOr("burnTime", 0));
     }
 
-    private record Snapshot(ItemStack fuel, int energy, int burnRemaining, int burnTime) {}
-
-    private final class GeneratorEnergyHandler implements EnergyHandler {
+    private final class GeneratorEnergyStorage implements IEnergyStorage {
         @Override
-        public long getAmountAsLong() {
+        public int getEnergyStored() {
             return energy;
         }
 
         @Override
-        public long getCapacityAsLong() {
+        public int getMaxEnergyStored() {
             return ENERGY_CAPACITY;
         }
 
         @Override
-        public int insert(int amount, TransactionContext transaction) {
+        public int receiveEnergy(int amount, boolean simulate) {
             return 0;
         }
 
         @Override
-        public int extract(int amount, TransactionContext transaction) {
+        public int extractEnergy(int amount, boolean simulate) {
             int extracted = Math.min(Math.max(0, amount), energy);
             if (extracted <= 0) return 0;
-            journal.updateSnapshots(transaction);
-            energy -= extracted;
+            if (!simulate) {
+                energy -= extracted;
+                setChanged();
+            }
             return extracted;
         }
+
+        @Override
+        public boolean canExtract() { return true; }
+
+        @Override
+        public boolean canReceive() { return false; }
     }
 
-    private final class FuelItemHandler implements ResourceHandler<ItemResource> {
+    private final class FuelItemHandler implements IItemHandler {
         @Override
-        public int size() {
+        public int getSlots() {
             return 1;
         }
 
         @Override
-        public ItemResource getResource(int slot) {
-            return slot == 0 && !fuel.isEmpty() ? ItemResource.of(fuel) : ItemResource.EMPTY;
+        public ItemStack getStackInSlot(int slot) {
+            return slot == 0 ? fuel.copy() : ItemStack.EMPTY;
         }
 
         @Override
-        public long getAmountAsLong(int slot) {
-            return slot == 0 ? fuel.getCount() : 0;
+        public ItemStack insertItem(int slot, ItemStack stack, boolean simulate) {
+            if (slot != 0 || stack.isEmpty() || !isFuel(stack)) return stack;
+            if (!fuel.isEmpty() && !ItemStack.isSameItemSameComponents(fuel, stack)) return stack;
+            int inserted = Math.min(stack.getCount(), MAX_FUEL_STACK - fuel.getCount());
+            if (inserted <= 0) return stack;
+            if (!simulate) {
+                if (fuel.isEmpty()) fuel = stack.copyWithCount(inserted);
+                else fuel.grow(inserted);
+                setChanged();
+            }
+            ItemStack remainder = stack.copy();
+            remainder.shrink(inserted);
+            return remainder;
         }
 
         @Override
-        public long getCapacityAsLong(int slot, ItemResource resource) {
-            return slot == 0 && isValid(slot, resource) ? MAX_FUEL_STACK : 0;
+        public ItemStack extractItem(int slot, int amount, boolean simulate) {
+            return ItemStack.EMPTY;
         }
 
         @Override
-        public boolean isValid(int slot, ItemResource resource) {
-            return slot == 0 && resource != null && !resource.isEmpty() && isFuel(resource.toStack());
+        public int getSlotLimit(int slot) {
+            return slot == 0 ? MAX_FUEL_STACK : 0;
         }
 
         @Override
-        public int insert(int slot, ItemResource resource, int amount, TransactionContext transaction) {
-            if (!isValid(slot, resource) || amount <= 0) return 0;
-            if (!fuel.isEmpty() && !resource.matches(fuel)) return 0;
-            int inserted = Math.min(amount, MAX_FUEL_STACK - fuel.getCount());
-            if (inserted <= 0) return 0;
-            journal.updateSnapshots(transaction);
-            if (fuel.isEmpty()) fuel = resource.toStack(inserted);
-            else fuel.grow(inserted);
-            return inserted;
-        }
-
-        @Override
-        public int extract(int slot, ItemResource resource, int amount, TransactionContext transaction) {
-            return 0;
+        public boolean isItemValid(int slot, ItemStack stack) {
+            return slot == 0 && isFuel(stack);
         }
     }
 }

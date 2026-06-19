@@ -11,7 +11,7 @@ import net.doole.doolestools.logistics.FilterSettings;
 import net.doole.doolestools.logistics.NodeType;
 import net.doole.doolestools.logistics.PortDirection;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.GuiGraphics;
 
 /** Stateless renderer for a single flowgraph node card (drawn in canvas space). */
 public final class GraphNodeWidget {
@@ -19,7 +19,7 @@ public final class GraphNodeWidget {
 
     private enum ActivityState { WORKING, STANDBY, ERROR }
 
-    public static void render(GuiGraphicsExtractor g, Font font, GraphNodeData node, ScannedBlockData scanned,
+    public static void render(GuiGraphics g, Font font, GraphNodeData node, ScannedBlockData scanned,
                               boolean selected, boolean isLinkSource) {
         int x = node.x();
         int y = node.y();
@@ -69,19 +69,19 @@ public final class GraphNodeWidget {
         int textX = x + 24;
         int line = y + 18;
         String typeLine = scanned != null ? scanned.blockName() : node.type().name();
-        g.text(font, trim(font, typeLine, w - 28), textX, line, DUTheme.TEXT_DIM, false);
+        g.drawString(font, trim(font, typeLine, w - 28), textX, line, DUTheme.TEXT_DIM, false);
         line += 11;
 
         // Main stat + optional progress bar.
         if (scanned != null && scanned.furnace().hasData()) {
             FurnaceSummary f = scanned.furnace();
-            g.text(font, trim(font, f.status(), w - 28), textX, line, statusTextColor(f.status()), false);
+            g.drawString(font, trim(font, f.status(), w - 28), textX, line, statusTextColor(f.status()), false);
             // Recipe row: input icon -> result icon (real items).
             int ry = y + 44;
             if (f.hasRecipe() || !f.inputId().isEmpty()) {
                 int ix = x + 5;
                 if (!f.inputId().isEmpty()) { ItemIcons.render(g, f.inputId(), ix, ry, ItemIcons.SIZE, DUTheme.PANEL_ALT); ix += 18; }
-                g.text(font, "→", ix, ry + 4, DUTheme.TEXT_DIM, false);
+                g.drawString(font, "→", ix, ry + 4, DUTheme.TEXT_DIM, false);
                 ix += font.width("→") + 4;
                 if (!f.resultId().isEmpty()) ItemIcons.render(g, f.resultId(), ix, ry, ItemIcons.SIZE, DUTheme.PANEL_ALT);
             }
@@ -92,9 +92,9 @@ public final class GraphNodeWidget {
             int pct = f.cookTotal() > 0 ? f.predictedPercent(elapsed) : 0;
             DUTheme.progress(g, x + 5, y + h - 22, w - 10, 7, pct / 100f, progress.error() ? DUTheme.ERROR : DUTheme.PROGRESS_ORANGE);
             String pctStr = pct + "%";
-            g.text(font, pctStr, x + w - 5 - font.width(pctStr), y + h - 31, DUTheme.TEXT_DIM, false);
+            g.drawString(font, pctStr, x + w - 5 - font.width(pctStr), y + h - 31, DUTheme.TEXT_DIM, false);
             if (f.isCooking()) {
-                g.text(font, DUTheme.formatTicks(f.predictedRemainingTicks(elapsed)), x + 5, y + h - 31, DUTheme.OK, false);
+                g.drawString(font, DUTheme.formatTicks(f.predictedRemainingTicks(elapsed)), x + 5, y + h - 31, DUTheme.OK, false);
             }
         } else if (scanned != null && scanned.progress().present() && isMachine(node, scanned)) {
             // Modded machines render like the furnace card: status, the material/output contents as real
@@ -102,7 +102,7 @@ public final class GraphNodeWidget {
             MachineProgressData progress = scanned.progress();
             int pct = Math.max(0, Math.min(100, progress.percent()));
             int statusColor = progress.error() ? DUTheme.ERROR : progress.active() ? DUTheme.OK : DUTheme.WARN;
-            g.text(font, trim(font, progress.status(), w - 28), textX, line, statusColor, false);
+            g.drawString(font, trim(font, progress.status(), w - 28), textX, line, statusColor, false);
             int ix = x + 5;
             int ry = y + 44;
             for (int i = 0; i < scanned.inventory().topStacks().size() && ix + ItemIcons.SIZE <= x + w - 5; i++) {
@@ -111,12 +111,12 @@ public final class GraphNodeWidget {
             }
             DUTheme.progress(g, x + 5, y + h - 22, w - 10, 7, pct / 100f, statusColor);
             String pctStr = pct + "%";
-            g.text(font, pctStr, x + w - 5 - font.width(pctStr), y + h - 31, DUTheme.TEXT_DIM, false);
-            if (progress.hasTimer()) g.text(font, "~" + DUTheme.formatTicks(timerTicks(progress)), x + 5, y + h - 31, DUTheme.TEXT_GREEN, false);
+            g.drawString(font, pctStr, x + w - 5 - font.width(pctStr), y + h - 31, DUTheme.TEXT_DIM, false);
+            if (progress.hasTimer()) g.drawString(font, "~" + DUTheme.formatTicks(timerTicks(progress)), x + 5, y + h - 31, DUTheme.TEXT_GREEN, false);
         } else if (scanned != null && scanned.inventory().hasData()) {
             InventorySummary inv = scanned.inventory();
-            g.text(font, inv.fillPercent() + "%", textX, line, fillColor(inv.fillPercent()), false);
-            g.text(font, inv.usedSlots() + " / " + inv.totalSlots(), x + w - 5 - font.width(inv.usedSlots() + " / " + inv.totalSlots()), line, DUTheme.TEXT_DIM, false);
+            g.drawString(font, inv.fillPercent() + "%", textX, line, fillColor(inv.fillPercent()), false);
+            g.drawString(font, inv.usedSlots() + " / " + inv.totalSlots(), x + w - 5 - font.width(inv.usedSlots() + " / " + inv.totalSlots()), line, DUTheme.TEXT_DIM, false);
             // Top contents as real item icons.
             int ix = x + 5;
             int ry = y + 44;
@@ -126,7 +126,7 @@ public final class GraphNodeWidget {
             }
             DUTheme.progress(g, x + 5, y + h - 22, w - 10, 7, inv.fillPercent() / 100f, DUTheme.PROGRESS_BLUE);
         } else {
-            g.text(font, node.type().name(), textX, line, DUTheme.TEXT_DIM, false);
+            g.drawString(font, node.type().name(), textX, line, DUTheme.TEXT_DIM, false);
         }
 
         // Warning strip.
@@ -135,10 +135,10 @@ public final class GraphNodeWidget {
         int networkMax = w / 2;
         int networkW = network.isBlank() ? 0 : Math.min(font.width(network), networkMax);
         g.fill(x + 1, y + h - 12, x + w - 1, y + h - 1, 0xFF0a0d09);
-        g.text(font, trim(font, strip, w - networkW - 12), x + 5, y + h - 11, worst, false);
+        g.drawString(font, trim(font, strip, w - networkW - 12), x + 5, y + h - 11, worst, false);
         if (!network.isBlank()) {
             String trimmedNetwork = trim(font, network, networkMax);
-            g.text(font, trimmedNetwork, x + w - 5 - font.width(trimmedNetwork), y + h - 11, DUTheme.TEXT_DIM, false);
+            g.drawString(font, trimmedNetwork, x + w - 5 - font.width(trimmedNetwork), y + h - 11, DUTheme.TEXT_DIM, false);
         }
 
         // Selection corner brackets (cyan).
@@ -152,7 +152,7 @@ public final class GraphNodeWidget {
         renderPorts(g, font, node, selected || isLinkSource);
     }
 
-    public static void renderLite(GuiGraphicsExtractor g, Font font, GraphNodeData node, boolean selected, boolean isLinkSource) {
+    public static void renderLite(GuiGraphics g, Font font, GraphNodeData node, boolean selected, boolean isLinkSource) {
         int x = node.x();
         int y = node.y();
         int w = node.width();
@@ -160,15 +160,15 @@ public final class GraphNodeWidget {
         int border = selected ? DUTheme.SELECTED : isLinkSource ? DUTheme.PROGRESS_ORANGE : DUTheme.PANEL_BORDER;
         DUTheme.box(g, x, y, w, h, DUTheme.PANEL, border);
         g.fill(x + 1, y + 1, x + w - 1, y + 13, DUTheme.PANEL_HEADER);
-        g.text(font, trim(font, node.displayName(), w - 16), x + 5, y + 3, selected ? DUTheme.SELECTED : DUTheme.TEXT, false);
-        g.text(font, node.type().name(), x + 5, y + 18, DUTheme.TEXT_DIM, false);
+        g.drawString(font, trim(font, node.displayName(), w - 16), x + 5, y + 3, selected ? DUTheme.SELECTED : DUTheme.TEXT, false);
+        g.drawString(font, node.type().name(), x + 5, y + 18, DUTheme.TEXT_DIM, false);
         if (node.type() == NodeType.FILTER) renderFilterSummary(g, font, node);
         if (node.instanced()) instanceBadge(g, x + w - 12, y + 3);
         renderPortDots(g, node, selected || isLinkSource);
     }
 
     /** Two dots joined by a line — marks a node that is an instance of an already-placed block. */
-    private static void instanceBadge(GuiGraphicsExtractor g, int x, int y) {
+    private static void instanceBadge(GuiGraphics g, int x, int y) {
         int color = 0xFF7a9aaf;
         // Left dot
         g.fill(x, y + 1, x + 2, y + 5, color);
@@ -180,7 +180,7 @@ public final class GraphNodeWidget {
         g.fill(x + 6, y + 2, x + 10, y + 4, color);
     }
 
-    private static void renderFilterSummary(GuiGraphicsExtractor g, Font font, GraphNodeData node) {
+    private static void renderFilterSummary(GuiGraphics g, Font font, GraphNodeData node) {
         FilterSettings filter = FilterSettings.parse(node.notes());
         int x = node.x() + 5;
         int y = node.y() + 36;
@@ -190,31 +190,31 @@ public final class GraphNodeWidget {
         filterPill(g, font, x + 42, y, 38, itemCount + " item", DUTheme.TEXT_GREEN);
         filterPill(g, font, x + 84, y, 38, filter.routing() == FilterSettings.Routing.ROUND_ROBIN ? "RR" : "First", DUTheme.PROGRESS_BLUE);
         String settings = "Limit " + filter.limit() + "  Tick " + filter.tickSpeed() + "  Prio " + filter.priority();
-        g.text(font, trim(font, settings, node.width() - 10), node.x() + 5, y + 16, DUTheme.TEXT_DIM, false);
-        g.text(font, "Click wells for item picker", node.x() + 5, node.y() + node.height() - 22, DUTheme.TEXT_DIM, false);
+        g.drawString(font, trim(font, settings, node.width() - 10), node.x() + 5, y + 16, DUTheme.TEXT_DIM, false);
+        g.drawString(font, "Click wells for item picker", node.x() + 5, node.y() + node.height() - 22, DUTheme.TEXT_DIM, false);
     }
 
     /** Card body for the routing nodes: Channel shows its colour swatch, Splitter/Combine a hint. */
-    private static void renderRoutingSummary(GuiGraphicsExtractor g, Font font, GraphNodeData node) {
+    private static void renderRoutingSummary(GuiGraphics g, Font font, GraphNodeData node) {
         int x = node.x() + 24;
         int y = node.y() + 18;
         switch (node.type()) {
             case CHANNEL -> {
                 FilterSettings fs = FilterSettings.parse(node.notes());
                 int color = FilterSettings.channelColor(fs.channel());
-                g.text(font, "Stamps channel", x, y, DUTheme.TEXT_DIM, false);
+                g.drawString(font, "Stamps channel", x, y, DUTheme.TEXT_DIM, false);
                 int sx = node.x() + 5;
                 int sy = node.y() + 40;
-                g.text(font, "Channel", sx, sy, DUTheme.TEXT_DIM, false);
+                g.drawString(font, "Channel", sx, sy, DUTheme.TEXT_DIM, false);
                 if (color == 0) {
-                    g.text(font, "None", sx + 48, sy, DUTheme.TEXT_DIM, false);
+                    g.drawString(font, "None", sx + 48, sy, DUTheme.TEXT_DIM, false);
                 } else {
                     g.fill(sx + 48, sy - 1, sx + 70, sy + 8, 0xFF0B0F0A);
                     g.fill(sx + 49, sy, sx + 69, sy + 7, color);
                 }
             }
-            case SPLITTER -> g.text(font, "Round-robin split", x, y, DUTheme.PROGRESS_BLUE, false);
-            case COMBINE -> g.text(font, "Merge inputs", x, y, DUTheme.TEXT_GREEN, false);
+            case SPLITTER -> g.drawString(font, "Round-robin split", x, y, DUTheme.PROGRESS_BLUE, false);
+            case COMBINE -> g.drawString(font, "Merge inputs", x, y, DUTheme.TEXT_GREEN, false);
             default -> { }
         }
     }
@@ -227,12 +227,12 @@ public final class GraphNodeWidget {
         };
     }
 
-    private static void filterPill(GuiGraphicsExtractor g, Font font, int x, int y, int w, String text, int color) {
+    private static void filterPill(GuiGraphics g, Font font, int x, int y, int w, String text, int color) {
         DUTheme.box(g, x, y, w, 12, 0xFF14303a, color);
-        g.centeredText(font, trim(font, text, w - 4), x + w / 2, y + 3, color);
+        g.drawCenteredString(font, trim(font, text, w - 4), x + w / 2, y + 3, color);
     }
 
-    private static void renderPortDots(GuiGraphicsExtractor g, GraphNodeData node, boolean active) {
+    private static void renderPortDots(GuiGraphics g, GraphNodeData node, boolean active) {
         int inIndex = 0;
         int outIndex = 0;
         for (GraphPortData port : node.ports()) {
@@ -271,7 +271,7 @@ public final class GraphNodeWidget {
         return (int) Math.max(0L, Math.min(Integer.MAX_VALUE, progress.remainingTicks()));
     }
 
-    private static void statusDot(GuiGraphicsExtractor g, int cx, int cy, ActivityState state) {
+    private static void statusDot(GuiGraphics g, int cx, int cy, ActivityState state) {
         int color = switch (state) {
             case WORKING -> pulse(DUTheme.OK);
             case ERROR -> DUTheme.ERROR;
@@ -287,7 +287,7 @@ public final class GraphNodeWidget {
     }
 
     /** Sockets sit on the card edges; port labels are drawn OUTSIDE the node so they never overlap the body. */
-    private static void renderPorts(GuiGraphicsExtractor g, Font font, GraphNodeData node, boolean active) {
+    private static void renderPorts(GuiGraphics g, Font font, GraphNodeData node, boolean active) {
         int inIndex = 0;
         int outIndex = 0;
         for (GraphPortData port : node.ports()) {
@@ -298,17 +298,17 @@ public final class GraphNodeWidget {
                 px = node.x() - 3;
                 socket(g, px, py, active ? pulse(DUTheme.SELECTED) : DUTheme.PROGRESS_BLUE);
                 String label = port.label();
-                g.text(font, label, node.x() - 7 - font.width(label), py - 4, DUTheme.TEXT_DIM, false);
+                g.drawString(font, label, node.x() - 7 - font.width(label), py - 4, DUTheme.TEXT_DIM, false);
             } else {
                 py = portY(node, PortDirection.OUT, outIndex++);
                 px = node.x() + node.width() + 3;
                 socket(g, px, py, active ? pulse(DUTheme.SELECTED) : DUTheme.OK);
-                g.text(font, port.label(), node.x() + node.width() + 7, py - 4, DUTheme.TEXT_DIM, false);
+                g.drawString(font, port.label(), node.x() + node.width() + 7, py - 4, DUTheme.TEXT_DIM, false);
             }
         }
     }
 
-    private static void socket(GuiGraphicsExtractor g, int cx, int cy, int color) {
+    private static void socket(GuiGraphics g, int cx, int cy, int color) {
         g.fill(cx - 3, cy - 3, cx + 4, cy + 4, 0xFF020402);
         g.fill(cx - 2, cy - 2, cx + 3, cy + 3, color);
     }
@@ -331,7 +331,7 @@ public final class GraphNodeWidget {
         return direction == PortDirection.IN ? node.x() - 3 : node.x() + node.width() + 3;
     }
 
-    private static void brackets(GuiGraphicsExtractor g, int x, int y, int w, int h, int c) {
+    private static void brackets(GuiGraphics g, int x, int y, int w, int h, int c) {
         int s = 5;
         // top-left
         g.fill(x - 2, y - 2, x - 2 + s, y - 1, c);

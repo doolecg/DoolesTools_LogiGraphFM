@@ -2,11 +2,12 @@ package net.doole.doolestools.world;
 
 import net.doole.doolestools.DoolesTools;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.HolderLookup;
 import com.mojang.serialization.Codec;
-import net.minecraft.resources.Identifier;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.saveddata.SavedData;
-import net.minecraft.world.level.saveddata.SavedDataType;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -17,8 +18,8 @@ public class BlockLabelSavedData extends SavedData {
     private static final int MAX_LABEL = 48;
     public static final Codec<BlockLabelSavedData> CODEC = Codec.unboundedMap(Codec.STRING, Codec.STRING)
             .xmap(BlockLabelSavedData::new, data -> data.labels);
-    public static final SavedDataType<BlockLabelSavedData> TYPE =
-            new SavedDataType<>(DoolesTools.id(NAME), BlockLabelSavedData::new, CODEC);
+    private static final SavedData.Factory<BlockLabelSavedData> FACTORY =
+            new SavedData.Factory<>(BlockLabelSavedData::new, BlockLabelSavedData::load, null);
 
     private final Map<String, String> labels = new HashMap<>();
 
@@ -29,15 +30,34 @@ public class BlockLabelSavedData extends SavedData {
     public BlockLabelSavedData() {}
 
     public static BlockLabelSavedData get(ServerLevel level) {
-        return level.getServer().overworld().getDataStorage().computeIfAbsent(TYPE);
+        return level.getServer().overworld().getDataStorage().computeIfAbsent(FACTORY, NAME);
     }
 
-    public String getLabel(Identifier dimension, BlockPos pos) {
+    private static BlockLabelSavedData load(CompoundTag tag, HolderLookup.Provider registries) {
+        Map<String, String> labels = new HashMap<>();
+        CompoundTag values = tag.getCompound("labels");
+        for (String key : values.getAllKeys()) {
+            labels.put(key, values.getString(key));
+        }
+        return new BlockLabelSavedData(labels);
+    }
+
+    @Override
+    public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
+        CompoundTag values = new CompoundTag();
+        for (Map.Entry<String, String> entry : labels.entrySet()) {
+            values.putString(entry.getKey(), entry.getValue());
+        }
+        tag.put("labels", values);
+        return tag;
+    }
+
+    public String getLabel(ResourceLocation dimension, BlockPos pos) {
         return labels.get(key(dimension, pos));
     }
 
     /** Collects labels in {@code dimension} within {@code radius} blocks of {@code center}. */
-    public void gatherNearby(Identifier dimension, BlockPos center, int radius,
+    public void gatherNearby(ResourceLocation dimension, BlockPos center, int radius,
                              java.util.List<BlockPos> outPositions, java.util.List<String> outLabels) {
         String dimPrefix = dimension + ":";
         long radiusSqr = (long) radius * radius;
@@ -57,7 +77,7 @@ public class BlockLabelSavedData extends SavedData {
         }
     }
 
-    public void setLabel(Identifier dimension, BlockPos pos, String label) {
+    public void setLabel(ResourceLocation dimension, BlockPos pos, String label) {
         String cleaned = sanitize(label);
         String key = key(dimension, pos);
         if (cleaned.isBlank()) labels.remove(key);
@@ -78,7 +98,7 @@ public class BlockLabelSavedData extends SavedData {
         return out.toString();
     }
 
-    private static String key(Identifier dimension, BlockPos pos) {
+    private static String key(ResourceLocation dimension, BlockPos pos) {
         return dimension + ":" + pos.asLong();
     }
 }

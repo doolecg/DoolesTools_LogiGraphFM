@@ -2,7 +2,11 @@ package net.doole.doolestools.blockentity;
 
 import net.doole.doolestools.menu.NetworkBatteryMenu;
 import net.doole.doolestools.registry.ModBlockEntities;
+import net.doole.doolestools.util.ValueInput;
+import net.doole.doolestools.util.ValueOutput;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.MenuProvider;
 import net.minecraft.world.entity.player.Inventory;
@@ -10,11 +14,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.storage.ValueInput;
-import net.minecraft.world.level.storage.ValueOutput;
-import net.neoforged.neoforge.transfer.energy.EnergyHandler;
-import net.neoforged.neoforge.transfer.transaction.SnapshotJournal;
-import net.neoforged.neoforge.transfer.transaction.TransactionContext;
+import net.neoforged.neoforge.energy.IEnergyStorage;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -27,50 +27,47 @@ public class NetworkBatteryBlockEntity extends BlockEntity implements MenuProvid
 
     private int energy;
 
-    private final SnapshotJournal<Integer> journal = new SnapshotJournal<>() {
+    private final IEnergyStorage energyStorage = new IEnergyStorage() {
         @Override
-        protected Integer createSnapshot() {
-            return energy;
-        }
-
-        @Override
-        protected void revertToSnapshot(Integer snapshot) {
-            energy = snapshot;
-        }
-
-        @Override
-        protected void onRootCommit(Integer snapshot) {
-            setChanged();
-        }
-    };
-
-    private final EnergyHandler energyHandler = new EnergyHandler() {
-        @Override
-        public long getAmountAsLong() {
-            return energy;
-        }
-
-        @Override
-        public long getCapacityAsLong() {
-            return CAPACITY;
-        }
-
-        @Override
-        public int insert(int amount, TransactionContext transaction) {
+        public int receiveEnergy(int amount, boolean simulate) {
             int accepted = Math.min(Math.min(Math.max(0, amount), MAX_IO), CAPACITY - energy);
             if (accepted <= 0) return 0;
-            journal.updateSnapshots(transaction);
-            energy += accepted;
+            if (!simulate) {
+                energy += accepted;
+                setChanged();
+            }
             return accepted;
         }
 
         @Override
-        public int extract(int amount, TransactionContext transaction) {
+        public int extractEnergy(int amount, boolean simulate) {
             int extracted = Math.min(Math.min(Math.max(0, amount), MAX_IO), energy);
             if (extracted <= 0) return 0;
-            journal.updateSnapshots(transaction);
-            energy -= extracted;
+            if (!simulate) {
+                energy -= extracted;
+                setChanged();
+            }
             return extracted;
+        }
+
+        @Override
+        public int getEnergyStored() {
+            return energy;
+        }
+
+        @Override
+        public int getMaxEnergyStored() {
+            return CAPACITY;
+        }
+
+        @Override
+        public boolean canExtract() {
+            return true;
+        }
+
+        @Override
+        public boolean canReceive() {
+            return true;
         }
     };
 
@@ -78,8 +75,8 @@ public class NetworkBatteryBlockEntity extends BlockEntity implements MenuProvid
         super(ModBlockEntities.NETWORK_BATTERY.get(), pos, state);
     }
 
-    public EnergyHandler energyHandler() {
-        return energyHandler;
+    public IEnergyStorage energyStorage() {
+        return energyStorage;
     }
 
     public int energy() {
@@ -106,14 +103,22 @@ public class NetworkBatteryBlockEntity extends BlockEntity implements MenuProvid
     }
 
     @Override
-    protected void saveAdditional(ValueOutput output) {
-        super.saveAdditional(output);
+    protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+        super.saveAdditional(tag, registries);
+        saveData(new ValueOutput(tag, registries));
+    }
+
+    private void saveData(ValueOutput output) {
         output.putInt("energy", energy);
     }
 
     @Override
-    protected void loadAdditional(ValueInput input) {
-        super.loadAdditional(input);
+    protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+        super.loadAdditional(tag, registries);
+        loadData(new ValueInput(tag, registries));
+    }
+
+    private void loadData(ValueInput input) {
         energy = Math.max(0, Math.min(CAPACITY, input.getIntOr("energy", 0)));
     }
 }

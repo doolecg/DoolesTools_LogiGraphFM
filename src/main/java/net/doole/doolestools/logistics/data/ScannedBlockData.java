@@ -62,7 +62,9 @@ public record ScannedBlockData(String id,
 
     public ScannedBlockData withNetworkIdentity(String newId, String newName) {
         return new ScannedBlockData(newId, pos, dimension, newName, registryId, type, distance, inventory,
-                fluids, energy, furnace, progress, warnings, lastScannedGameTime, networkId, networkName);
+                fluids, energy, furnace, progress, warnings, lastScannedGameTime,
+                newId == null ? "" : newId,
+                newName == null || newName.isBlank() ? newId == null ? "" : newId : newName);
     }
 
     public ScannedBlockData withNetworkSource(String sourceNetworkId, String sourceNetworkName) {

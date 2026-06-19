@@ -24,7 +24,7 @@ public final class ClientPayloadHandlers {
                     && screen.context().pos().equals(payload.pos())) {
                 screen.context().setState(payload.scan(), payload.graph(), payload.lastScanTime(), payload.power());
                 screen.context().setActiveRouteIds(payload.activeRouteIds());
-                screen.context().setNetworkState(payload.networkId(), payload.networkName(), payload.accessMode(), payload.editorWhitelist(), payload.canEdit());
+                screen.context().setNetworkState(payload.networkId(), payload.networkDisplayId(), payload.networkName(), payload.accessMode(), payload.editorWhitelist(), payload.canEdit());
                 screen.context().setPowerHistory(payload.powerSupplyHistory(), payload.powerDemandHistory());
                 screen.context().setTimescaleHistory(payload.supply30m(), payload.demand30m(),
                         payload.supply1h(), payload.demand1h(), payload.supply12h(), payload.demand12h(),

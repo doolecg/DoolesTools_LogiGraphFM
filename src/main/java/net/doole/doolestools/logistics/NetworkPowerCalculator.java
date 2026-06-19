@@ -18,8 +18,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.neoforged.neoforge.capabilities.Capabilities;
-import net.neoforged.neoforge.transfer.energy.EnergyHandler;
-import net.neoforged.neoforge.transfer.transaction.Transaction;
+import net.neoforged.neoforge.energy.IEnergyStorage;
 
 import java.util.ArrayDeque;
 import java.util.HashMap;
@@ -103,16 +102,12 @@ public final class NetworkPowerCalculator {
         int interval = Math.max(1, ModServerConfig.LFM_TICK_INTERVAL.get());
         int needed = Math.max(1, (int) Math.ceil(power.demandCentiFe() * interval / 100.0));
         int pulled = 0;
-        try (Transaction tx = Transaction.openRoot()) {
-            for (Direction direction : Direction.values()) {
-                EnergyHandler handler = energyHandler(level, computerPos.relative(direction), direction.getOpposite());
-                if (handler == null) continue;
-                int extracted = handler.extract(needed - pulled, tx);
-                if (extracted > 0) pulled += extracted;
-                if (pulled >= needed) break;
-            }
-            tx.commit();
-        } catch (RuntimeException ignored) {
+        for (Direction direction : Direction.values()) {
+            IEnergyStorage handler = energyHandler(level, computerPos.relative(direction), direction.getOpposite());
+            if (handler == null) continue;
+            int extracted = handler.extractEnergy(needed - pulled, false);
+            if (extracted > 0) pulled += extracted;
+            if (pulled >= needed) break;
         }
         return Math.min(1f, pulled / (float) needed);
     }
@@ -122,20 +117,14 @@ public final class NetworkPowerCalculator {
         long extractable = 0L;
         // Sources directly adjacent to the computer (any energy provider, incl. other mods).
         for (Direction direction : Direction.values()) {
-            EnergyHandler handler = energyHandler(level, computerPos.relative(direction), direction.getOpposite());
+            IEnergyStorage handler = energyHandler(level, computerPos.relative(direction), direction.getOpposite());
             if (handler == null) continue;
-            try (Transaction tx = Transaction.openRoot()) {
-                extractable += Math.max(0, handler.extract(Integer.MAX_VALUE, tx));
-            } catch (RuntimeException ignored) {
-            }
+            extractable += Math.max(0, handler.extractEnergy(Integer.MAX_VALUE, true));
             if (extractable > Integer.MAX_VALUE / 100L) break;
         }
         // All Network Generators reachable over the wired network are summed in.
         for (NetworkGeneratorBlockEntity generator : wiredGenerators) {
-            try (Transaction tx = Transaction.openRoot()) {
-                extractable += Math.max(0, generator.energyHandler().extract(Integer.MAX_VALUE, tx));
-            } catch (RuntimeException ignored) {
-            }
+            extractable += Math.max(0, generator.energyStorage().extractEnergy(Integer.MAX_VALUE, true));
             if (extractable > Integer.MAX_VALUE / 100L) break;
         }
         return (int) Math.min(Integer.MAX_VALUE, extractable * 100L / interval);
@@ -143,23 +132,20 @@ public final class NetworkPowerCalculator {
 
     private static boolean hasRealEnergySource(ServerLevel level, BlockPos computerPos) {
         for (Direction direction : Direction.values()) {
-            EnergyHandler handler = energyHandler(level, computerPos.relative(direction), direction.getOpposite());
+            IEnergyStorage handler = energyHandler(level, computerPos.relative(direction), direction.getOpposite());
             if (handler == null) continue;
-            try (Transaction tx = Transaction.openRoot()) {
-                if (handler.extract(1, tx) > 0) return true;
-            } catch (RuntimeException ignored) {
-            }
+            if (handler.extractEnergy(1, true) > 0) return true;
         }
         return false;
     }
 
-    private static EnergyHandler energyHandler(ServerLevel level, BlockPos pos, Direction side) {
+    private static IEnergyStorage energyHandler(ServerLevel level, BlockPos pos, Direction side) {
         if (!level.hasChunkAt(pos)) return null;
         BlockState state = level.getBlockState(pos);
         BlockEntity be = level.getBlockEntity(pos);
         if (be == null) return null;
         try {
-            return Capabilities.Energy.BLOCK.getCapability(level, pos, state, be, side);
+            return Capabilities.EnergyStorage.BLOCK.getCapability(level, pos, state, be, side);
         } catch (RuntimeException ignored) {
             return null;
         }
@@ -341,7 +327,7 @@ public final class NetworkPowerCalculator {
             BlockPos neighbor = attachedPos.relative(direction);
             BlockEntity be = level.getBlockEntity(neighbor);
             if (be instanceof NetworkEndpointBlockEntity router && router.attachedPos().equals(attachedPos)) return true;
-            if (be instanceof NetworkWireBlockEntity wire && wire.hasRouter() && wire.attachedPos().equals(attachedPos)) return true;
+            if (be instanceof NetworkWireBlockEntity wire && wire.hasRouterAttachedTo(attachedPos)) return true;
         }
         return false;
     }
@@ -354,8 +340,8 @@ public final class NetworkPowerCalculator {
             BlockEntity be = level.getBlockEntity(neighbor);
             if (be instanceof NetworkEndpointBlockEntity router && router.attachedPos().equals(attachedPos)) {
                 total += router.upgradeCount(type);
-            } else if (be instanceof NetworkWireBlockEntity wire && wire.hasEndpoint() && wire.attachedPos().equals(attachedPos)) {
-                total += wire.upgradeCount(type);
+            } else if (be instanceof NetworkWireBlockEntity wire) {
+                total += wire.upgradeCountForAttachedPos(attachedPos, type);
             }
         }
         return total;

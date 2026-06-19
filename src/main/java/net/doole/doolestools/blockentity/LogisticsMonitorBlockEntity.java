@@ -5,7 +5,11 @@ import net.doole.doolestools.logistics.data.LogisticsGraphData;
 import net.doole.doolestools.logistics.data.ScannedBlockData;
 import net.doole.doolestools.menu.LogisticsMonitorMenu;
 import net.doole.doolestools.registry.ModBlockEntities;
+import net.doole.doolestools.util.ValueInput;
+import net.doole.doolestools.util.ValueOutput;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.MenuProvider;
 import net.minecraft.world.entity.player.Inventory;
@@ -14,8 +18,6 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.storage.ValueInput;
-import net.minecraft.world.level.storage.ValueOutput;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
@@ -121,15 +123,23 @@ public class LogisticsMonitorBlockEntity extends BlockEntity implements MenuProv
     // --- Persistence ---
 
     @Override
-    protected void saveAdditional(ValueOutput output) {
-        super.saveAdditional(output);
+    protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+        super.saveAdditional(tag, registries);
+        saveData(new ValueOutput(tag, registries));
+    }
+
+    private void saveData(ValueOutput output) {
         output.store("mode", Mode.CODEC, mode);
         output.storeNullable("linkedComputer", BlockPos.CODEC, linkedComputer);
     }
 
     @Override
-    protected void loadAdditional(ValueInput input) {
-        super.loadAdditional(input);
+    protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+        super.loadAdditional(tag, registries);
+        loadData(new ValueInput(tag, registries));
+    }
+
+    private void loadData(ValueInput input) {
         this.mode = input.read("mode", Mode.CODEC).orElse(Mode.FLOWGRAPH);
         this.linkedComputer = input.read("linkedComputer", BlockPos.CODEC).orElse(null);
     }

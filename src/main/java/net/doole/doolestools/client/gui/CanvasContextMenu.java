@@ -1,7 +1,7 @@
 package net.doole.doolestools.client.gui;
 
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.GuiGraphics;
 
 import java.util.List;
 
@@ -36,14 +36,14 @@ public class CanvasContextMenu {
         return mx >= x && mx < x + w && my >= y && my < y + h;
     }
 
-    public void render(GuiGraphicsExtractor g, Font font, int mouseX, int mouseY) {
+    public void render(GuiGraphics g, Font font, int mouseX, int mouseY) {
         DUTheme.box(g, x, y, w, h, 0xF0121712, DUTheme.SELECTED);
         for (int i = 0; i < items.size(); i++) {
             int ry = y + 1 + i * ROW_H;
             boolean hover = mouseX >= x && mouseX < x + w && mouseY >= ry && mouseY < ry + ROW_H;
             if (hover) g.fill(x + 1, ry, x + w - 1, ry + ROW_H, 0xFF1b2a1c);
             Item it = items.get(i);
-            g.text(font, it.label(), x + PAD + 2, ry + 3, hover ? DUTheme.SELECTED : it.color(), false);
+            g.drawString(font, it.label(), x + PAD + 2, ry + 3, hover ? DUTheme.SELECTED : it.color(), false);
         }
     }
 

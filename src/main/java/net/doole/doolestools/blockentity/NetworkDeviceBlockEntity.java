@@ -2,6 +2,8 @@ package net.doole.doolestools.blockentity;
 
 import net.doole.doolestools.item.UpgradeType;
 import net.doole.doolestools.util.NetworkIdentityUtils;
+import net.doole.doolestools.util.ValueInput;
+import net.doole.doolestools.util.ValueOutput;
 import net.doole.doolestools.world.NetworkIdentitySavedData;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
@@ -10,13 +12,9 @@ import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientGamePacketListener;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.storage.TagValueOutput;
-import net.minecraft.world.level.storage.ValueInput;
-import net.minecraft.world.level.storage.ValueOutput;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -192,16 +190,20 @@ public abstract class NetworkDeviceBlockEntity extends BlockEntity {
 
     @Override
     public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
-        TagValueOutput output = TagValueOutput.createWithContext(ProblemReporter.DISCARDING, registries);
-        saveAdditional(output);
-        return output.buildResult();
+        CompoundTag tag = new CompoundTag();
+        saveAdditional(tag, registries);
+        return tag;
     }
 
     // --- Persistence --- save keys stay byte-for-byte identical to the original files ---
 
     @Override
-    protected void saveAdditional(ValueOutput output) {
-        super.saveAdditional(output);
+    protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+        super.saveAdditional(tag, registries);
+        saveData(new ValueOutput(tag, registries));
+    }
+
+    private void saveData(ValueOutput output) {
         output.store(idKey(),     com.mojang.serialization.Codec.STRING, deviceId());
         output.putInt(numberKey(), deviceNumber());
         output.store(nameKey(),   com.mojang.serialization.Codec.STRING, deviceName == null ? "" : deviceName);
@@ -213,8 +215,12 @@ public abstract class NetworkDeviceBlockEntity extends BlockEntity {
     }
 
     @Override
-    protected void loadAdditional(ValueInput input) {
-        super.loadAdditional(input);
+    protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+        super.loadAdditional(tag, registries);
+        loadData(new ValueInput(tag, registries));
+    }
+
+    private void loadData(ValueInput input) {
         deviceId    = input.read(idKey(),     com.mojang.serialization.Codec.STRING).orElse("");
         deviceNumber = Math.max(0, input.getIntOr(numberKey(), 0));
         deviceName  = input.read(nameKey(),   com.mojang.serialization.Codec.STRING).orElse("");

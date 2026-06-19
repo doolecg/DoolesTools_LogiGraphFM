@@ -10,6 +10,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -40,22 +41,27 @@ public class NetworkRelayBlock extends Block implements EntityBlock {
     }
 
     @Override
-    protected InteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
-        if (NetworkDismantle.tryDismantle(level, pos, player, stack)) return InteractionResult.SUCCESS;
-        if (!(level.getBlockEntity(pos) instanceof NetworkRelayBlockEntity relay)) return InteractionResult.PASS;
+    protected ItemInteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
+        if (NetworkDismantle.tryDismantle(level, pos, player, stack)) return ItemInteractionResult.SUCCESS;
+        if (!(level.getBlockEntity(pos) instanceof NetworkRelayBlockEntity relay)) return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
         if (stack.getItem() == ModItems.NETWORK_SCREWDRIVER.get()) {
             if (!level.isClientSide()) removeOneUpgrade(level, pos, player, relay);
-            return InteractionResult.SUCCESS;
+            return ItemInteractionResult.SUCCESS;
         }
         UpgradeType upgradeType = ModItems.upgradeType(stack);
         if (upgradeType != null) {
-            if (!level.isClientSide() && relay.installUpgrade(upgradeType)) {
-                if (!player.getAbilities().instabuild) stack.shrink(1);
-                player.sendSystemMessage(Component.literal("Relay " + upgradeType.label + " upgrade installed (" + relay.upgradeCount(upgradeType) + "/" + NetworkRelayBlockEntity.MAX_UPGRADES_PER_TYPE + ")"));
+            if (!level.isClientSide()) {
+                if (relay.installUpgrade(upgradeType)) {
+                    if (!player.getAbilities().instabuild) stack.shrink(1);
+                    level.sendBlockUpdated(pos, state, state, 3);
+                    player.sendSystemMessage(Component.literal("Relay " + upgradeType.label + " upgrade installed (" + relay.upgradeCount(upgradeType) + "/" + NetworkRelayBlockEntity.MAX_UPGRADES_PER_TYPE + ")"));
+                } else {
+                    player.sendSystemMessage(Component.literal("Relay " + upgradeType.label + " upgrade could not be installed"));
+                }
             }
-            return InteractionResult.SUCCESS;
+            return ItemInteractionResult.SUCCESS;
         }
-        return open(level, pos, player);
+        open(level, pos, player); return ItemInteractionResult.SUCCESS;
     }
 
     private static void removeOneUpgrade(Level level, BlockPos pos, Player player, NetworkRelayBlockEntity relay) {
@@ -77,7 +83,7 @@ public class NetworkRelayBlock extends Block implements EntityBlock {
 
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
-        return open(level, pos, player);
+        open(level, pos, player); return InteractionResult.SUCCESS;
     }
 
     private static InteractionResult open(Level level, BlockPos pos, Player player) {

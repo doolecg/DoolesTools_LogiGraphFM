@@ -11,6 +11,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -93,7 +94,7 @@ public class NetworkWireBlock extends Block implements EntityBlock {
 
     @Override
     public void neighborChanged(BlockState state, Level level, BlockPos pos,
-            Block neighborBlock, net.minecraft.world.level.redstone.Orientation orientation, boolean movedByPiston) {
+            Block neighborBlock, BlockPos neighborPos, boolean movedByPiston) {
         if (!level.isClientSide() && level.getBlockEntity(pos) instanceof NetworkWireBlockEntity wire)
             wire.refreshConnections();
     }
@@ -108,8 +109,8 @@ public class NetworkWireBlock extends Block implements EntityBlock {
     }
 
     @Override
-    protected InteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
-        if (NetworkDismantle.tryDismantle(level, pos, player, stack)) return InteractionResult.SUCCESS;
+    protected ItemInteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
+        if (NetworkDismantle.tryDismantle(level, pos, player, stack)) return ItemInteractionResult.SUCCESS;
         if (stack.getItem() == ModItems.NETWORK_WIRE.get() && !state.getValue(CABLE)) {
             if (!level.isClientSide()) {
                 BlockState next = withConnections(level, pos, state.setValue(CABLE, true));
@@ -117,28 +118,33 @@ public class NetworkWireBlock extends Block implements EntityBlock {
                 if (level.getBlockEntity(pos) instanceof NetworkWireBlockEntity wire) wire.setCableInstalled(true);
                 if (!player.getAbilities().instabuild) stack.shrink(1);
             }
-            return InteractionResult.SUCCESS;
+            return ItemInteractionResult.SUCCESS;
         }
 
         // Block items must pass through so wire-to-wire placement works even when an endpoint is mounted.
-        if (stack.getItem() instanceof net.minecraft.world.item.BlockItem) return InteractionResult.PASS;
+        if (stack.getItem() instanceof net.minecraft.world.item.BlockItem) return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
 
         // Upgrades/screwdriver work on a plain right-click (no shift): vanilla skips useItemOn when the
         // player sneaks with an item in hand, so a shift-gated install could never fire.
         if (hasEndpointFlag(state) && level.getBlockEntity(pos) instanceof NetworkWireBlockEntity wire) {
-            Direction hitFace = hit.getDirection();
+            Direction hitFace = endpointFaceForHit(pos, hit, wire);
             if (stack.getItem() == ModItems.NETWORK_SCREWDRIVER.get()) {
                 if (!level.isClientSide()) removeOneUpgrade(level, pos, player, wire, hitFace);
-                return InteractionResult.SUCCESS;
+                return ItemInteractionResult.SUCCESS;
             }
             UpgradeType upgradeType = ModItems.upgradeType(stack);
             if (upgradeType != null) {
-                Direction epFace = wire.hasEndpointAt(hitFace) ? hitFace : wire.endpointFace();
-                if (!level.isClientSide() && wire.installUpgrade(upgradeType, epFace)) {
-                    if (!player.getAbilities().instabuild) stack.shrink(1);
-                    level.sendBlockUpdated(pos, state, state, 3);
+                if (!level.isClientSide()) {
+                    if (wire.installUpgrade(upgradeType, hitFace)) {
+                        if (!player.getAbilities().instabuild) stack.shrink(1);
+                        level.sendBlockUpdated(pos, state, state, 3);
+                        player.sendSystemMessage(Component.literal(upgradeType.label + " socket upgrade installed ("
+                                + wire.upgradeCount(hitFace, upgradeType) + "/" + NetworkEndpointBlockEntity.MAX_UPGRADES_PER_TYPE + ")"));
+                    } else {
+                        player.sendSystemMessage(Component.literal(upgradeType.label + " socket upgrade could not be installed"));
+                    }
                 }
-                return InteractionResult.SUCCESS;
+                return ItemInteractionResult.SUCCESS;
             }
         }
 
@@ -153,29 +159,27 @@ public class NetworkWireBlock extends Block implements EntityBlock {
                     if (!player.getAbilities().instabuild) stack.shrink(1);
                 }
             }
-            return InteractionResult.SUCCESS;
+            return ItemInteractionResult.SUCCESS;
         }
 
         // Otherwise open the endpoint screen if one is mounted.
         if (hasEndpointFlag(state)) {
-            if (level.isClientSide()) openWireEndpointScreen(level, pos, hit.getDirection());
-            return InteractionResult.SUCCESS;
+            if (level.isClientSide()) openWireEndpointScreen(level, pos, hit);
+            return ItemInteractionResult.SUCCESS;
         }
-        return InteractionResult.PASS;
+        return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
     }
 
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
         if (!hasEndpointFlag(state)) return InteractionResult.PASS;
-        if (level.isClientSide()) openWireEndpointScreen(level, pos, hit.getDirection());
+        if (level.isClientSide()) openWireEndpointScreen(level, pos, hit);
         return InteractionResult.SUCCESS;
     }
 
-    private static void openWireEndpointScreen(Level level, BlockPos pos, Direction hitFace) {
+    private static void openWireEndpointScreen(Level level, BlockPos pos, BlockHitResult hit) {
         if (!(level.getBlockEntity(pos) instanceof NetworkWireBlockEntity wire)) return;
-        // Pick the endpoint on the hit face; fall back to any available endpoint.
-        Direction useFace = wire.hasEndpointAt(hitFace) ? hitFace
-                : wire.endpointFaces().stream().findFirst().orElse(hitFace);
+        Direction useFace = endpointFaceForHit(pos, hit, wire);
         String title = wire.hasRouter() ? "Wireless Router" : wire.hasModem() ? "Cable Socket" : "Network Endpoint";
         String name = wire.hasEndpointAt(useFace) ? wire.endpointName(useFace) : "";
         String id = wire.hasEndpointAt(useFace) ? wire.formattedEndpointId(useFace) : "0000";
@@ -183,8 +187,41 @@ public class NetworkWireBlock extends Block implements EntityBlock {
         NetworkEndpointBlock.openEndpointNameScreen(pos, title, name, id, upgrades, useFace);
     }
 
+    private static Direction endpointFaceForHit(BlockPos pos, BlockHitResult hit, NetworkWireBlockEntity wire) {
+        Vec3 local = hit.getLocation().subtract(pos.getX(), pos.getY(), pos.getZ());
+        Direction containedFace = null;
+        double containedDistance = Double.MAX_VALUE;
+        for (Direction face : wire.endpointFaces()) {
+            net.minecraft.world.phys.AABB bounds = endpointShapeFor(face).bounds().inflate(0.001D);
+            if (!bounds.contains(local)) continue;
+            double distance = local.distanceToSqr((bounds.minX + bounds.maxX) * 0.5D, (bounds.minY + bounds.maxY) * 0.5D, (bounds.minZ + bounds.maxZ) * 0.5D);
+            if (distance < containedDistance) {
+                containedDistance = distance;
+                containedFace = face;
+            }
+        }
+        if (containedFace != null) return containedFace;
+
+        Direction hitFace = hit.getDirection();
+        if (wire.hasEndpointAt(hitFace)) return hitFace;
+        Direction bestFace = wire.endpointFace();
+        double bestDistance = Double.MAX_VALUE;
+        for (Direction face : wire.endpointFaces()) {
+            net.minecraft.world.phys.AABB bounds = endpointShapeFor(face).bounds();
+            double cx = (bounds.minX + bounds.maxX) * 0.5D;
+            double cy = (bounds.minY + bounds.maxY) * 0.5D;
+            double cz = (bounds.minZ + bounds.maxZ) * 0.5D;
+            double distance = local.distanceToSqr(cx, cy, cz);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                bestFace = face;
+            }
+        }
+        return bestFace;
+    }
+
     @Override
-    public boolean onDestroyedByPlayer(BlockState state, Level level, BlockPos pos, Player player, ItemStack toolStack, boolean willHarvest, FluidState fluid) {
+    public boolean onDestroyedByPlayer(BlockState state, Level level, BlockPos pos, Player player, boolean willHarvest, FluidState fluid) {
         if (level.getBlockEntity(pos) instanceof NetworkWireBlockEntity wire && wire.hasEndpoint()) {
             if (!level.isClientSide()) {
                 Direction face = endpointFaceForBreak(pos, player, wire);
@@ -195,7 +232,7 @@ public class NetworkWireBlock extends Block implements EntityBlock {
             }
             return false;
         }
-        return super.onDestroyedByPlayer(state, level, pos, player, toolStack, willHarvest, fluid);
+        return super.onDestroyedByPlayer(state, level, pos, player, willHarvest, fluid);
     }
 
     private static Direction endpointFaceForBreak(BlockPos pos, Player player, NetworkWireBlockEntity wire) {
@@ -217,10 +254,8 @@ public class NetworkWireBlock extends Block implements EntityBlock {
     }
 
     private static void removeOneUpgrade(Level level, BlockPos pos, Player player, NetworkWireBlockEntity wire, Direction hitFace) {
-        // Try the hit face first, then fall back to the first endpoint with upgrades.
-        Direction epFace = wire.hasEndpointAt(hitFace) ? hitFace : wire.endpointFace();
         for (UpgradeType type : UpgradeType.values()) {
-            if (!wire.removeUpgrade(type, epFace)) continue;
+            if (!wire.removeUpgrade(type, hitFace)) continue;
             giveOrDrop(level, pos, player, type);
             player.sendSystemMessage(Component.literal(type.label + " upgrade removed"));
             return;
@@ -293,13 +328,7 @@ public class NetworkWireBlock extends Block implements EntityBlock {
     @Nullable
     public static Direction endpointInstallFace(BlockGetter level, BlockPos pos, Direction clickedFace) {
         if (isEndpointTarget(level, pos.relative(clickedFace))) return clickedFace;
-        Direction found = null;
-        for (Direction direction : Direction.values()) {
-            if (!isEndpointTarget(level, pos.relative(direction))) continue;
-            if (found != null) return null;
-            found = direction;
-        }
-        return found == null ? clickedFace : found;
+        return null;
     }
 
     private static boolean isEndpointTarget(BlockGetter level, BlockPos pos) {

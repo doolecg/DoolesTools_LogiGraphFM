@@ -10,9 +10,9 @@ import net.doole.doolestools.registry.ModItems;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.ShapeRenderer;
-import net.minecraft.client.renderer.rendertype.RenderTypes;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.InteractionHand;
@@ -20,6 +20,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import net.minecraft.world.level.block.Block;
 import net.neoforged.api.distmarker.Dist;
@@ -32,7 +33,8 @@ public final class NetworkPlacementPreviewEvents {
     private NetworkPlacementPreviewEvents() {}
 
     @SubscribeEvent
-    public static void onRenderLevel(RenderLevelStageEvent.AfterTranslucentBlocks event) {
+    public static void onRenderLevel(RenderLevelStageEvent event) {
+        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_TRANSLUCENT_BLOCKS) return;
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
         if (player == null || mc.level == null) return;
@@ -43,13 +45,13 @@ public final class NetworkPlacementPreviewEvents {
         if (preview == null) return;
 
         Camera camera = mc.gameRenderer.getMainCamera();
-        Vec3 cam = camera.position();
+        Vec3 cam = camera.getPosition();
         PoseStack pose = event.getPoseStack();
         MultiBufferSource.BufferSource buffers = mc.renderBuffers().bufferSource();
-        VertexConsumer lines = buffers.getBuffer(RenderTypes.lines());
-        ShapeRenderer.renderShape(pose, lines, endpointShape(preview.face()),
-                preview.pos().getX() - cam.x, preview.pos().getY() - cam.y, preview.pos().getZ() - cam.z, 0xCC3FD2E0, 2.0f);
-        buffers.endBatch(RenderTypes.lines());
+        VertexConsumer lines = buffers.getBuffer(RenderType.lines());
+        AABB box = endpointShape(preview.face()).bounds().move(preview.pos()).move(-cam.x, -cam.y, -cam.z);
+        LevelRenderer.renderLineBox(pose, lines, box, 0.25f, 0.82f, 0.88f, 0.8f);
+        buffers.endBatch(RenderType.lines());
     }
 
     private static PlacementPreview previewForHit(Minecraft mc, BlockHitResult hit) {

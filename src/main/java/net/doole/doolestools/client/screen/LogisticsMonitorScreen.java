@@ -11,8 +11,7 @@ import net.doole.doolestools.logistics.data.LogisticsGraphData;
 import net.doole.doolestools.logistics.data.ScannedBlockData;
 import net.doole.doolestools.logistics.data.WarningData;
 import net.doole.doolestools.menu.LogisticsMonitorMenu;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -50,7 +49,9 @@ public class LogisticsMonitorScreen extends AbstractContainerScreen<LogisticsMon
     private int contentX, contentY, contentW, contentH;
 
     public LogisticsMonitorScreen(LogisticsMonitorMenu menu, Inventory inv, Component title) {
-        super(menu, inv, title, MIN_GUI_W, MIN_GUI_H);
+        super(menu, inv, title);
+        this.imageWidth = MIN_GUI_W;
+        this.imageHeight = MIN_GUI_H;
     }
 
     public void applyState(boolean linked, BlockPos computerPos, int mode,
@@ -100,7 +101,7 @@ public class LogisticsMonitorScreen extends AbstractContainerScreen<LogisticsMon
     }
 
     @Override
-    public void extractBackground(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick) {
+    protected void renderBg(GuiGraphics g, float partialTick, int mouseX, int mouseY) {
         int lx = leftPos, ty = topPos;
 
         DUTheme.bezel(g, lx, ty, guiW, guiH);
@@ -115,11 +116,11 @@ public class LogisticsMonitorScreen extends AbstractContainerScreen<LogisticsMon
         // Content panel.
         DUTheme.box(g, contentX, contentY - 12, contentW, contentH + 12, DUTheme.PANEL, DUTheme.PANEL_BORDER);
         g.fill(contentX + 1, contentY - 11, contentX + contentW - 1, contentY - 1, DUTheme.PANEL_HEADER);
-        g.text(font, "MODE: " + MODE_NAMES[Math.floorMod(mode, MODE_NAMES.length)], contentX + 4, contentY - 10, DUTheme.TEXT_GREEN, false);
+        g.drawString(font, "MODE: " + MODE_NAMES[Math.floorMod(mode, MODE_NAMES.length)], contentX + 4, contentY - 10, DUTheme.TEXT_GREEN, false);
 
         if (!linked) {
-            g.centeredText(font, "NO COMPUTER LINKED", lx + guiW / 2, ty + guiH / 2 - 8, DUTheme.WARN);
-            g.centeredText(font, "Place near a Logistics Computer", lx + guiW / 2, ty + guiH / 2 + 4, DUTheme.TEXT_DIM);
+            g.drawCenteredString(font, "NO COMPUTER LINKED", lx + guiW / 2, ty + guiH / 2 - 8, DUTheme.WARN);
+            g.drawCenteredString(font, "Place near a Logistics Computer", lx + guiW / 2, ty + guiH / 2 + 4, DUTheme.TEXT_DIM);
         } else {
             switch (Math.floorMod(mode, MODE_NAMES.length)) {
                 case 0 -> { if (canvasWidget != null) canvasWidget.render(g, font, -1000, -1000); }
@@ -132,29 +133,37 @@ public class LogisticsMonitorScreen extends AbstractContainerScreen<LogisticsMon
         String link = linked
                 ? "Linked Computer: X " + computerPos.getX() + " Y " + computerPos.getY() + " Z " + computerPos.getZ()
                 : "Linked Computer: none";
-        g.text(font, link, lx + guiW - 12 - font.width(link), ty + guiH - 22, DUTheme.TEXT_DIM, false);
+        link = trimToWidth(link, Math.max(80, guiW - 144));
+        g.drawString(font, link, lx + guiW - 12 - font.width(link), ty + guiH - 22, DUTheme.TEXT_DIM, false);
     }
 
-    private void renderHeader(GuiGraphicsExtractor g, int lx, int ty) {
+    private String trimToWidth(String text, int maxWidth) {
+        if (font.width(text) <= maxWidth) return text;
+        String ellipsis = "...";
+        if (maxWidth <= font.width(ellipsis)) return font.plainSubstrByWidth(text, maxWidth);
+        return font.plainSubstrByWidth(text, maxWidth - font.width(ellipsis)) + ellipsis;
+    }
+
+    private void renderHeader(GuiGraphics g, int lx, int ty) {
         DUTheme.box(g, lx + 10, ty + 8, guiW - 20, 28, DUTheme.PANEL, DUTheme.PANEL_BORDER);
         g.fill(lx + 14, ty + 12, lx + 34, ty + 32, DUTheme.PROGRESS_BLUE);
         DUTheme.outline(g, lx + 14, ty + 12, 20, 20, 0xFF0a2a3a);
-        g.text(font, "D", lx + 21, ty + 18, 0xFF06140a, false);
+        g.drawString(font, "D", lx + 21, ty + 18, 0xFF06140a, false);
 
-        g.text(font, "DOOLE'S UTILS ", lx + 40, ty + 13, DUTheme.TEXT_GREEN, false);
+        g.drawString(font, "DOOLE'S UTILS ", lx + 40, ty + 13, DUTheme.TEXT_GREEN, false);
         int w1 = font.width("DOOLE'S UTILS ");
-        g.text(font, "// LOGIGRAPH", lx + 40 + w1, ty + 13, DUTheme.TEXT_DIM, false);
-        g.text(font, "LOGISTICS MONITOR", lx + 40, ty + 24, DUTheme.TEXT_DIM, false);
+        g.drawString(font, "// LOGIGRAPH", lx + 40 + w1, ty + 13, DUTheme.TEXT_DIM, false);
+        g.drawString(font, "LOGISTICS MONITOR", lx + 40, ty + 24, DUTheme.TEXT_DIM, false);
 
         String status = linked ? "MIRRORING" : "NO LINK";
         int statusColor = linked ? DUTheme.OK : DUTheme.WARN;
         int sx = lx + guiW - 112;
         DUTheme.dot(g, sx - 8, ty + 13, statusColor);
-        g.text(font, status, sx, ty + 12, statusColor, false);
-        g.text(font, LocalTime.now().format(CLOCK), sx, ty + 24, DUTheme.TEXT_DIM, false);
+        g.drawString(font, status, sx, ty + 12, statusColor, false);
+        g.drawString(font, LocalTime.now().format(CLOCK), sx, ty + 24, DUTheme.TEXT_DIM, false);
     }
 
-    private void renderWarnings(GuiGraphicsExtractor g, int x, int y, int w) {
+    private void renderWarnings(GuiGraphics g, int x, int y, int w) {
         List<WarningData> graphWarnings = WarningGenerator.forGraph(ctx != null ? ctx.graph() : LogisticsGraphData.EMPTY, scanById);
         int cy = y;
         boolean any = false;
@@ -162,7 +171,7 @@ public class LogisticsMonitorScreen extends AbstractContainerScreen<LogisticsMon
         for (ScannedBlockData s : scan) {
             for (WarningData wd : s.warnings()) {
                 if (wd.severity() == WarningData.Severity.INFO) continue;
-                g.text(font, "- " + s.blockName() + ": " + wd.message(), x, cy, color(wd), false);
+                g.drawString(font, "- " + s.blockName() + ": " + wd.message(), x, cy, color(wd), false);
                 cy += 11;
                 any = true;
                 if (cy > bottom) break;
@@ -171,16 +180,16 @@ public class LogisticsMonitorScreen extends AbstractContainerScreen<LogisticsMon
         }
         for (WarningData wd : graphWarnings) {
             if (cy > bottom) break;
-            g.text(font, "- " + wd.message(), x, cy, color(wd), false);
+            g.drawString(font, "- " + wd.message(), x, cy, color(wd), false);
             cy += 11;
             any = true;
         }
         if (!any) {
-            g.text(font, "No active warnings.", x, y, DUTheme.OK, false);
+            g.drawString(font, "No active warnings.", x, y, DUTheme.OK, false);
         }
     }
 
-    private void renderStorage(GuiGraphicsExtractor g, int x, int y, int w) {
+    private void renderStorage(GuiGraphics g, int x, int y, int w) {
         int cy = y;
         boolean any = false;
         int bottom = contentY + contentH - 6;
@@ -188,16 +197,16 @@ public class LogisticsMonitorScreen extends AbstractContainerScreen<LogisticsMon
         for (ScannedBlockData s : scan) {
             if (!s.inventory().hasData()) continue;
             int pct = s.inventory().fillPercent();
-            g.text(font, clip(s.blockName(), 22), x, cy, DUTheme.TEXT, false);
+            g.drawString(font, clip(s.blockName(), 22), x, cy, DUTheme.TEXT, false);
             DUTheme.progress(g, barX, cy, 100, 8, pct / 100f,
                     pct >= 100 ? DUTheme.ERROR : pct >= 85 ? DUTheme.WARN : DUTheme.OK);
-            g.text(font, pct + "%", barX + 106, cy, DUTheme.TEXT_DIM, false);
+            g.drawString(font, pct + "%", barX + 106, cy, DUTheme.TEXT_DIM, false);
             cy += 12;
             any = true;
             if (cy > bottom) break;
         }
         if (!any) {
-            g.text(font, "No storage data. Scan from the computer.", x, y, DUTheme.TEXT_DIM, false);
+            g.drawString(font, "No storage data. Scan from the computer.", x, y, DUTheme.TEXT_DIM, false);
         }
     }
 
@@ -208,32 +217,32 @@ public class LogisticsMonitorScreen extends AbstractContainerScreen<LogisticsMon
     }
 
     @Override
-    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-        if (overCanvas(event.x(), event.y())) {
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (overCanvas(mouseX, mouseY)) {
             panning = true;
-            lastMouseX = event.x();
-            lastMouseY = event.y();
+            lastMouseX = mouseX;
+            lastMouseY = mouseY;
             return true;
         }
-        return super.mouseClicked(event, doubleClick);
+        return super.mouseClicked(mouseX, mouseY, button);
     }
 
     @Override
-    public boolean mouseDragged(MouseButtonEvent event, double dx, double dy) {
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double dx, double dy) {
         if (panning && ctx != null) {
-            ctx.panX += (event.x() - lastMouseX);
-            ctx.panY += (event.y() - lastMouseY);
-            lastMouseX = event.x();
-            lastMouseY = event.y();
+            ctx.panX += (mouseX - lastMouseX);
+            ctx.panY += (mouseY - lastMouseY);
+            lastMouseX = mouseX;
+            lastMouseY = mouseY;
             return true;
         }
-        return super.mouseDragged(event, dx, dy);
+        return super.mouseDragged(mouseX, mouseY, button, dx, dy);
     }
 
     @Override
-    public boolean mouseReleased(MouseButtonEvent event) {
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
         panning = false;
-        return super.mouseReleased(event);
+        return super.mouseReleased(mouseX, mouseY, button);
     }
 
     @Override
@@ -262,7 +271,7 @@ public class LogisticsMonitorScreen extends AbstractContainerScreen<LogisticsMon
     }
 
     @Override
-    protected void extractLabels(GuiGraphicsExtractor g, int mouseX, int mouseY) { }
+    protected void renderLabels(GuiGraphics g, int mouseX, int mouseY) { }
 
     @Override
     public boolean isPauseScreen() {

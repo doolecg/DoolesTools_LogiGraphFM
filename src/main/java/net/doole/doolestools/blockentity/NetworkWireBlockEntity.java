@@ -3,6 +3,8 @@ package net.doole.doolestools.blockentity;
 import net.doole.doolestools.item.UpgradeType;
 import net.doole.doolestools.registry.ModBlockEntities;
 import net.doole.doolestools.block.NetworkWireBlock;
+import net.doole.doolestools.util.ValueInput;
+import net.doole.doolestools.util.ValueOutput;
 import net.doole.doolestools.world.NetworkIdentitySavedData;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -12,12 +14,8 @@ import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientGamePacketListener;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.storage.TagValueOutput;
-import net.minecraft.world.level.storage.ValueInput;
-import net.minecraft.world.level.storage.ValueOutput;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -65,9 +63,9 @@ public class NetworkWireBlockEntity extends BlockEntity {
 
     @Override
     public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
-        TagValueOutput output = TagValueOutput.createWithContext(ProblemReporter.DISCARDING, registries);
-        saveAdditional(output);
-        return output.buildResult();
+        CompoundTag tag = new CompoundTag();
+        saveAdditional(tag, registries);
+        return tag;
     }
 
     // ── Wire identity ─────────────────────────────────────────────────────────
@@ -376,8 +374,12 @@ public class NetworkWireBlockEntity extends BlockEntity {
     // ── Persistence ───────────────────────────────────────────────────────────
 
     @Override
-    protected void saveAdditional(ValueOutput output) {
-        super.saveAdditional(output);
+    protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+        super.saveAdditional(tag, registries);
+        saveData(new ValueOutput(tag, registries));
+    }
+
+    private void saveData(ValueOutput output) {
         output.putInt("laneCount", laneCount());
         output.putInt("connectionMask", connectionMask);
         output.putBoolean("cableInstalled", cableInstalled);
@@ -399,8 +401,12 @@ public class NetworkWireBlockEntity extends BlockEntity {
     }
 
     @Override
-    protected void loadAdditional(ValueInput input) {
-        super.loadAdditional(input);
+    protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+        super.loadAdditional(tag, registries);
+        loadData(new ValueInput(tag, registries));
+    }
+
+    private void loadData(ValueInput input) {
         laneCount = Math.max(1, Math.min(MAX_LANES, input.getIntOr("laneCount", 1)));
         connectionMask = input.getIntOr("connectionMask", 0);
         cableInstalled = input.getBooleanOr("cableInstalled", true);

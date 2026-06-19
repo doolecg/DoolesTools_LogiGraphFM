@@ -3,9 +3,10 @@ package net.doole.doolestools.world;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.doole.doolestools.DoolesTools;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.saveddata.SavedData;
-import net.minecraft.world.level.saveddata.SavedDataType;
 
 import java.util.Locale;
 
@@ -18,8 +19,8 @@ public class NetworkIdentitySavedData extends SavedData {
             Codec.INT.fieldOf("nextEndpointNumber").forGetter(data -> data.nextEndpointNumber)
     ).apply(inst, NetworkIdentitySavedData::new));
 
-    public static final SavedDataType<NetworkIdentitySavedData> TYPE =
-            new SavedDataType<>(DoolesTools.id(NAME), NetworkIdentitySavedData::new, CODEC);
+    private static final SavedData.Factory<NetworkIdentitySavedData> FACTORY =
+            new SavedData.Factory<>(NetworkIdentitySavedData::new, NetworkIdentitySavedData::load, null);
 
     private int nextNetworkNumber = 1;
     private int nextEndpointNumber = 1;
@@ -32,7 +33,18 @@ public class NetworkIdentitySavedData extends SavedData {
     }
 
     public static NetworkIdentitySavedData get(ServerLevel level) {
-        return level.getServer().overworld().getDataStorage().computeIfAbsent(TYPE);
+        return level.getServer().overworld().getDataStorage().computeIfAbsent(FACTORY, NAME);
+    }
+
+    private static NetworkIdentitySavedData load(CompoundTag tag, HolderLookup.Provider registries) {
+        return new NetworkIdentitySavedData(tag.getInt("nextNetworkNumber"), tag.getInt("nextEndpointNumber"));
+    }
+
+    @Override
+    public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
+        tag.putInt("nextNetworkNumber", nextNetworkNumber);
+        tag.putInt("nextEndpointNumber", nextEndpointNumber);
+        return tag;
     }
 
     public int allocateNetworkNumber() {

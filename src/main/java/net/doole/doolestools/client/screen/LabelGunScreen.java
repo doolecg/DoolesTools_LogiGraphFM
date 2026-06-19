@@ -6,10 +6,9 @@ import net.doole.doolestools.client.gui.DUTheme;
 import net.doole.doolestools.client.gui.GuiSprites;
 import net.doole.doolestools.client.gui.TerminalButton;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.input.KeyEvent;
 import net.minecraft.network.chat.Component;
 
 /**
@@ -66,26 +65,28 @@ public class LabelGunScreen extends Screen {
     }
 
     @Override
-    public void extractBackground(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick) {
+    public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        g.fill(0, 0, width, height, 0xEE000000);
         int panelH = panelH();
         int x = (width - PANEL_W) / 2;
         int y = (height - panelH) / 2;
         DUTheme.bezel(g, x, y, PANEL_W, panelH);
         DUTheme.box(g, x + 6, y + 6, PANEL_W - 12, panelH - 12, DUTheme.SCREEN, DUTheme.PANEL_BORDER);
-        g.text(font, "LABEL GUN", x + 12, y + 12, DUTheme.TEXT_GREEN, false);
-        g.text(font, "Sneak + right-click to apply", x + 12, y + 22, DUTheme.TEXT_DIM, false);
+        g.drawString(font, "LABEL GUN", x + 12, y + 12, DUTheme.TEXT_GREEN, false);
+        g.drawString(font, "Sneak + right-click to apply", x + 12, y + 22, DUTheme.TEXT_DIM, false);
         if (!ClientPrefs.recentLabels.isEmpty()) {
-            g.text(font, "Recent (click to load):", x + 12, y + 82, DUTheme.TEXT_DIM, false);
+            g.drawString(font, "Recent (click to load):", x + 12, y + 82, DUTheme.TEXT_DIM, false);
         }
+        super.render(g, mouseX, mouseY, partialTick);
     }
 
     @Override
-    public boolean keyPressed(KeyEvent event) {
-        if (event.key() == 257 || event.key() == 335) {
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (keyCode == 257 || keyCode == 335) {
             saveAndClose();
             return true;
         }
-        return super.keyPressed(event);
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     private void saveAndClose() {

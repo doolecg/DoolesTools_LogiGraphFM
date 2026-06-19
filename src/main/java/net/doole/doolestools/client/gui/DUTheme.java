@@ -1,6 +1,6 @@
 package net.doole.doolestools.client.gui;
 
-import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.GuiGraphics;
 
 /**
  * Shared palette and primitive draw helpers for the LogiGraph terminal GUI. Colours match the
@@ -40,12 +40,12 @@ public final class DUTheme {
     public static final int DISABLED = 0xFF6a7066;
 
     /** Filled rectangle with a 1px border. */
-    public static void box(GuiGraphicsExtractor g, int x, int y, int w, int h, int fill, int border) {
+    public static void box(GuiGraphics g, int x, int y, int w, int h, int fill, int border) {
         g.fill(x, y, x + w, y + h, fill);
         outline(g, x, y, w, h, border);
     }
 
-    public static void outline(GuiGraphicsExtractor g, int x, int y, int w, int h, int color) {
+    public static void outline(GuiGraphics g, int x, int y, int w, int h, int color) {
         g.fill(x, y, x + w, y + 1, color);
         g.fill(x, y + h - 1, x + w, y + h, color);
         g.fill(x, y, x + 1, y + h, color);
@@ -56,7 +56,7 @@ public final class DUTheme {
      * Vanilla-style recessed inventory slot well, using the vanilla slot colours. Pass the slot's
      * pixel position minus 1 ({@code slotX - 1, slotY - 1}); the well is 18x18 to frame a 16x16 slot.
      */
-    public static void slotWell(GuiGraphicsExtractor g, int x, int y) {
+    public static void slotWell(GuiGraphics g, int x, int y) {
         g.fill(x, y, x + 18, y + 18, 0xFF12160F);
         g.fill(x, y, x + 18, y + 1, 0xFF000000);
         g.fill(x, y, x + 1, y + 18, 0xFF000000);
@@ -65,7 +65,7 @@ public final class DUTheme {
     }
 
     /** Chunky bezel with bevel highlight/shadow. */
-    public static void bezel(GuiGraphicsExtractor g, int x, int y, int w, int h) {
+    public static void bezel(GuiGraphics g, int x, int y, int w, int h) {
         g.fill(x, y, x + w, y + h, BEZEL);
         g.fill(x, y, x + w, y + 2, BEZEL_LIGHT);
         g.fill(x, y, x + 2, y + h, BEZEL_LIGHT);
@@ -73,20 +73,20 @@ public final class DUTheme {
         g.fill(x + w - 2, y, x + w, y + h, BEZEL_DARK);
     }
 
-    public static void screw(GuiGraphicsExtractor g, int cx, int cy) {
+    public static void screw(GuiGraphics g, int cx, int cy) {
         g.fill(cx - 3, cy - 3, cx + 3, cy + 3, SCREW);
         g.fill(cx - 3, cy - 3, cx + 3, cy - 2, SCREW_HI);
         g.fill(cx - 1, cy - 1, cx + 1, cy + 1, SCREW_HI);
     }
 
     /** Status indicator dot. */
-    public static void dot(GuiGraphicsExtractor g, int x, int y, int color) {
+    public static void dot(GuiGraphics g, int x, int y, int color) {
         g.fill(x, y + 1, x + 5, y + 4, color);
         g.fill(x + 1, y, x + 4, y + 5, color);
     }
 
     /** Horizontal progress bar with fraction 0..1. */
-    public static void progress(GuiGraphicsExtractor g, int x, int y, int w, int h, float frac, int color) {
+    public static void progress(GuiGraphics g, int x, int y, int w, int h, float frac, int color) {
         frac = Math.max(0f, Math.min(1f, frac));
         g.fill(x, y, x + w, y + h, 0xFF06090a);
         outline(g, x, y, w, h, PANEL_BORDER);
@@ -98,11 +98,11 @@ public final class DUTheme {
 
     /**
      * Draws a 1px line as a handful of axis-aligned {@code fill} rectangles rather than one quad per
-     * pixel (GuiGraphicsExtractor has no native line primitive). For the near-horizontal/near-vertical
+     * pixel (GuiGraphics has no native line primitive). For the near-horizontal/near-vertical
      * segments that make up the graph's Bezier links this collapses dozens of draws into a couple,
      * which is the difference between a smooth canvas and a stutter once many links are on screen.
      */
-    public static void line(GuiGraphicsExtractor g, int x1, int y1, int x2, int y2, int color) {
+    public static void line(GuiGraphics g, int x1, int y1, int x2, int y2, int color) {
         if (y1 == y2) {
             g.fill(Math.min(x1, x2), y1, Math.max(x1, x2) + 1, y1 + 1, color);
             return;
@@ -155,7 +155,7 @@ public final class DUTheme {
      * Marching-ants dashed rectangle border. {@code phase} animates the dash offset (e.g. derived
      * from {@code System.currentTimeMillis()}). {@code dash}/{@code gap} are in pixels.
      */
-    public static void dashedRect(GuiGraphicsExtractor g, int x, int y, int w, int h, int color, int dash, int gap, int phase) {
+    public static void dashedRect(GuiGraphics g, int x, int y, int w, int h, int color, int dash, int gap, int phase) {
         int period = Math.max(1, dash + gap);
         int perimeter = 2 * (w + h);
         for (int d = 0; d < perimeter; d++) {
@@ -185,13 +185,13 @@ public final class DUTheme {
      * Draws text with a subtle CRT-style glow: a faint translucent halo of the same colour behind a
      * crisp foreground. Cheap (4 offset passes), so reserve it for prominent labels.
      */
-    public static void glowText(GuiGraphicsExtractor g, net.minecraft.client.gui.Font font, String s, int x, int y, int color) {
+    public static void glowText(GuiGraphics g, net.minecraft.client.gui.Font font, String s, int x, int y, int color) {
         int glow = (color & 0x00FFFFFF) | 0x55000000;
-        g.text(font, s, x + 1, y, glow, false);
-        g.text(font, s, x - 1, y, glow, false);
-        g.text(font, s, x, y + 1, glow, false);
-        g.text(font, s, x, y - 1, glow, false);
-        g.text(font, s, x, y, color, false);
+        g.drawString(font, s, x + 1, y, glow, false);
+        g.drawString(font, s, x - 1, y, glow, false);
+        g.drawString(font, s, x, y + 1, glow, false);
+        g.drawString(font, s, x, y - 1, glow, false);
+        g.drawString(font, s, x, y, color, false);
     }
 
     public static int statusColor(String kind) {
@@ -240,7 +240,7 @@ public final class DUTheme {
     }
 
     /** Horizontal battery bar: positive-terminal bump on the left, interior fill left→right, 4 segment dividers. */
-    public static void horizBattery(GuiGraphicsExtractor g, int x, int y, int w, int h, float frac, int color) {
+    public static void horizBattery(GuiGraphics g, int x, int y, int w, int h, float frac, int color) {
         int bumpH = 6, bumpW = 3;
         int bumpY = y + (h - bumpH) / 2;
         g.fill(x - bumpW, bumpY, x, bumpY + bumpH, PANEL_BORDER);
@@ -257,7 +257,7 @@ public final class DUTheme {
     }
 
     /** Vertical battery bar: positive-terminal bump on top, interior fill bottom→top, 2 segment dividers. */
-    public static void vertBattery(GuiGraphicsExtractor g, int bx, int by, int bw, int bh, float frac, int color) {
+    public static void vertBattery(GuiGraphics g, int bx, int by, int bw, int bh, float frac, int color) {
         int bumpW = Math.max(2, bw / 2), bumpH = 2;
         int bumpX = bx + (bw - bumpW) / 2;
         g.fill(bumpX, by - bumpH, bumpX + bumpW, by, PANEL_BORDER);
@@ -273,14 +273,14 @@ public final class DUTheme {
     }
 
     /** Panel box with a coloured header strip and glow-text title. */
-    public static void panelWithHeader(GuiGraphicsExtractor g, net.minecraft.client.gui.Font font, int x, int y, int w, int h, String title) {
+    public static void panelWithHeader(GuiGraphics g, net.minecraft.client.gui.Font font, int x, int y, int w, int h, String title) {
         box(g, x, y, w, h, PANEL, PANEL_BORDER);
         g.fill(x + 1, y + 1, x + w - 1, y + 11, PANEL_HEADER);
         glowText(g, font, title, x + 4, y + 2, TEXT_GREEN);
     }
 
     /** Full terminal frame: bezel, four corner screws, inner screen box. */
-    public static void frame(GuiGraphicsExtractor g, int x, int y, int w, int h) {
+    public static void frame(GuiGraphics g, int x, int y, int w, int h) {
         bezel(g, x, y, w, h);
         screw(g, x + 8, y + 8);
         screw(g, x + w - 8, y + 8);

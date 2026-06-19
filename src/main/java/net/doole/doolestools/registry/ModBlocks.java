@@ -54,35 +54,35 @@ public final class ModBlocks {
     // --- Block registrations ---
 
     public static final DeferredBlock<LogisticsComputerBlock> LOGISTICS_COMPUTER =
-            BLOCKS.registerBlock("logistics_computer", LogisticsComputerBlock::new, heavyMachine());
+            BLOCKS.registerBlock("logistics_computer", LogisticsComputerBlock::new, heavyMachine().get());
 
     public static final DeferredBlock<LogisticsMonitorBlock> LOGISTICS_MONITOR =
-            BLOCKS.registerBlock("logistics_monitor", LogisticsMonitorBlock::new, monitorPanel());
+            BLOCKS.registerBlock("logistics_monitor", LogisticsMonitorBlock::new, monitorPanel().get());
 
     public static final DeferredBlock<LogiGraphWallMonitorBlock> LOGIGRAPH_WALL_MONITOR =
-            BLOCKS.registerBlock("logigraph_wall_monitor", LogiGraphWallMonitorBlock::new, monitorPanel());
+            BLOCKS.registerBlock("logigraph_wall_monitor", LogiGraphWallMonitorBlock::new, monitorPanel().get());
 
     public static final DeferredBlock<WirelessRouterBlock> WIRELESS_ROUTER =
-            BLOCKS.registerBlock("wireless_router", WirelessRouterBlock::new, lightDevice());
+            BLOCKS.registerBlock("wireless_router", WirelessRouterBlock::new, lightDevice().get());
 
     public static final DeferredBlock<WirelessDongleBlock> WIRELESS_DONGLE =
-            BLOCKS.registerBlock("wireless_dongle", WirelessDongleBlock::new, lightDevice());
+            BLOCKS.registerBlock("wireless_dongle", WirelessDongleBlock::new, lightDevice().get());
 
     public static final DeferredBlock<NetworkModemBlock> NETWORK_MODEM =
-            BLOCKS.registerBlock("network_modem", NetworkModemBlock::new, lightDevice());
+            BLOCKS.registerBlock("network_modem", NetworkModemBlock::new, lightDevice().get());
 
     public static final DeferredBlock<NetworkWireBlock> NETWORK_WIRE =
-            BLOCKS.registerBlock("network_wire", NetworkWireBlock::new, wire());
+            BLOCKS.registerBlock("network_wire", NetworkWireBlock::new, wire().get());
 
     public static final DeferredBlock<NetworkRelayBlock> NETWORK_RELAY =
-            BLOCKS.registerBlock("network_relay", NetworkRelayBlock::new, relay());
+            BLOCKS.registerBlock("network_relay", NetworkRelayBlock::new, relay().get());
 
     public static final DeferredBlock<NetworkGeneratorBlock> NETWORK_GENERATOR =
-            BLOCKS.registerBlock("network_generator", NetworkGeneratorBlock::new, heavyMachine());
+            BLOCKS.registerBlock("network_generator", NetworkGeneratorBlock::new, heavyMachine().get());
 
     public static final DeferredBlock<NetworkBatteryBlock> NETWORK_BATTERY =
-            BLOCKS.registerBlock("network_battery", NetworkBatteryBlock::new, heavyMachine());
+            BLOCKS.registerBlock("network_battery", NetworkBatteryBlock::new, heavyMachine().get());
 
     public static final DeferredBlock<NetworkSwitchboardBlock> NETWORK_SWITCHBOARD =
-            BLOCKS.registerBlock("network_switchboard", NetworkSwitchboardBlock::new, heavyMachine());
+            BLOCKS.registerBlock("network_switchboard", NetworkSwitchboardBlock::new, heavyMachine().get());
 }

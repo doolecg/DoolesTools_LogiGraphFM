@@ -11,6 +11,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
@@ -86,7 +87,7 @@ public abstract class NetworkEndpointBlock extends DirectionalBlock implements E
 
     @Override
     public void neighborChanged(BlockState state, Level level, BlockPos pos,
-            Block neighborBlock, net.minecraft.world.level.redstone.Orientation orientation, boolean movedByPiston) {
+            Block neighborBlock, BlockPos neighborPos, boolean movedByPiston) {
         if (!level.isClientSide()) {
             boolean wired = !(this instanceof NetworkModemBlock) && hasAdjacentWire(level, pos);
             if (state.getValue(WIRE_CONNECTED) != wired)
@@ -140,27 +141,31 @@ public abstract class NetworkEndpointBlock extends DirectionalBlock implements E
     // is sneaking with an item in hand, so a shift-gated install can never fire. Plain right-click with
     // a card installs; plain right-click with the screwdriver removes; anything else opens the screen.
     @Override
-    protected InteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
-        if (NetworkDismantle.tryDismantle(level, pos, player, stack)) return InteractionResult.SUCCESS;
-        if (!(level.getBlockEntity(pos) instanceof NetworkEndpointBlockEntity endpoint)) return InteractionResult.PASS;
+    protected ItemInteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
+        if (NetworkDismantle.tryDismantle(level, pos, player, stack)) return ItemInteractionResult.SUCCESS;
+        if (!(level.getBlockEntity(pos) instanceof NetworkEndpointBlockEntity endpoint)) return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
         if (stack.getItem() == ModItems.NETWORK_SCREWDRIVER.get()) {
             if (!level.isClientSide()) removeOneUpgrade(level, pos, player, endpoint);
-            return InteractionResult.SUCCESS;
+            return ItemInteractionResult.SUCCESS;
         }
         UpgradeType upgradeType = ModItems.upgradeType(stack);
         if (upgradeType != null) {
-            if (!level.isClientSide() && endpoint.installUpgrade(upgradeType)) {
-                if (!player.getAbilities().instabuild) stack.shrink(1);
-                level.sendBlockUpdated(pos, state, state, 3);
-                player.sendSystemMessage(Component.literal(upgradeType.label + " upgrade installed ("
-                        + endpoint.upgradeCount(upgradeType) + "/" + NetworkEndpointBlockEntity.MAX_UPGRADES_PER_TYPE + ")"));
+            if (!level.isClientSide()) {
+                if (endpoint.installUpgrade(upgradeType)) {
+                    if (!player.getAbilities().instabuild) stack.shrink(1);
+                    level.sendBlockUpdated(pos, state, state, 3);
+                    player.sendSystemMessage(Component.literal(upgradeType.label + " upgrade installed ("
+                            + endpoint.upgradeCount(upgradeType) + "/" + NetworkEndpointBlockEntity.MAX_UPGRADES_PER_TYPE + ")"));
+                } else {
+                    player.sendSystemMessage(Component.literal(upgradeType.label + " upgrade could not be installed"));
+                }
             }
-            return InteractionResult.SUCCESS;
+            return ItemInteractionResult.SUCCESS;
         }
         if (level.isClientSide()) {
             openEndpointNameScreen(pos, endpoint.deviceKind(), endpoint.deviceName(), endpoint.formattedDeviceId(), endpoint.upgradeCounts());
         }
-        return InteractionResult.SUCCESS;
+        return ItemInteractionResult.SUCCESS;
     }
 
     private static void removeOneUpgrade(Level level, BlockPos pos, Player player, NetworkEndpointBlockEntity endpoint) {

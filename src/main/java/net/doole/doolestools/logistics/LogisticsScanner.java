@@ -40,10 +40,10 @@ import net.minecraft.world.level.block.state.properties.ChestType;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.neoforged.neoforge.capabilities.Capabilities;
-import net.neoforged.neoforge.transfer.ResourceHandler;
-import net.neoforged.neoforge.transfer.energy.EnergyHandler;
-import net.neoforged.neoforge.transfer.fluid.FluidResource;
-import net.neoforged.neoforge.transfer.item.ItemResource;
+import net.neoforged.neoforge.energy.IEnergyStorage;
+import net.neoforged.neoforge.fluids.FluidStack;
+import net.neoforged.neoforge.fluids.capability.IFluidHandler;
+import net.neoforged.neoforge.items.IItemHandler;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -170,12 +170,12 @@ public final class LogisticsScanner {
         if (state.is(ModBlockTags.SCANNER_BLACKLIST) || block instanceof ScannerHiddenBlock) {
             return null;
         }
-        String label = labels.getLabel(level.dimension().identifier(), pos);
+        String label = labels.getLabel(level.dimension().location(), pos);
         boolean largeChest = block instanceof ChestBlock && state.getValue(ChestBlock.TYPE) != ChestType.SINGLE;
         String blockName = label != null && !label.isBlank() ? label : largeChest ? "Large Chest" : block.getName().getString();
         String registryId = BuiltInRegistries.BLOCK.getKey(block).toString();
         double distance = Math.sqrt(center.distSqr(pos));
-        String dimension = level.dimension().identifier().toString();
+        String dimension = level.dimension().location().toString();
         String id = blockId(pos);
 
         ScannedType type;
@@ -253,8 +253,8 @@ public final class LogisticsScanner {
     }
 
     private static boolean networkMatches(String endpointNetworkId, String computerNetworkId) {
-        if (computerNetworkId == null || computerNetworkId.isBlank()) return false;
-        if (endpointNetworkId == null || endpointNetworkId.isBlank()) return false;
+        if (computerNetworkId == null || computerNetworkId.isBlank()) return true;
+        if (endpointNetworkId == null || endpointNetworkId.isBlank()) return true;
         return endpointNetworkId.equals(computerNetworkId);
     }
 
@@ -298,6 +298,7 @@ public final class LogisticsScanner {
         attached = canonicalScanPos(attached, attachedState);
         if (!level.hasChunkAt(attached)) return null;
         BlockEntity attachedBe = level.getBlockEntity(attached);
+        if (attachedBe instanceof LogisticsComputerBlockEntity) return null;
         if (attachedBe == null || attachedBe instanceof NetworkEndpointBlockEntity || attachedBe instanceof NetworkWireBlockEntity) return null;
         ScannedBlockData attachedData = readBlock(level, center, attached, gameTime, labels, false);
         if (attachedData == null) return null;
@@ -390,6 +391,8 @@ public final class LogisticsScanner {
     private record RelayNode(BlockPos pos, int rangeUpgrades) {}
 
     private static boolean isWiredEndpointOnline(ServerLevel level, BlockPos startPos) {
+        if (level.getBlockEntity(startPos) instanceof NetworkWireBlockEntity startWire
+                && startWire.hasModem() && wireAttachedToComputer(level, startWire)) return true;
         Queue<BlockPos> queue = new ArrayDeque<>();
         Set<BlockPos> seen = new HashSet<>();
         queue.add(startPos);
@@ -502,7 +505,7 @@ public final class LogisticsScanner {
 
     private static BlockPos canonicalScanPos(BlockPos pos, BlockState state) {
         if (state.getBlock() instanceof ChestBlock && state.getValue(ChestBlock.TYPE) != ChestType.SINGLE) {
-            BlockPos other = ChestBlock.getConnectedBlockPos(pos, state);
+            BlockPos other = pos.relative(ChestBlock.getConnectedDirection(state));
             return pos.asLong() <= other.asLong() ? pos : other;
         }
         return pos;
@@ -536,22 +539,21 @@ public final class LogisticsScanner {
     }
 
     private static InventorySummary readItemCapability(ServerLevel level, BlockPos pos, BlockState state, BlockEntity be) {
-        ResourceHandler<ItemResource> handler = firstItemHandler(level, pos, state, be);
+        IItemHandler handler = firstItemHandler(level, pos, state, be);
         if (handler == null) return InventorySummary.EMPTY;
         try {
-            int slots = Math.max(0, handler.size());
+            int slots = Math.max(0, handler.getSlots());
             int used = 0;
             Map<String, Integer> tally = new LinkedHashMap<>();
             Map<String, String> names = new LinkedHashMap<>();
             for (int i = 0; i < slots; i++) {
-                ItemResource resource = handler.getResource(i);
-                long amount = handler.getAmountAsLong(i);
-                if (resource == null || resource.isEmpty() || amount <= 0) continue;
+                ItemStack stack = handler.getStackInSlot(i);
+                if (stack.isEmpty()) continue;
                 used++;
-                String id = BuiltInRegistries.ITEM.getKey(resource.getItem()).toString();
-                int count = amount > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) amount;
+                String id = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+                int count = stack.getCount();
                 tally.merge(id, count, Integer::sum);
-                names.putIfAbsent(id, resource.getHoverName().getString());
+                names.putIfAbsent(id, stack.getHoverName().getString());
             }
             List<ItemEntry> top = tally.entrySet().stream()
                     .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
@@ -565,20 +567,20 @@ public final class LogisticsScanner {
     }
 
     private static FluidSummary readFluidCapability(ServerLevel level, BlockPos pos, BlockState state, BlockEntity be) {
-        ResourceHandler<FluidResource> handler = firstFluidHandler(level, pos, state, be);
+        IFluidHandler handler = firstFluidHandler(level, pos, state, be);
         if (handler == null) return FluidSummary.EMPTY;
         try {
             List<FluidEntry> tanks = new ArrayList<>();
-            for (int i = 0; i < handler.size(); i++) {
-                FluidResource resource = handler.getResource(i);
-                long amount = Math.max(0L, handler.getAmountAsLong(i));
-                long capacity = Math.max(0L, handler.getCapacityAsLong(i, resource));
+            for (int i = 0; i < handler.getTanks(); i++) {
+                FluidStack resource = handler.getFluidInTank(i);
+                long amount = Math.max(0L, resource.getAmount());
+                long capacity = Math.max(0L, handler.getTankCapacity(i));
                 if (amount <= 0 && capacity <= 0) continue;
                 boolean empty = resource == null || resource.isEmpty();
                 String name = empty ? "Empty" : resource.getHoverName().getString();
                 String id = "";
                 if (!empty) {
-                    net.minecraft.resources.Identifier key = BuiltInRegistries.FLUID.getKey(resource.getFluid());
+                    net.minecraft.resources.ResourceLocation key = BuiltInRegistries.FLUID.getKey(resource.getFluid());
                     if (key != null) id = key.toString();
                 }
                 tanks.add(new FluidEntry(name, id, amount, capacity));
@@ -590,22 +592,22 @@ public final class LogisticsScanner {
     }
 
     private static EnergySummary readEnergyCapability(ServerLevel level, BlockPos pos, BlockState state, BlockEntity be) {
-        EnergyHandler handler = firstEnergyHandler(level, pos, state, be);
+        IEnergyStorage handler = firstEnergyHandler(level, pos, state, be);
         if (handler == null) return EnergySummary.EMPTY;
         try {
-            long capacity = Math.max(0L, handler.getCapacityAsLong());
-            long stored = Math.max(0L, handler.getAmountAsLong());
+            long capacity = Math.max(0L, handler.getMaxEnergyStored());
+            long stored = Math.max(0L, handler.getEnergyStored());
             return capacity <= 0 ? EnergySummary.EMPTY : new EnergySummary(true, stored, capacity);
         } catch (RuntimeException e) {
             return EnergySummary.EMPTY;
         }
     }
 
-    private static ResourceHandler<ItemResource> firstItemHandler(ServerLevel level, BlockPos pos, BlockState state, BlockEntity be) {
+    private static IItemHandler firstItemHandler(ServerLevel level, BlockPos pos, BlockState state, BlockEntity be) {
         for (Direction direction : probeDirections()) {
-            ResourceHandler<ItemResource> handler = null;
+            IItemHandler handler = null;
             try {
-                handler = Capabilities.Item.BLOCK.getCapability(level, pos, state, be, direction);
+                handler = Capabilities.ItemHandler.BLOCK.getCapability(level, pos, state, be, direction);
             } catch (RuntimeException ignored) {
                 // Some mod providers are side-sensitive or throw while their BE is mid-update; keep scanning.
             }
@@ -614,11 +616,11 @@ public final class LogisticsScanner {
         return null;
     }
 
-    private static ResourceHandler<FluidResource> firstFluidHandler(ServerLevel level, BlockPos pos, BlockState state, BlockEntity be) {
+    private static IFluidHandler firstFluidHandler(ServerLevel level, BlockPos pos, BlockState state, BlockEntity be) {
         for (Direction direction : probeDirections()) {
-            ResourceHandler<FluidResource> handler = null;
+            IFluidHandler handler = null;
             try {
-                handler = Capabilities.Fluid.BLOCK.getCapability(level, pos, state, be, direction);
+                handler = Capabilities.FluidHandler.BLOCK.getCapability(level, pos, state, be, direction);
             } catch (RuntimeException ignored) {
                 // Capability probing must never make a modded block disappear from the scan.
             }
@@ -627,11 +629,11 @@ public final class LogisticsScanner {
         return null;
     }
 
-    private static EnergyHandler firstEnergyHandler(ServerLevel level, BlockPos pos, BlockState state, BlockEntity be) {
+    private static IEnergyStorage firstEnergyHandler(ServerLevel level, BlockPos pos, BlockState state, BlockEntity be) {
         for (Direction direction : probeDirections()) {
-            EnergyHandler handler = null;
+            IEnergyStorage handler = null;
             try {
-                handler = Capabilities.Energy.BLOCK.getCapability(level, pos, state, be, direction);
+                handler = Capabilities.EnergyStorage.BLOCK.getCapability(level, pos, state, be, direction);
             } catch (RuntimeException ignored) {
                 // Keep the scanner read-only and fault-tolerant per block/side.
             }
@@ -706,11 +708,11 @@ public final class LogisticsScanner {
         }
         try {
             var inputHolder = new net.minecraft.world.item.crafting.SingleRecipeInput(input);
-            var recipe = level.recipeAccess().getRecipeFor(
+            var recipe = level.getRecipeManager().getRecipeFor(
                     (net.minecraft.world.item.crafting.RecipeType<net.minecraft.world.item.crafting.AbstractCookingRecipe>) type,
                     inputHolder, level);
             if (recipe.isEmpty()) return ItemStack.EMPTY;
-            return recipe.get().value().assemble(inputHolder);
+            return recipe.get().value().assemble(inputHolder, level.registryAccess());
         } catch (RuntimeException e) {
             return ItemStack.EMPTY;
         }

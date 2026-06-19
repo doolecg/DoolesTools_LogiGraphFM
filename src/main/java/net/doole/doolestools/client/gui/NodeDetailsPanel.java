@@ -10,7 +10,7 @@ import net.doole.doolestools.logistics.data.ItemEntry;
 import net.doole.doolestools.logistics.data.ScannedBlockData;
 import net.doole.doolestools.logistics.data.WarningData;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.GuiGraphics;
 
 import java.util.List;
 
@@ -22,6 +22,9 @@ public class NodeDetailsPanel {
     private final EditorContext ctx;
     private final Runnable showAllCallback;
     public int x, y, w, h;
+    private int scissorOffsetX;
+    private int scissorOffsetY;
+    private float scissorScale = 1.0F;
 
     // Hit-test state for "SHOW ALL" button — updated each render pass
     private int showAllY = -1;
@@ -44,9 +47,23 @@ public class NodeDetailsPanel {
         return false;
     }
 
-    public void render(GuiGraphicsExtractor g, Font font, int nameFieldBottom) {
+    public void setScissorTransform(int offsetX, int offsetY, float scale) {
+        this.scissorOffsetX = offsetX;
+        this.scissorOffsetY = offsetY;
+        this.scissorScale = scale <= 0.0F ? 1.0F : scale;
+    }
+
+    private void enableScissor(GuiGraphics g, int x1, int y1, int x2, int y2) {
+        int sx1 = (int) Math.floor(scissorOffsetX + x1 * scissorScale);
+        int sy1 = (int) Math.floor(scissorOffsetY + y1 * scissorScale);
+        int sx2 = (int) Math.ceil(scissorOffsetX + x2 * scissorScale);
+        int sy2 = (int) Math.ceil(scissorOffsetY + y2 * scissorScale);
+        g.enableScissor(sx1, sy1, sx2, sy2);
+    }
+
+    public void render(GuiGraphics g, Font font, int nameFieldBottom) {
         // Clip everything to the panel so long detail lists never spill over the buttons / other panels.
-        g.enableScissor(x, nameFieldBottom, x + w, y + h);
+        enableScissor(g, x, nameFieldBottom, x + w, y + h);
         try {
             renderBody(g, font, nameFieldBottom);
         } finally {
@@ -54,15 +71,15 @@ public class NodeDetailsPanel {
         }
     }
 
-    private void renderBody(GuiGraphicsExtractor g, Font font, int nameFieldBottom) {
+    private void renderBody(GuiGraphics g, Font font, int nameFieldBottom) {
         showAllVisible = false;
         showAllY = -1;
 
         GraphNodeData node = ctx.selectedNode();
         if (node == null) {
-            g.text(font, "No node selected.", x, y, DUTheme.TEXT_DIM, false);
-            g.text(font, "Add a scanned block to", x, y + 14, DUTheme.TEXT_DIM, false);
-            g.text(font, "the canvas, then click it.", x, y + 24, DUTheme.TEXT_DIM, false);
+            g.drawString(font, "No node selected.", x, y, DUTheme.TEXT_DIM, false);
+            g.drawString(font, "Add a scanned block to", x, y + 14, DUTheme.TEXT_DIM, false);
+            g.drawString(font, "the canvas, then click it.", x, y + 24, DUTheme.TEXT_DIM, false);
             return;
         }
         ScannedBlockData s = ctx.scannedFor(node);
@@ -82,16 +99,16 @@ public class NodeDetailsPanel {
             cy = kv(g, font, "Routes", diagnostics.inboundItemRoutes() + " in / " + diagnostics.outboundItemRoutes() + " out", cy);
             cy = kv(g, font, "Saved", ctx.isDirty() ? "Save graph to apply" : "Server graph current", cy);
             if (!diagnostics.warnings().isEmpty()) {
-                g.text(font, "FILTER WARNINGS", x, cy, DUTheme.WARN, false);
+                g.drawString(font, "FILTER WARNINGS", x, cy, DUTheme.WARN, false);
                 cy += 11;
                 for (String warning : diagnostics.warnings()) {
-                    g.text(font, trim(font, warning, w), x, cy, DUTheme.WARN, false);
+                    g.drawString(font, trim(font, warning, w), x, cy, DUTheme.WARN, false);
                     cy += 10;
                 }
             }
-            g.text(font, "3x3 ghost grid controls item matches.", x, cy, DUTheme.TEXT_DIM, false);
+            g.drawString(font, "3x3 ghost grid controls item matches.", x, cy, DUTheme.TEXT_DIM, false);
             cy += 10;
-            g.text(font, "Priority 0 ignores priority.", x, cy, DUTheme.TEXT_DIM, false);
+            g.drawString(font, "Priority 0 ignores priority.", x, cy, DUTheme.TEXT_DIM, false);
             cy += 14;
         }
         if (s != null) {
@@ -111,9 +128,9 @@ public class NodeDetailsPanel {
             for (int i = 0; i < preview; i++) {
                 ItemEntry e = top.get(i);
                 ItemIcons.render(g, e.registryId(), x, cy, ItemIcons.SIZE, DUTheme.PANEL_ALT);
-                g.text(font, trim(font, e.displayName(), w - 44), x + 20, cy + 4, DUTheme.TEXT, false);
+                g.drawString(font, trim(font, e.displayName(), w - 44), x + 20, cy + 4, DUTheme.TEXT, false);
                 String count = String.valueOf(e.count());
-                g.text(font, count, x + w - font.width(count), cy + 4, DUTheme.TEXT_DIM, false);
+                g.drawString(font, count, x + w - font.width(count), cy + 4, DUTheme.TEXT_DIM, false);
                 cy += 18;
             }
             if (top.size() > SHOW_ALL_THRESHOLD) {
@@ -121,25 +138,25 @@ public class NodeDetailsPanel {
                 showAllVisible = true;
                 String label = "[ SHOW ALL " + top.size() + " ITEMS ]";
                 DUTheme.box(g, x, cy, w, 11, DUTheme.PANEL_ALT, DUTheme.TEXT_GREEN);
-                g.centeredText(font, label, x + w / 2, cy + 2, DUTheme.TEXT_GREEN);
+                g.drawCenteredString(font, label, x + w / 2, cy + 2, DUTheme.TEXT_GREEN);
                 cy += 13;
             }
-            g.text(font, s.inventory().usedSlots() + " / " + s.inventory().totalSlots() + " slots ("
+            g.drawString(font, s.inventory().usedSlots() + " / " + s.inventory().totalSlots() + " slots ("
                     + s.inventory().fillPercent() + "%)", x, cy, DUTheme.TEXT_DIM, false);
             cy += 12;
         }
 
         if (s != null && s.furnace().hasData()) {
             var f = s.furnace();
-            g.text(font, "FURNACE", x, cy, DUTheme.TEXT_GREEN, false);
+            g.drawString(font, "FURNACE", x, cy, DUTheme.TEXT_GREEN, false);
             cy += 11;
             // Recipe row with real item icons: input -> result.
             if (f.hasRecipe() || !f.inputId().isEmpty()) {
-                g.text(font, "Recipe", x, cy + 4, DUTheme.TEXT_DIM, false);
+                g.drawString(font, "Recipe", x, cy + 4, DUTheme.TEXT_DIM, false);
                 int ix = x + 46;
                 ItemIcons.render(g, f.inputId(), ix, cy, ItemIcons.SIZE, DUTheme.PANEL_ALT);
                 ix += 18;
-                g.text(font, "→", ix, cy + 4, DUTheme.TEXT_DIM, false);
+                g.drawString(font, "→", ix, cy + 4, DUTheme.TEXT_DIM, false);
                 ix += font.width("→") + 4;
                 ItemIcons.render(g, f.resultId(), ix, cy, ItemIcons.SIZE, DUTheme.PANEL_ALT);
                 cy += 18;
@@ -149,9 +166,9 @@ public class NodeDetailsPanel {
             if (f.cookTotal() > 0) {
                 long elapsed = DUTheme.clientGameTime() - s.lastScannedGameTime();
                 int pct = f.predictedPercent(elapsed);
-                g.text(font, "Cooking", x, cy, DUTheme.TEXT_DIM, false);
+                g.drawString(font, "Cooking", x, cy, DUTheme.TEXT_DIM, false);
                 DUTheme.progress(g, x + 46, cy, w - 78, 7, pct / 100f, DUTheme.PROGRESS_ORANGE);
-                g.text(font, pct + "%", x + w - font.width(pct + "%"), cy, DUTheme.TEXT_DIM, false);
+                g.drawString(font, pct + "%", x + w - font.width(pct + "%"), cy, DUTheme.TEXT_DIM, false);
                 cy += 11;
                 if (f.isCooking()) {
                     cy = kv(g, font, "Time", DUTheme.formatTicks(f.predictedRemainingTicks(elapsed)) + " left", cy);
@@ -161,13 +178,13 @@ public class NodeDetailsPanel {
 
         if (s != null && s.progress().present() && !s.furnace().hasData()) {
             var p = s.progress();
-            g.text(font, "MACHINE", x, cy, DUTheme.TEXT_GREEN, false);
+            g.drawString(font, "MACHINE", x, cy, DUTheme.TEXT_GREEN, false);
             cy += 11;
             cy = kv(g, font, "State", p.status(), cy);
-            g.text(font, trim(font, p.label(), 44), x, cy, DUTheme.TEXT_DIM, false);
+            g.drawString(font, trim(font, p.label(), 44), x, cy, DUTheme.TEXT_DIM, false);
             DUTheme.progress(g, x + 46, cy, w - 78, 7, p.percent() / 100f,
                     p.error() ? DUTheme.ERROR : p.active() ? DUTheme.OK : DUTheme.WARN);
-            g.text(font, p.percent() + "%", x + w - font.width(p.percent() + "%"), cy, DUTheme.TEXT_DIM, false);
+            g.drawString(font, p.percent() + "%", x + w - font.width(p.percent() + "%"), cy, DUTheme.TEXT_DIM, false);
             cy += 11;
             if (p.hasTimer()) {
                 cy = kv(g, font, "Timer", "~" + DUTheme.formatTicks((int) Math.max(0L, Math.min(Integer.MAX_VALUE, p.remainingTicks()))) + " left", cy);
@@ -175,14 +192,14 @@ public class NodeDetailsPanel {
         }
 
         if (s != null && s.energy().hasData()) {
-            g.text(font, "ENERGY", x, cy, DUTheme.TEXT_GREEN, false);
+            g.drawString(font, "ENERGY", x, cy, DUTheme.TEXT_GREEN, false);
             cy += 11;
             cy = kv(g, font, "Stored", s.energy().stored() + " / " + s.energy().capacity(), cy);
         }
 
         // Connections.
         cy += 2;
-        g.text(font, "CONNECTED TO", x, cy, DUTheme.TEXT_GREEN, false);
+        g.drawString(font, "CONNECTED TO", x, cy, DUTheme.TEXT_GREEN, false);
         cy += 11;
         boolean any = false;
         for (GraphLinkData l : ctx.graph().activeCanvas().links()) {
@@ -195,7 +212,7 @@ public class NodeDetailsPanel {
                 if (sn != null) other = "← " + sn.displayName();
             }
             if (other != null) {
-                g.text(font, trim(font, other, w), x, cy, DUTheme.TEXT, false);
+                g.drawString(font, trim(font, other, w), x, cy, DUTheme.TEXT, false);
                 cy += 10;
                 double avg = ctx.linkAvgPerMinute(l.linkId());
                 if (avg >= 0.0) {
@@ -205,35 +222,35 @@ public class NodeDetailsPanel {
                         case ENERGY -> "FE/min";
                         case MANUAL -> "moves/min";
                     };
-                    g.text(font, trim(font, String.format(java.util.Locale.ROOT, "%.1f %s", avg, unit), w - 4), x + 4, cy, DUTheme.TEXT_DIM, false);
+                    g.drawString(font, trim(font, String.format(java.util.Locale.ROOT, "%.1f %s", avg, unit), w - 4), x + 4, cy, DUTheme.TEXT_DIM, false);
                     cy += 10;
                 }
                 any = true;
             }
         }
         if (!any) {
-            g.text(font, "None", x, cy, DUTheme.TEXT_DIM, false);
+            g.drawString(font, "None", x, cy, DUTheme.TEXT_DIM, false);
             cy += 10;
         }
 
         // Warnings.
         cy += 2;
-        g.text(font, "WARNINGS", x, cy, DUTheme.ERROR, false);
+        g.drawString(font, "WARNINGS", x, cy, DUTheme.ERROR, false);
         cy += 11;
         if (s != null && s.hasWarnings()) {
             for (WarningData wd : s.warnings()) {
-                g.text(font, trim(font, wd.message(), w), x, cy, color(wd), false);
+                g.drawString(font, trim(font, wd.message(), w), x, cy, color(wd), false);
                 cy += 10;
             }
         } else {
-            g.text(font, "None", x, cy, DUTheme.TEXT_DIM, false);
+            g.drawString(font, "None", x, cy, DUTheme.TEXT_DIM, false);
         }
     }
 
-    private int kv(GuiGraphicsExtractor g, Font font, String key, String value, int cy) {
-        g.text(font, key, x, cy, DUTheme.TEXT_DIM, false);
+    private int kv(GuiGraphics g, Font font, String key, String value, int cy) {
+        g.drawString(font, key, x, cy, DUTheme.TEXT_DIM, false);
         int vx = x + 46;
-        g.text(font, trim(font, value, w - 48), vx, cy, DUTheme.TEXT, false);
+        g.drawString(font, trim(font, value, w - 48), vx, cy, DUTheme.TEXT, false);
         return cy + 11;
     }
 

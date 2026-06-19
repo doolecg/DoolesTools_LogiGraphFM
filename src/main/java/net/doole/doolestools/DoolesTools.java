@@ -11,7 +11,7 @@ import net.doole.doolestools.registry.ModCapabilities;
 import net.doole.doolestools.registry.ModCreativeTabs;
 import net.doole.doolestools.registry.ModItems;
 import net.doole.doolestools.registry.ModMenus;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.config.ModConfig;
@@ -56,7 +56,7 @@ public final class DoolesTools {
     }
 
     /** Central helper so the (possibly renamed) identifier type is referenced in exactly one place. */
-    public static Identifier id(String path) {
-        return Identifier.fromNamespaceAndPath(MOD_ID, path);
+    public static ResourceLocation id(String path) {
+        return ResourceLocation.fromNamespaceAndPath(MOD_ID, path);
     }
 }

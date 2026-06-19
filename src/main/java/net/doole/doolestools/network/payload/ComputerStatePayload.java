@@ -20,10 +20,11 @@ public record ComputerStatePayload(BlockPos pos,
                                      LogisticsGraphData graph,
                                      long lastScanTime,
                                      NetworkPowerData power,
-                                      List<String> activeRouteIds,
-                                      String networkId,
-                                      String networkName,
-                                      String accessMode,
+                                       List<String> activeRouteIds,
+                                       String networkId,
+                                       String networkDisplayId,
+                                       String networkName,
+                                       String accessMode,
                                       List<String> editorWhitelist,
                                       boolean canEdit,
                                       List<Integer> powerSupplyHistory,
@@ -51,9 +52,10 @@ public record ComputerStatePayload(BlockPos pos,
                             ModStreamCodecs.GRAPH.decode(buf),
                             ByteBufCodecs.VAR_LONG.decode(buf),
                             ModStreamCodecs.POWER.decode(buf),
-                            ModStreamCodecs.STRING_LIST.decode(buf),
-                            ByteBufCodecs.stringUtf8(128).decode(buf),
-                            ByteBufCodecs.stringUtf8(192).decode(buf),
+                             ModStreamCodecs.STRING_LIST.decode(buf),
+                             ByteBufCodecs.stringUtf8(128).decode(buf),
+                             ByteBufCodecs.stringUtf8(16).decode(buf),
+                             ByteBufCodecs.stringUtf8(192).decode(buf),
                             ByteBufCodecs.stringUtf8(32).decode(buf),
                             ModStreamCodecs.STRING_LIST.decode(buf),
                             ByteBufCodecs.BOOL.decode(buf),
@@ -81,6 +83,7 @@ public record ComputerStatePayload(BlockPos pos,
                     ModStreamCodecs.POWER.encode(buf, payload.power());
                     ModStreamCodecs.STRING_LIST.encode(buf, payload.activeRouteIds());
                     ByteBufCodecs.stringUtf8(128).encode(buf, payload.networkId());
+                    ByteBufCodecs.stringUtf8(16).encode(buf, payload.networkDisplayId());
                     ByteBufCodecs.stringUtf8(192).encode(buf, payload.networkName());
                     ByteBufCodecs.stringUtf8(32).encode(buf, payload.accessMode());
                     ModStreamCodecs.STRING_LIST.encode(buf, payload.editorWhitelist());

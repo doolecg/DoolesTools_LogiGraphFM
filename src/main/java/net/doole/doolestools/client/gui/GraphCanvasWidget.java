@@ -9,8 +9,8 @@ import net.doole.doolestools.logistics.data.GraphNodeData;
 import net.doole.doolestools.logistics.data.GraphPortData;
 import net.doole.doolestools.logistics.data.GraphTextData;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
-import org.joml.Matrix3x2fStack;
+import net.minecraft.client.gui.GuiGraphics;
+import com.mojang.blaze3d.vertex.PoseStack;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -36,6 +36,9 @@ public class GraphCanvasWidget {
     private final CanvasViewState adapterView;
 
     public int x, y, w, h;
+    private int scissorOffsetX;
+    private int scissorOffsetY;
+    private float scissorScale = 1.0F;
 
     // Projected geometry cache. Link curves only move when the graph changes, so we bake them per
     // revision and reuse them every frame; pan/zoom is just the matrix and viewport culling on top.
@@ -70,6 +73,20 @@ public class GraphCanvasWidget {
     private float viewZoom() { return adapterView != null ? adapterView.zoom : ctx.zoom; }
     private float viewPanX() { return adapterView != null ? adapterView.panX : ctx.panX; }
     private float viewPanY() { return adapterView != null ? adapterView.panY : ctx.panY; }
+
+    public void setScissorTransform(int offsetX, int offsetY, float scale) {
+        this.scissorOffsetX = offsetX;
+        this.scissorOffsetY = offsetY;
+        this.scissorScale = scale <= 0.0F ? 1.0F : scale;
+    }
+
+    private void enableScissor(GuiGraphics g, int x1, int y1, int x2, int y2) {
+        int sx1 = (int) Math.floor(scissorOffsetX + x1 * scissorScale);
+        int sy1 = (int) Math.floor(scissorOffsetY + y1 * scissorScale);
+        int sx2 = (int) Math.ceil(scissorOffsetX + x2 * scissorScale);
+        int sy2 = (int) Math.ceil(scissorOffsetY + y2 * scissorScale);
+        g.enableScissor(sx1, sy1, sx2, sy2);
+    }
 
     public boolean contains(double mx, double my) {
         return mx >= x && mx < x + w && my >= y && my < y + h;
@@ -301,10 +318,10 @@ public class GraphCanvasWidget {
         ctx.panY = (h - gh * ctx.zoom) / 2f - minY * ctx.zoom;
     }
 
-    public void render(GuiGraphicsExtractor g, Font font, double mouseX, double mouseY) {
+    public void render(GuiGraphics g, Font font, double mouseX, double mouseY) {
         if (adapter != null) { renderAdapter(g, font, mouseX, mouseY); return; }
         DUTheme.box(g, x, y, w, h, DUTheme.SCREEN, DUTheme.PANEL_BORDER);
-        g.enableScissor(x + 1, y + 1, x + w - 1, y + h - 1);
+        enableScissor(g, x + 1, y + 1, x + w - 1, y + h - 1);
         var canvas = ctx.graph().activeCanvas();
         double minX = toCanvasX(x) - 96;
         double minY = toCanvasY(y) - 96;
@@ -327,10 +344,10 @@ public class GraphCanvasWidget {
             }
         }
 
-        Matrix3x2fStack pose = g.pose();
-        pose.pushMatrix();
-        pose.translate(x + ctx.panX, y + ctx.panY);
-        pose.scale(ctx.zoom, ctx.zoom);
+        PoseStack pose = g.pose();
+        pose.pushPose();
+        pose.translate(x + ctx.panX, y + ctx.panY, 0.0F);
+        pose.scale(ctx.zoom, ctx.zoom, 1.0F);
         ensureModel(canvas);
         Map<String, GraphNodeData> nodesById = cachedNodesById;
         // Viewport culling over cached geometry is cheap rect arithmetic; no per-frame projection.
@@ -351,7 +368,7 @@ public class GraphCanvasWidget {
             g.fill(f.x(), f.y(), f.x() + f.width(), f.y() + f.height(), 0x14000000 | (DUTheme.SELECTED & 0x00FFFFFF));
             DUTheme.outline(g, f.x(), f.y(), f.width(), f.height(), fsel ? DUTheme.SELECTED : DUTheme.PANEL_BORDER);
             g.fill(f.x(), f.y(), f.x() + f.width(), f.y() + FRAME_TITLE_H, fsel ? 0xFF14303a : DUTheme.PANEL_HEADER);
-            g.text(font, f.label(), f.x() + 4, f.y() + 3, fsel ? DUTheme.SELECTED : DUTheme.TEXT_GREEN, false);
+            g.drawString(font, f.label(), f.x() + 4, f.y() + 3, fsel ? DUTheme.SELECTED : DUTheme.TEXT_GREEN, false);
             // Bottom-right resize grip.
             int hx = f.x() + f.width();
             int hy = f.y() + f.height();
@@ -410,23 +427,23 @@ public class GraphCanvasWidget {
                 g.fill(t.x() - 2, t.y() - 2, t.x() + tw + 2, t.y() + 10, 0x223fd2e0);
                 DUTheme.outline(g, t.x() - 2, t.y() - 2, tw + 4, 12, DUTheme.SELECTED);
             }
-            g.text(font, t.text(), t.x(), t.y(), tsel ? DUTheme.SELECTED : DUTheme.TEXT, false);
+            g.drawString(font, t.text(), t.x(), t.y(), tsel ? DUTheme.SELECTED : DUTheme.TEXT, false);
         }
 
-        pose.popMatrix();
+        pose.popPose();
         g.disableScissor();
 
         if (canvas.nodes().isEmpty()) {
-            g.centeredText(font, "DROP SCANNED BLOCKS HERE", x + w / 2, y + h / 2 - 4, DUTheme.TEXT_DIM);
+            g.drawCenteredString(font, "DROP SCANNED BLOCKS HERE", x + w / 2, y + h / 2 - 4, DUTheme.TEXT_DIM);
         }
     }
 
     // --- Adapter mode (CanvasAdapter / CanvasViewState) ---
 
     /** Renders the canvas using the generic adapter instead of the logistics-graph context. */
-    private void renderAdapter(GuiGraphicsExtractor g, Font font, double mouseX, double mouseY) {
+    private void renderAdapter(GuiGraphics g, Font font, double mouseX, double mouseY) {
         DUTheme.box(g, x, y, w, h, DUTheme.SCREEN, DUTheme.PANEL_BORDER);
-        g.enableScissor(x + 1, y + 1, x + w - 1, y + h - 1);
+        enableScissor(g, x + 1, y + 1, x + w - 1, y + h - 1);
 
         if (net.doole.doolestools.client.ClientPrefs.showGrid) {
             int spacing = Math.max(12, Math.round(24 * adapterView.zoom));
@@ -438,10 +455,10 @@ public class GraphCanvasWidget {
             for (int gy = y + oy; gy < y + h && count++ < maxLines; gy += spacing) g.fill(x + 1, gy, x + w - 1, gy + 1, 0x3632452f);
         }
 
-        org.joml.Matrix3x2fStack pose = g.pose();
-        pose.pushMatrix();
-        pose.translate(x + adapterView.panX, y + adapterView.panY);
-        pose.scale(adapterView.zoom, adapterView.zoom);
+        PoseStack pose = g.pose();
+        pose.pushPose();
+        pose.translate(x + adapterView.panX, y + adapterView.panY, 0.0F);
+        pose.scale(adapterView.zoom, adapterView.zoom, 1.0F);
 
         // Build node lookup for edge port lookups.
         java.util.Map<String, CanvasAdapter.CanvasNode> nodesById = new java.util.HashMap<>();
@@ -469,7 +486,7 @@ public class GraphCanvasWidget {
             int my = (y1 + y2) / 2;
             int labelW = font.width(edge.label()) + 8;
             DUTheme.box(g, mx - labelW / 2, my - 6, labelW, 12, 0xE60b0f0a, edge.selected() ? edge.color() : DUTheme.PANEL_BORDER);
-            g.centeredText(font, edge.label(), mx, my - 4, edge.color());
+            g.drawCenteredString(font, edge.label(), mx, my - 4, edge.color());
         }
 
         // Nodes on top.
@@ -497,10 +514,10 @@ public class GraphCanvasWidget {
         }
 
         if (adapter.nodes().isEmpty()) {
-            g.centeredText(font, "WAITING FOR NETWORK INDEX", (int) toCanvasX(x + w / 2.0), (int) toCanvasY(y + h / 2.0), DUTheme.TEXT_DIM);
+            g.drawCenteredString(font, "WAITING FOR NETWORK INDEX", (int) toCanvasX(x + w / 2.0), (int) toCanvasY(y + h / 2.0), DUTheme.TEXT_DIM);
         }
 
-        pose.popMatrix();
+        pose.popPose();
         g.disableScissor();
     }
 
@@ -553,7 +570,7 @@ public class GraphCanvasWidget {
 
     /** Rebuilds the cached node lookup and baked link polylines when the graph revision changes. */
     /** Small badge under transport-participating nodes when the network is out of / low on power. */
-    private void drawNodePowerBadge(GuiGraphicsExtractor g, Font font, GraphNodeData n) {
+    private void drawNodePowerBadge(GuiGraphics g, Font font, GraphNodeData n) {
         if (!cachedLinkedNodeIds.contains(n.nodeId())) return;
         net.doole.doolestools.logistics.data.NetworkPowerData power = ctx.power();
         if (power == null) return;
@@ -573,14 +590,14 @@ public class GraphCanvasWidget {
         int by = n.y() + n.height() + 2;
         g.fill(bx, by, bx + bw, by + 10, 0xE60a0d09);
         DUTheme.outline(g, bx, by, bw, 10, color);
-        g.text(font, text, bx + 3, by + 1, color, false);
+        g.drawString(font, text, bx + 3, by + 1, color, false);
     }
 
     /**
      * Far-zoom node rendering. Below 0.4 zoom we keep the node box but replace its contents with a large
      * uppercase block name (e.g. "BLAST FURNACE", "CHEST"). Below 0.15 only a small dot is drawn.
      */
-    private void renderNodeStatusMarker(GuiGraphicsExtractor g, Font font, GraphNodeData n, boolean selected) {
+    private void renderNodeStatusMarker(GuiGraphics g, Font font, GraphNodeData n, boolean selected) {
         int cx = n.x() + n.width() / 2;
         int cy = n.y() + n.height() / 2;
         if (ctx.zoom < 0.15f) {
@@ -597,7 +614,7 @@ public class GraphCanvasWidget {
             name = name.substring(0, name.length() - 1);
             tw = font.width(name);
         }
-        g.text(font, name, cx - tw / 2, cy - 3, DUTheme.TEXT, false);
+        g.drawString(font, name, cx - tw / 2, cy - 3, DUTheme.TEXT, false);
         if (nodeHasWarnings(n)) Glyphs.warning(g, cx - 2, n.y() + 2, DUTheme.WARN);
     }
 
@@ -664,7 +681,7 @@ public class GraphCanvasWidget {
     }
 
     /** Draws a link from its baked polyline: solid base, optional animated flow dots, arrowhead. */
-    private void drawArrowCached(GuiGraphicsExtractor g, CachedLink link, int color, boolean active, boolean lowDetail) {
+    private void drawArrowCached(GuiGraphics g, CachedLink link, int color, boolean active, boolean lowDetail) {
         int[] px = link.px();
         int[] py = link.py();
         int baseColor = (color & 0x00FFFFFF) | 0xCC000000;
@@ -691,7 +708,7 @@ public class GraphCanvasWidget {
     }
 
     /** Draws a live Bezier link (used for the in-progress drag link, which can't be cached). */
-    private void drawArrow(GuiGraphicsExtractor g, int x1, int y1, int x2, int y2, int color, boolean active, int maxSamples, boolean lowDetail) {
+    private void drawArrow(GuiGraphics g, int x1, int y1, int x2, int y2, int color, boolean active, int maxSamples, boolean lowDetail) {
         int samples = Math.max(4, Math.min(maxSamples, curveSamples(x1, y1, x2, y2)));
         int baseColor = (color & 0x00FFFFFF) | 0xCC000000;
         int highlightPhase = net.doole.doolestools.client.ClientPrefs.animate ? (int) ((System.currentTimeMillis() / 90L) % 6L) : 0;
@@ -742,19 +759,19 @@ public class GraphCanvasWidget {
         return u * u * u * y1 + 3 * u * u * t * y1 + 3 * u * t * t * y2 + t * t * t * y2;
     }
 
-    private void drawSideOverridePill(GuiGraphicsExtractor g, Font font, GraphLinkData link) {
+    private void drawSideOverridePill(GuiGraphics g, Font font, GraphLinkData link) {
         int[] midpoint = linkMidpoint(link);
         if (midpoint == null) return;
         drawSideOverridePill(g, font, link, midpoint[0], midpoint[1]);
     }
 
-    private void drawSideOverridePill(GuiGraphicsExtractor g, Font font, GraphLinkData link, int midX, int midY) {
+    private void drawSideOverridePill(GuiGraphics g, Font font, GraphLinkData link, int midX, int midY) {
         String label = sideLabel(link.sideOverride());
         int px = midX - SIDE_PILL_W / 2;
         int py = midY - SIDE_PILL_H / 2;
         int border = "auto".equalsIgnoreCase(link.sideOverride()) ? DUTheme.PANEL_BORDER : DUTheme.SELECTED;
         DUTheme.box(g, px, py, SIDE_PILL_W, SIDE_PILL_H, 0xEE0b0f0a, border);
-        g.text(font, label, px + 4, py + 2, "auto".equalsIgnoreCase(link.sideOverride()) ? DUTheme.TEXT_DIM : DUTheme.SELECTED, false);
+        g.drawString(font, label, px + 4, py + 2, "auto".equalsIgnoreCase(link.sideOverride()) ? DUTheme.TEXT_DIM : DUTheme.SELECTED, false);
     }
 
     private int[] linkMidpoint(GraphLinkData link) {

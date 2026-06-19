@@ -139,7 +139,7 @@ public final class ServerPayloadHandlers {
     private static void sendComputerState(ServerPlayer player, BlockPos pos, LogisticsComputerBlockEntity be) {
         PacketDistributor.sendToPlayer(player,
                 new ComputerStatePayload(pos, be.getLastScan(), be.getGraph(), be.getLastScanTime(), be.getNetworkPower(), be.getActiveRouteIds(),
-                        be.networkId(), be.networkName(), be.accessMode(), be.editorWhitelist(), be.canEdit(player),
+                        be.networkId(), be.formattedNetworkNumber(), be.networkName(), be.accessMode(), be.editorWhitelist(), be.canEdit(player),
                         be.getPowerSupplyHistory(), be.getPowerDemandHistory(),
                         be.getSupply30m(), be.getDemand30m(), be.getSupply1h(), be.getDemand1h(),
                         be.getSupply12h(), be.getDemand12h(), be.getSupply1d(), be.getDemand1d(),
@@ -155,7 +155,7 @@ public final class ServerPayloadHandlers {
             if (!(player.level() instanceof ServerLevel level)) return;
             if (!level.hasChunkAt(payload.pos())) return;
             if (player.distanceToSqr(payload.pos().getCenter()) > 64.0D) return;
-            BlockLabelSavedData.get(level).setLabel(level.dimension().identifier(), payload.pos(), payload.label());
+            BlockLabelSavedData.get(level).setLabel(level.dimension().location(), payload.pos(), payload.label());
         });
     }
 
@@ -183,7 +183,7 @@ public final class ServerPayloadHandlers {
             if (!(player.level() instanceof ServerLevel level)) return;
             List<BlockPos> positions = new ArrayList<>();
             List<String> labels = new ArrayList<>();
-            BlockLabelSavedData.get(level).gatherNearby(level.dimension().identifier(),
+            BlockLabelSavedData.get(level).gatherNearby(level.dimension().location(),
                     player.blockPosition(), NEARBY_LABEL_RADIUS, positions, labels);
             // Also surface the names players gave network devices on the naming screen, so the gun
             // shows them as holograms too. Block labels are added first and win on shared positions.

@@ -6,7 +6,7 @@ import net.doole.doolestools.logistics.data.GraphNodeData;
 import net.doole.doolestools.logistics.data.ScannedBlockData;
 import net.doole.doolestools.logistics.data.WarningData;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.GuiGraphics;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -65,7 +65,7 @@ public class WarningBarWidget {
         return null;
     }
 
-    public void render(GuiGraphicsExtractor g, Font font) {
+    public void render(GuiGraphics g, Font font) {
         entries = build();
         hitBoxes.clear();
 
@@ -75,12 +75,12 @@ public class WarningBarWidget {
         }
 
         int labelX = x + 16;
-        g.text(font, "WARNINGS:", labelX, y + (h - 8) / 2, entries.isEmpty() ? DUTheme.OK : DUTheme.ERROR, false);
+        g.drawString(font, "WARNINGS:", labelX, y + (h - 8) / 2, entries.isEmpty() ? DUTheme.OK : DUTheme.ERROR, false);
         int cursor = labelX + font.width("WARNINGS: ") + 4;
         int textY = y + (h - 8) / 2;
 
         if (entries.isEmpty()) {
-            g.text(font, "All systems nominal.", cursor, textY, DUTheme.TEXT_DIM, false);
+            g.drawString(font, "All systems nominal.", cursor, textY, DUTheme.TEXT_DIM, false);
             return;
         }
 
@@ -89,14 +89,14 @@ public class WarningBarWidget {
             String seg = e.text();
             int segW = font.width(seg);
             if (cursor + segW > x + w - 8) {
-                g.text(font, "…", cursor, textY, DUTheme.TEXT_DIM, false);
+                g.drawString(font, "…", cursor, textY, DUTheme.TEXT_DIM, false);
                 break;
             }
-            g.text(font, seg, cursor, textY, e.color(), false);
+            g.drawString(font, seg, cursor, textY, e.color(), false);
             hitBoxes.add(new int[]{cursor, cursor + segW, i});
             cursor += segW;
             if (i < entries.size() - 1) {
-                g.text(font, " | ", cursor, textY, DUTheme.TEXT_DIM, false);
+                g.drawString(font, " | ", cursor, textY, DUTheme.TEXT_DIM, false);
                 cursor += font.width(" | ");
             }
         }

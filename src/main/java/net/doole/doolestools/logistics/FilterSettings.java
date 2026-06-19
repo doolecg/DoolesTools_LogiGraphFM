@@ -1,7 +1,7 @@
 package net.doole.doolestools.logistics;
 
-import net.neoforged.neoforge.transfer.item.ItemResource;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.item.ItemStack;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -87,9 +87,9 @@ public record FilterSettings(Mode mode,
                 + " routing=" + (routing == Routing.ROUND_ROBIN ? "round_robin" : "first");
     }
 
-    public boolean allows(ItemResource resource) {
+    public boolean allows(ItemStack stack) {
         if (mode == Mode.PASS_ALL) return true;
-        String id = BuiltInRegistries.ITEM.getKey(resource.getItem()).toString().toLowerCase(Locale.ROOT);
+        String id = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString().toLowerCase(Locale.ROOT);
         boolean hasItems = false;
         boolean matched = false;
         for (String item : items) {
@@ -99,7 +99,7 @@ public record FilterSettings(Mode mode,
         }
         if (hasItems) return mode == Mode.WHITELIST ? matched : !matched;
         if (legacyTokens.isEmpty()) return mode != Mode.WHITELIST;
-        String name = resource.getHoverName().getString().toLowerCase(Locale.ROOT);
+        String name = stack.getHoverName().getString().toLowerCase(Locale.ROOT);
         for (String token : legacyTokens) {
             if (id.contains(token) || name.contains(token)) {
                 matched = true;

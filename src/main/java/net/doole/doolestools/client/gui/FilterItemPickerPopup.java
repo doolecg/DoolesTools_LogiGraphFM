@@ -6,10 +6,9 @@ import net.doole.doolestools.logistics.LogisticsGraph;
 import net.doole.doolestools.logistics.NodeType;
 import net.doole.doolestools.logistics.data.GraphNodeData;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -66,7 +65,7 @@ public final class FilterItemPickerPopup {
         recentTab = false;
     }
 
-    public void render(GuiGraphicsExtractor g, int mouseX, int mouseY) {
+    public void render(GuiGraphics g, int mouseX, int mouseY) {
         if (!open) return;
         int w = Math.min(360, guiW - 40);
         int h = Math.min(250, guiH - 70);
@@ -75,9 +74,9 @@ public final class FilterItemPickerPopup {
 
         DUTheme.box(g, x - 3, y - 3, w + 6, h + 6, 0xF01b3320, DUTheme.SELECTED);
         DUTheme.box(g, x, y, w, h, 0xFF111b14, DUTheme.SELECTED);
-        g.text(font, "CHOOSE FILTER ITEM", x + 8, y + 8, DUTheme.TEXT_GREEN, false);
+        g.drawString(font, "CHOOSE FILTER ITEM", x + 8, y + 8, DUTheme.TEXT_GREEN, false);
         String slotText = slot >= 0 ? "Slot " + (slot + 1) : "Slot";
-        g.text(font, slotText, x + w - 8 - font.width(slotText), y + 8, DUTheme.TEXT_DIM, false);
+        g.drawString(font, slotText, x + w - 8 - font.width(slotText), y + 8, DUTheme.TEXT_DIM, false);
 
         int tabY = y + 22;
         pickerTab(g, x + 8,  tabY, 44, "ALL",    !recentTab);
@@ -86,7 +85,7 @@ public final class FilterItemPickerPopup {
         int searchY = y + 39;
         DUTheme.box(g, x + 8, searchY, w - 16, 16, DUTheme.PANEL_ALT, DUTheme.PANEL_BORDER);
         String searchDisplay = recentTab ? "Recent picks" : search.isBlank() ? "Search item/block name or id..." : search;
-        g.text(font, trim(font, searchDisplay, w - 26), x + 12, searchY + 5, search.isBlank() || recentTab ? DUTheme.TEXT_DIM : DUTheme.TEXT, false);
+        g.drawString(font, trim(font, searchDisplay, w - 26), x + 12, searchY + 5, search.isBlank() || recentTab ? DUTheme.TEXT_DIM : DUTheme.TEXT, false);
         if (!recentTab && (System.currentTimeMillis() / 450L) % 2L == 0L) {
             int cursorX = x + 12 + font.width(trim(font, search, w - 34));
             g.fill(cursorX, searchY + 4, cursorX + 1, searchY + 13, DUTheme.SELECTED);
@@ -105,18 +104,18 @@ public final class FilterItemPickerPopup {
             boolean hover = mouseX >= x + 8 && mouseX <= x + w - 8 && mouseY >= ry && mouseY < ry + rowH;
             DUTheme.box(g, x + 8, ry, w - 16, rowH - 1, hover ? 0xFF1f4a32 : (row % 2 == 0 ? 0xFF152018 : 0xFF101710), hover ? DUTheme.SELECTED : DUTheme.PANEL_BORDER);
             ItemIcons.render(g, entry.registryId(), x + 10, ry + 2, ItemIcons.SIZE, DUTheme.PANEL_ALT);
-            g.text(font, trim(font, entry.name(), w - 54), x + 30, ry + 3,  hover ? DUTheme.SELECTED : DUTheme.TEXT, false);
-            g.text(font, trim(font, entry.registryId(), w - 54), x + 30, ry + 12, DUTheme.TEXT_DIM, false);
+            g.drawString(font, trim(font, entry.name(), w - 54), x + 30, ry + 3,  hover ? DUTheme.SELECTED : DUTheme.TEXT, false);
+            g.drawString(font, trim(font, entry.registryId(), w - 54), x + 30, ry + 12, DUTheme.TEXT_DIM, false);
         }
         g.disableScissor();
         if (entries.isEmpty()) {
-            g.centeredText(font, recentTab ? "No recent items yet" : "No matching items", x + w / 2, listY + listH / 2, DUTheme.TEXT_DIM);
+            g.drawCenteredString(font, recentTab ? "No recent items yet" : "No matching items", x + w / 2, listY + listH / 2, DUTheme.TEXT_DIM);
         }
 
         int footerY = y + h - 18;
         DUTheme.box(g, x + 8, footerY, 58, 12, DUTheme.PANEL_ALT, DUTheme.WARN);
-        g.centeredText(font, "CLEAR", x + 37, footerY + 3, DUTheme.WARN);
-        g.text(font, "Esc closes", x + 74, footerY + 3, DUTheme.TEXT_DIM, false);
+        g.drawCenteredString(font, "CLEAR", x + 37, footerY + 3, DUTheme.WARN);
+        g.drawString(font, "Esc closes", x + 74, footerY + 3, DUTheme.TEXT_DIM, false);
     }
 
     /** Returns true if the event was consumed. */
@@ -148,16 +147,15 @@ public final class FilterItemPickerPopup {
     }
 
     /** Returns true if the event was consumed. */
-    public boolean handleKey(KeyEvent event) {
+    public boolean handleKey(int key, int modifiers) {
         if (!open) return false;
-        int key = event.key();
         if (key == 256) { close(); return true; }
         if (key == 259) {
             if (!search.isEmpty()) { search = search.substring(0, search.length() - 1); scroll = 0; }
             return true;
         }
         if (recentTab) return true;
-        String typed = keyText(event);
+        String typed = keyText(key, modifiers);
         if (!typed.isEmpty() && search.length() < 64) { search += typed; scroll = 0; }
         return true;
     }
@@ -173,9 +171,9 @@ public final class FilterItemPickerPopup {
 
     // --- Private ---
 
-    private void pickerTab(GuiGraphicsExtractor g, int x, int y, int w, String label, boolean selected) {
+    private void pickerTab(GuiGraphics g, int x, int y, int w, String label, boolean selected) {
         DUTheme.box(g, x, y, w, 13, selected ? 0xFF1f4a32 : DUTheme.PANEL_ALT, selected ? DUTheme.SELECTED : DUTheme.PANEL_BORDER);
-        g.centeredText(font, label, x + w / 2, y + 3, selected ? DUTheme.SELECTED : DUTheme.TEXT_DIM);
+        g.drawCenteredString(font, label, x + w / 2, y + 3, selected ? DUTheme.SELECTED : DUTheme.TEXT_DIM);
     }
 
     private void commitSlot(String registryId) {
@@ -221,7 +219,7 @@ public final class FilterItemPickerPopup {
             List<PickerEntry> list = new ArrayList<>();
             for (Item item : BuiltInRegistries.ITEM) {
                 if (item == Items.AIR) continue;
-                Identifier id = BuiltInRegistries.ITEM.getKey(item);
+                ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
                 if (id == null) continue;
                 String rid = id.toString();
                 String name = new ItemStack(item).getHoverName().getString();
@@ -233,9 +231,8 @@ public final class FilterItemPickerPopup {
         return allEntries;
     }
 
-    private static String keyText(KeyEvent event) {
-        int key = event.key();
-        boolean shift = (event.modifiers() & 1) != 0;
+    private static String keyText(int key, int modifiers) {
+        boolean shift = (modifiers & 1) != 0;
         if (key >= 65 && key <= 90) return String.valueOf((char) (shift ? key : key + 32));
         if (key >= 48 && key <= 57) return String.valueOf((char) key);
         return switch (key) {

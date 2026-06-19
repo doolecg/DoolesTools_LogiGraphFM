@@ -11,11 +11,11 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.neoforge.capabilities.Capabilities;
-import net.neoforged.neoforge.transfer.ResourceHandler;
-import net.neoforged.neoforge.transfer.item.ItemResource;
+import net.neoforged.neoforge.items.IItemHandler;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.LinkedHashMap;
@@ -32,31 +32,31 @@ public final class StorageDrawersProvider implements ModStorageProvider {
 
     @Override
     public @Nullable ModStorageResult read(ServerLevel level, BlockEntity be) {
-        ResourceHandler<ItemResource> handler = findItemHandler(level, be.getBlockPos(), level.getBlockState(be.getBlockPos()), be);
-        if (handler == null || handler.size() <= 0) return null;
+        IItemHandler handler = findItemHandler(level, be.getBlockPos(), level.getBlockState(be.getBlockPos()), be);
+        if (handler == null || handler.getSlots() <= 0) return null;
         Map<String, Integer> tally = new LinkedHashMap<>();
         Map<String, String> names = new LinkedHashMap<>();
         int used = 0;
-        for (int i = 0; i < handler.size(); i++) {
-            ItemResource res = handler.getResource(i);
-            long amount = handler.getAmountAsLong(i);
-            if (res == null || res.isEmpty() || amount <= 0) continue;
+        for (int i = 0; i < handler.getSlots(); i++) {
+            ItemStack stack = handler.getStackInSlot(i);
+            int amount = stack.getCount();
+            if (stack.isEmpty() || amount <= 0) continue;
             used++;
-            String id = BuiltInRegistries.ITEM.getKey(res.getItem()).toString();
-            tally.merge(id, amount > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) amount, Integer::sum);
-            names.putIfAbsent(id, res.getHoverName().getString());
+            String id = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+            tally.merge(id, amount, Integer::sum);
+            names.putIfAbsent(id, stack.getHoverName().getString());
         }
         if (tally.isEmpty()) return null;
         List<ItemEntry> items = tally.entrySet().stream()
                 .map(e -> new ItemEntry(names.get(e.getKey()), e.getKey(), e.getValue()))
                 .toList();
-        return new ModStorageResult(new InventorySummary(used, handler.size(), items), FluidSummary.EMPTY, EnergySummary.EMPTY, ScannedType.STORAGE);
+        return new ModStorageResult(new InventorySummary(used, handler.getSlots(), items), FluidSummary.EMPTY, EnergySummary.EMPTY, ScannedType.STORAGE);
     }
 
-    private static ResourceHandler<ItemResource> findItemHandler(ServerLevel level, BlockPos pos, BlockState state, BlockEntity be) {
+    private static IItemHandler findItemHandler(ServerLevel level, BlockPos pos, BlockState state, BlockEntity be) {
         for (Direction face : new Direction[] { null, Direction.DOWN, Direction.UP, Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST }) {
             try {
-                ResourceHandler<ItemResource> handler = Capabilities.Item.BLOCK.getCapability(level, pos, state, be, face);
+                IItemHandler handler = Capabilities.ItemHandler.BLOCK.getCapability(level, pos, state, be, face);
                 if (handler != null) return handler;
             } catch (RuntimeException ignored) {
             }

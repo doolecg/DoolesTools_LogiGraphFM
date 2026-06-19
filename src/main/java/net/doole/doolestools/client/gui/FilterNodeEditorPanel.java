@@ -6,7 +6,7 @@ import net.doole.doolestools.logistics.LogisticsGraph;
 import net.doole.doolestools.logistics.NodeType;
 import net.doole.doolestools.logistics.data.GraphNodeData;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.GuiGraphics;
 
 import java.util.function.IntConsumer;
 
@@ -35,7 +35,7 @@ public final class FilterNodeEditorPanel {
     }
 
     /** Renders the editor for the selected node. Returns the y coordinate below the editor content. */
-    public int render(GuiGraphicsExtractor g) {
+    public int render(GuiGraphics g) {
         GraphNodeData node = ctx.selectedNode();
         if (node == null) return contentY + 30;
         return switch (node.type()) {
@@ -92,11 +92,11 @@ public final class FilterNodeEditorPanel {
 
     // --- Render helpers ---
 
-    private int renderFilterEditor(GuiGraphicsExtractor g, GraphNodeData node) {
+    private int renderFilterEditor(GuiGraphics g, GraphNodeData node) {
         FilterSettings settings = FilterSettings.parse(node.notes());
         int x = rightX + 4, y = contentY + 30;
         int slot = 15, gap = 2;
-        g.text(font, "FILTER", x, y, DUTheme.TEXT_GREEN, false); y += 11;
+        g.drawString(font, "FILTER", x, y, DUTheme.TEXT_GREEN, false); y += 11;
 
         String[] modes = {"PASS", "ALLOW", "BLOCK"};
         for (int i = 0; i < modes.length; i++) {
@@ -105,7 +105,7 @@ public final class FilterNodeEditorPanel {
                       || (i == 1 && settings.mode() == FilterSettings.Mode.WHITELIST)
                       || (i == 2 && settings.mode() == FilterSettings.Mode.BLACKLIST);
             DUTheme.box(g, bx, y, 39, 12, on ? 0xFF14303a : DUTheme.PANEL_ALT, on ? DUTheme.SELECTED : DUTheme.PANEL_BORDER);
-            g.text(font, modes[i], bx + 4, y + 3, on ? DUTheme.SELECTED : DUTheme.TEXT_DIM, false);
+            g.drawString(font, modes[i], bx + 4, y + 3, on ? DUTheme.SELECTED : DUTheme.TEXT_DIM, false);
         }
         y += 16;
 
@@ -127,36 +127,36 @@ public final class FilterNodeEditorPanel {
         return Math.max(y + 54, cy) + 4;
     }
 
-    private int renderChannelEditor(GuiGraphicsExtractor g, GraphNodeData node) {
+    private int renderChannelEditor(GuiGraphics g, GraphNodeData node) {
         FilterSettings settings = FilterSettings.parse(node.notes());
         int x = rightX + 4, y = contentY + 30;
-        g.text(font, "CHANNEL", x, y, DUTheme.TEXT_GREEN, false);
-        g.text(font, "Routes onto outputs of this channel", x, y + 11, DUTheme.TEXT_DIM, false);
+        g.drawString(font, "CHANNEL", x, y, DUTheme.TEXT_GREEN, false);
+        g.drawString(font, "Routes onto outputs of this channel", x, y + 11, DUTheme.TEXT_DIM, false);
         filterChannelControl(g, x, y + 23, settings.channel());
         return y + 39;
     }
 
-    private int renderRoutingInfo(GuiGraphicsExtractor g, String title, String line1, String line2) {
+    private int renderRoutingInfo(GuiGraphics g, String title, String line1, String line2) {
         int x = rightX + 4, y = contentY + 30;
-        g.text(font, title, x, y, DUTheme.TEXT_GREEN, false);
-        g.text(font, line1, x, y + 11, DUTheme.TEXT_DIM, false);
-        g.text(font, line2, x, y + 21, DUTheme.TEXT_DIM, false);
+        g.drawString(font, title, x, y, DUTheme.TEXT_GREEN, false);
+        g.drawString(font, line1, x, y + 11, DUTheme.TEXT_DIM, false);
+        g.drawString(font, line2, x, y + 21, DUTheme.TEXT_DIM, false);
         return y + 35;
     }
 
-    private int filterControl(GuiGraphicsExtractor g, int x, int y, String key, String value) {
+    private int filterControl(GuiGraphics g, int x, int y, String key, String value) {
         DUTheme.box(g, x, y, rightX + rightW - x - 4, 10, DUTheme.PANEL_ALT, DUTheme.PANEL_BORDER);
-        g.text(font, key,   x + 3,  y + 2, DUTheme.TEXT_DIM, false);
-        g.text(font, value, x + 56, y + 2, DUTheme.TEXT, false);
+        g.drawString(font, key,   x + 3,  y + 2, DUTheme.TEXT_DIM, false);
+        g.drawString(font, value, x + 56, y + 2, DUTheme.TEXT, false);
         return y + 12;
     }
 
-    private int filterChannelControl(GuiGraphicsExtractor g, int x, int y, String channel) {
+    private int filterChannelControl(GuiGraphics g, int x, int y, String channel) {
         DUTheme.box(g, x, y, rightX + rightW - x - 4, 10, DUTheme.PANEL_ALT, DUTheme.PANEL_BORDER);
-        g.text(font, "Channel", x + 3, y + 2, DUTheme.TEXT_DIM, false);
+        g.drawString(font, "Channel", x + 3, y + 2, DUTheme.TEXT_DIM, false);
         int color = FilterSettings.channelColor(channel);
         if (color == 0) {
-            g.text(font, "None", x + 56, y + 2, DUTheme.TEXT_DIM, false);
+            g.drawString(font, "None", x + 56, y + 2, DUTheme.TEXT_DIM, false);
         } else {
             g.fill(x + 56, y + 2, x + 66, y + 9, 0xFF0B0F0A);
             g.fill(x + 57, y + 3, x + 65, y + 8, color);

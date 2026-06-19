@@ -2,7 +2,7 @@ package net.doole.doolestools.client.screen;
 
 import net.doole.doolestools.client.gui.DUTheme;
 import net.doole.doolestools.menu.NetworkBatteryMenu;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
@@ -10,7 +10,9 @@ import net.minecraft.world.inventory.Slot;
 
 public class NetworkBatteryScreen extends AbstractContainerScreen<NetworkBatteryMenu> {
     public NetworkBatteryScreen(NetworkBatteryMenu menu, Inventory inventory, Component title) {
-        super(menu, inventory, title, 176, 166);
+        super(menu, inventory, title);
+        this.imageWidth = 176;
+        this.imageHeight = 166;
         this.inventoryLabelY = 72;
     }
 
@@ -25,20 +27,20 @@ public class NetworkBatteryScreen extends AbstractContainerScreen<NetworkBattery
     }
 
     @Override
-    public void extractBackground(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick) {
+    protected void renderBg(GuiGraphics g, float partialTick, int mouseX, int mouseY) {
         DUTheme.bezel(g, leftPos, topPos, imageWidth, imageHeight);
         DUTheme.box(g, leftPos + 5, topPos + 5, imageWidth - 10, imageHeight - 10, DUTheme.SCREEN, DUTheme.PANEL_BORDER);
         DUTheme.box(g, leftPos + 10, topPos + 10, imageWidth - 20, 56, DUTheme.PANEL, DUTheme.PANEL_BORDER);
 
-        g.text(font, "NETWORK BATTERY", leftPos + 14, topPos + 14, DUTheme.TEXT_GREEN, false);
+        g.drawString(font, "NETWORK BATTERY", leftPos + 14, topPos + 14, DUTheme.TEXT_GREEN, false);
 
         int pct = menu.energyPercent();
-        g.text(font, "STORED", leftPos + 14, topPos + 28, DUTheme.TEXT_DIM, false);
-        g.text(font, format(menu.energy()) + " FE", leftPos + 60, topPos + 28, DUTheme.TEXT, false);
+        g.drawString(font, "STORED", leftPos + 14, topPos + 28, DUTheme.TEXT_DIM, false);
+        g.drawString(font, format(menu.energy()) + " FE", leftPos + 60, topPos + 28, DUTheme.TEXT, false);
         DUTheme.progress(g, leftPos + 14, topPos + 41, imageWidth - 44, 10, pct / 100f, DUTheme.PROGRESS_BLUE);
-        g.text(font, pct + "%", leftPos + imageWidth - 26, topPos + 53, DUTheme.TEXT_DIM, false);
+        g.drawString(font, pct + "%", leftPos + imageWidth - 26, topPos + 53, DUTheme.TEXT_DIM, false);
 
-        g.text(font, "Inventory", leftPos + 8, topPos + 72, DUTheme.TEXT_DIM, false);
+        g.drawString(font, "Inventory", leftPos + 8, topPos + 72, DUTheme.TEXT_DIM, false);
 
         // Vanilla-style slot wells behind every slot.
         for (Slot slot : menu.slots) {

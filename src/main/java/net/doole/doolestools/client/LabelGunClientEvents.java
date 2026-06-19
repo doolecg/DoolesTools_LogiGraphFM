@@ -9,9 +9,9 @@ import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.ShapeRenderer;
-import net.minecraft.client.renderer.rendertype.RenderTypes;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.InteractionHand;
@@ -19,7 +19,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
-import net.minecraft.world.phys.shapes.Shapes;
+import net.minecraft.world.phys.AABB;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -72,12 +72,13 @@ public final class LabelGunClientEvents {
     }
 
     @SubscribeEvent
-    public static void onRenderLevel(RenderLevelStageEvent.AfterTranslucentBlocks event) {
+    public static void onRenderLevel(RenderLevelStageEvent event) {
+        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_TRANSLUCENT_BLOCKS) return;
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || !holdingGun(mc.player)) return;
 
         Camera camera = mc.gameRenderer.getMainCamera();
-        Vec3 cam = camera.position();
+        Vec3 cam = camera.getPosition();
         PoseStack pose = event.getPoseStack();
         MultiBufferSource.BufferSource buffers = mc.renderBuffers().bufferSource();
         Font font = mc.font;
@@ -86,10 +87,9 @@ public final class LabelGunClientEvents {
         boolean renderedText = false;
         if (mc.hitResult instanceof BlockHitResult hit && hit.getType() == HitResult.Type.BLOCK) {
             BlockPos tp = hit.getBlockPos();
-            VertexConsumer lines = buffers.getBuffer(RenderTypes.lines());
-            ShapeRenderer.renderShape(pose, lines, Shapes.block(),
-                    tp.getX() - cam.x, tp.getY() - cam.y, tp.getZ() - cam.z, 0xCC40FF73, 2.0f);
-            buffers.endBatch(RenderTypes.lines());
+            VertexConsumer lines = buffers.getBuffer(RenderType.lines());
+            LevelRenderer.renderLineBox(pose, lines, new AABB(tp).move(-cam.x, -cam.y, -cam.z), 0.25f, 1.0f, 0.45f, 0.8f);
+            buffers.endBatch(RenderType.lines());
             String heldName = heldGunName(mc.player);
             if (!heldName.isBlank()) {
                 renderLabel(pose, buffers, font, camera, cam, tp, heldName, bgColor(mc));

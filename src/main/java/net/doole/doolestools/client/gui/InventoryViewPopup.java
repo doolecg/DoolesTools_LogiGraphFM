@@ -3,7 +3,7 @@ package net.doole.doolestools.client.gui;
 import net.doole.doolestools.logistics.data.InventorySummary;
 import net.doole.doolestools.logistics.data.ItemEntry;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.GuiGraphics;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -92,7 +92,7 @@ public class InventoryViewPopup {
 
     // ── Render ───────────────────────────────────────────────────────────────
 
-    public void render(GuiGraphicsExtractor g, Font font, int guiW, int guiH) {
+    public void render(GuiGraphics g, Font font, int guiW, int guiH) {
         bx = (guiW - POP_W) / 2;
         by = (guiH - POP_H) / 2;
 
@@ -106,23 +106,23 @@ public class InventoryViewPopup {
         renderFooter(g, font);
     }
 
-    private void renderHeader(GuiGraphicsExtractor g, Font font) {
+    private void renderHeader(GuiGraphics g, Font font) {
         g.fill(bx + 1, by + 1, bx + POP_W - 1, by + HEADER_H, DUTheme.PANEL_HEADER);
         DUTheme.glowText(g, font, "INVENTORY", bx + 6, by + 4, DUTheme.TEXT_GREEN);
-        g.text(font, trim(font, blockName, POP_W - 60), bx + 6, by + 13, DUTheme.TEXT_DIM, false);
+        g.drawString(font, trim(font, blockName, POP_W - 60), bx + 6, by + 13, DUTheme.TEXT_DIM, false);
 
         closeBtnX = bx + POP_W - 20;
         closeBtnY = by + 5;
         DUTheme.box(g, closeBtnX, closeBtnY, 14, 11, DUTheme.PANEL, DUTheme.ERROR);
-        g.centeredText(font, "X", closeBtnX + 7, closeBtnY + 2, DUTheme.ERROR);
+        g.drawCenteredString(font, "X", closeBtnX + 7, closeBtnY + 2, DUTheme.ERROR);
     }
 
-    private void renderSortBar(GuiGraphicsExtractor g, Font font) {
+    private void renderSortBar(GuiGraphics g, Font font) {
         modeBtnY = by + HEADER_H + 4;
         int sx = bx + 6;
 
         // "Sort by:" label
-        g.text(font, "Sort by:", sx, modeBtnY + 3, DUTheme.TEXT_DIM, false);
+        g.drawString(font, "Sort by:", sx, modeBtnY + 3, DUTheme.TEXT_DIM, false);
         int labelW = font.width("Sort by:") + 6;
 
         // Three mode buttons
@@ -135,7 +135,7 @@ public class InventoryViewPopup {
             DUTheme.box(g, modeBtnX[i], modeBtnY, MODE_BTN_W, BTN_H,
                     active ? 0xFF0d1f13 : DUTheme.PANEL,
                     active ? DUTheme.TEXT_GREEN : DUTheme.PANEL_BORDER);
-            g.centeredText(font, label, modeBtnX[i] + MODE_BTN_W / 2, modeBtnY + 3,
+            g.drawCenteredString(font, label, modeBtnX[i] + MODE_BTN_W / 2, modeBtnY + 3,
                     active ? DUTheme.TEXT_GREEN : DUTheme.TEXT_DIM);
         }
 
@@ -144,11 +144,11 @@ public class InventoryViewPopup {
         dirBtnX = sx + labelW + 3 * (MODE_BTN_W + BTN_GAP);
         dirBtnY = modeBtnY;
         DUTheme.box(g, dirBtnX, dirBtnY, DIR_BTN_W, BTN_H, DUTheme.PANEL, DUTheme.TEXT_GREEN);
-        g.centeredText(font, ascending ? "▲" : "▼", dirBtnX + DIR_BTN_W / 2, dirBtnY + 3,
+        g.drawCenteredString(font, ascending ? "▲" : "▼", dirBtnX + DIR_BTN_W / 2, dirBtnY + 3,
                 DUTheme.TEXT_GREEN);
     }
 
-    private void renderItems(GuiGraphicsExtractor g, Font font) {
+    private void renderItems(GuiGraphics g, Font font) {
         int divY = by + HEADER_H + SORT_H;
         g.fill(bx + 4, divY, bx + POP_W - 4, divY + 1, DUTheme.PANEL_BORDER);
 
@@ -178,7 +178,7 @@ public class InventoryViewPopup {
         }
     }
 
-    private void renderRow(GuiGraphicsExtractor g, Font font, ItemEntry e, int ry, boolean alt, int listRight) {
+    private void renderRow(GuiGraphics g, Font font, ItemEntry e, int ry, boolean alt, int listRight) {
         int rowRight = listRight - bx;
         if (alt) g.fill(bx + 2, ry, listRight, ry + ROW_H - 1, DUTheme.PANEL_ALT);
 
@@ -186,12 +186,12 @@ public class InventoryViewPopup {
 
         // Item name — trim to fit before the mod column
         int nameMaxW = COL_MOD - COL_NAME - 6;
-        g.text(font, trim(font, e.displayName(), nameMaxW), bx + COL_NAME, ry + 4, DUTheme.TEXT, false);
+        g.drawString(font, trim(font, e.displayName(), nameMaxW), bx + COL_NAME, ry + 4, DUTheme.TEXT, false);
 
         // Mod tag — always shown, dim
         String mod = modOf(e.registryId());
         int modMaxW = COL_COUNT - COL_MOD - 6;
-        g.text(font, trim(font, mod, modMaxW), bx + COL_MOD, ry + 4, DUTheme.TEXT_DIM, false);
+        g.drawString(font, trim(font, mod, modMaxW), bx + COL_MOD, ry + 4, DUTheme.TEXT_DIM, false);
 
         // Count right-aligned, with full-stack annotation
         int stacks = e.count() / 64;
@@ -199,13 +199,13 @@ public class InventoryViewPopup {
         String stackStr = stacks > 0 ? " ×" + stacks : ""; // ×N
         String full = countStr + stackStr;
         int cx = bx + rowRight - 6 - font.width(full);
-        g.text(font, countStr, cx, ry + 4, DUTheme.TEXT, false);
+        g.drawString(font, countStr, cx, ry + 4, DUTheme.TEXT, false);
         if (stacks > 0) {
-            g.text(font, stackStr, cx + font.width(countStr), ry + 4, DUTheme.TEXT_DIM, false);
+            g.drawString(font, stackStr, cx + font.width(countStr), ry + 4, DUTheme.TEXT_DIM, false);
         }
     }
 
-    private void renderFooter(GuiGraphicsExtractor g, Font font) {
+    private void renderFooter(GuiGraphics g, Font font) {
         int footerY = by + POP_H - FOOTER_H;
         g.fill(bx + 1, footerY, bx + POP_W - 1, footerY + FOOTER_H - 1, DUTheme.PANEL_HEADER);
         g.fill(bx + 4, footerY, bx + POP_W - 4, footerY + 1, DUTheme.PANEL_BORDER);
@@ -216,8 +216,8 @@ public class InventoryViewPopup {
 
         String left = items.size() + " types  ·  " + formatCount(total) + " items";
         String right = fullStacks + " stacks of 64" + (rem > 0 ? " + " + rem : "");
-        g.text(font, left,  bx + 6, footerY + 4, DUTheme.TEXT_DIM, false);
-        g.text(font, right, bx + POP_W - 4 - font.width(right), footerY + 4, DUTheme.TEXT_DIM, false);
+        g.drawString(font, left,  bx + 6, footerY + 4, DUTheme.TEXT_DIM, false);
+        g.drawString(font, right, bx + POP_W - 4 - font.width(right), footerY + 4, DUTheme.TEXT_DIM, false);
     }
 
     // ── Input ─────────────────────────────────────────────────────────────────

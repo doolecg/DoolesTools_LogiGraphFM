@@ -1,7 +1,7 @@
 package net.doole.doolestools.client.gui;
 
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.GuiGraphics;
 
 import java.util.List;
 
@@ -22,7 +22,7 @@ public interface CanvasAdapter {
     void onNodeMoved(String id, int logicalX, int logicalY);
 
     /** Draw the node card. Called inside the widget's zoom/pan matrix, so coordinates are logical. */
-    void renderNode(GuiGraphicsExtractor g, Font font, CanvasNode node, boolean selected);
+    void renderNode(GuiGraphics g, Font font, CanvasNode node, boolean selected);
 
     default int portInX(CanvasNode node) { return node.x() - 1; }
     default int portInY(CanvasNode node) { return node.y() + node.h() / 2; }

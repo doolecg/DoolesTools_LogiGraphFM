@@ -32,17 +32,15 @@ import net.doole.doolestools.logistics.data.NetworkPowerData;
 import net.doole.doolestools.logistics.data.ScannedBlockData;
 import net.minecraft.client.Minecraft;
 import net.doole.doolestools.menu.LogisticsComputerMenu;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.input.KeyEvent;
-import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -154,11 +152,14 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
     public LogisticsComputerScreen(LogisticsComputerMenu menu, Inventory inv, Component title) {
         // Pass an oversized imageWidth/imageHeight so JEI/REI/EMI calculate no available
         // margin and keep their panels off-screen. Our rendering uses guiW/guiH, not these.
-        super(menu, inv, title, 10000, 10000);
+        super(menu, inv, title);
+        this.imageWidth = 10000;
+        this.imageHeight = 10000;
         this.ctx = new EditorContext(menu.getPos());
-        this.statsPanel = new net.doole.doolestools.client.gui.StatsPagePanel(ctx, font);
-        this.filterPickerPopup = new net.doole.doolestools.client.gui.FilterItemPickerPopup(ctx, font);
-        this.filterNodeEditor = new net.doole.doolestools.client.gui.FilterNodeEditorPanel(ctx, font);
+        Font clientFont = Minecraft.getInstance().font;
+        this.statsPanel = new net.doole.doolestools.client.gui.StatsPagePanel(ctx, clientFont);
+        this.filterPickerPopup = new net.doole.doolestools.client.gui.FilterItemPickerPopup(ctx, clientFont);
+        this.filterNodeEditor = new net.doole.doolestools.client.gui.FilterNodeEditorPanel(ctx, clientFont);
     }
 
     public EditorContext context() {
@@ -190,10 +191,17 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
 
         // Panel geometry.
         leftX = lx + 10;
-        leftW = 132;
+        leftW = Math.min(132, Math.max(112, guiW / 5));
         rightW = Math.max(126, Math.min(176, guiW / 4));
         rightX = lx + guiW - rightW - 10;
         canvasX = leftX + leftW + 8;
+        int maxSideWidth = Math.max(112, (guiW - 176) / 2);
+        if (rightX - canvasX - 8 < 140) {
+            leftW = Math.min(leftW, maxSideWidth);
+            rightW = Math.min(rightW, maxSideWidth);
+            rightX = lx + guiW - rightW - 10;
+            canvasX = leftX + leftW + 8;
+        }
         canvasW = Math.max(140, rightX - canvasX - 8);
         contentY = ty + 44;
         tabBarY = ty + guiH - 24;
@@ -203,7 +211,7 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         // Inset the list strictly inside the panel, ending above the SCAN/REFRESH buttons.
         int listBottom = contentY + contentH - 44;
         listWidget = new ScannedBlockListWidget(ctx, leftX + 2, contentY + 13, leftW - 4, Math.max(44, listBottom - (contentY + 13)));
-        canvasWidget = new GraphCanvasWidget(ctx, canvasX, contentY, canvasW, contentH);
+        canvasWidget = new GraphCanvasWidget(ctx, canvasX, contentY, canvasW, Math.max(72, contentH - 14));
         // Details content must end above the Set Type / Remove buttons (at contentY + contentH - 16).
         int detailsBottom = contentY + contentH - 20;
         detailsPanel = new NodeDetailsPanel(ctx, rightX + 4, contentY + 30, rightW - 8, detailsBottom - (contentY + 30), this::openInventoryPopup);
@@ -241,7 +249,7 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         return b;
     }
 
-    private net.minecraft.resources.Identifier pageSprite(int targetPage) {
+    private net.minecraft.resources.ResourceLocation pageSprite(int targetPage) {
         return switch (targetPage) {
             case PAGE_SCANNED -> GuiSprites.LIST;
             case PAGE_STATS -> GuiSprites.STATS;
@@ -293,9 +301,9 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
 
         // Canvas header zoom controls.
         paged(PAGE_GRAPH, new TerminalButton(canvasX + canvasW - 24, contentY + 1, 11, 9,
-                Component.literal("+"), () -> zoomBy(0.2f)));
+                Component.empty(), () -> zoomBy(0.2f)).iconOnly(Glyphs::plus));
         paged(PAGE_GRAPH, new TerminalButton(canvasX + canvasW - 12, contentY + 1, 11, 9,
-                Component.literal("-"), () -> zoomBy(-0.2f)));
+                Component.empty(), () -> zoomBy(-0.2f)).iconOnly(Glyphs::minus));
 
         // Right panel: editable custom name + Set Type / Remove.
         nameField = new EditBox(font, rightX + 4, contentY + 14, rightW - 8, 12, Component.literal("name"));
@@ -603,35 +611,42 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
 
     // --- UI scale helpers ---
 
-    private int designX(double screenX) { return (int) Math.round((screenX - uiOffsetX) / uiScale); }
-    private int designY(double screenY) { return (int) Math.round((screenY - uiOffsetY) / uiScale); }
+    private int designX(double screenX) { return Math.max(leftPos, Math.min(leftPos + guiW, (int) Math.round((screenX - uiOffsetX) / uiScale))); }
+    private int designY(double screenY) { return Math.max(topPos, Math.min(topPos + guiH, (int) Math.round((screenY - uiOffsetY) / uiScale))); }
 
-    private void pushUi(GuiGraphicsExtractor g) {
-        g.pose().pushMatrix();
-        g.pose().translate(uiOffsetX, uiOffsetY);
-        g.pose().scale(uiScale, uiScale);
+    private void pushUi(GuiGraphics g) {
+        g.pose().pushPose();
+        g.pose().translate(uiOffsetX, uiOffsetY, 0.0F);
+        g.pose().scale(uiScale, uiScale, 1.0F);
+    }
+
+    private void enableDesignScissor(GuiGraphics g, int x1, int y1, int x2, int y2) {
+        int sx1 = (int) Math.floor(uiOffsetX + x1 * uiScale);
+        int sy1 = (int) Math.floor(uiOffsetY + y1 * uiScale);
+        int sx2 = (int) Math.ceil(uiOffsetX + x2 * uiScale);
+        int sy2 = (int) Math.ceil(uiOffsetY + y2 * uiScale);
+        g.enableScissor(sx1, sy1, sx2, sy2);
     }
 
     @Override
-    public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float a) {
+    public void render(GuiGraphics g, int mouseX, int mouseY, float a) {
         // Render widgets under the same scale/offset as the background, with design-space mouse coords.
         pushUi(g);
         int designMouseX = designX(mouseX), designMouseY = designY(mouseY);
-        super.extractRenderState(g, designMouseX, designMouseY, a);
+        super.render(g, designMouseX, designMouseY, a);
         if (page == PAGE_GRAPH && !startMenuOpen && !filterPickerPopup.isOpen() && contextMenu == null && inventoryPopup == null) {
             renderToolTooltips(g, designMouseX, designMouseY);
         }
         if (startMenuOpen) renderStartMenu(g, leftPos, topPos, designMouseX, designMouseY);
         filterPickerPopup.render(g, designMouseX, designMouseY);
-        g.pose().popMatrix();
+        g.pose().popPose();
     }
 
     // --- rendering ---
 
     @Override
-    public void extractBackground(GuiGraphicsExtractor g, int rawMouseX, int rawMouseY, float partialTick) {
-        pushUi(g);
-        int mouseX = designX(rawMouseX), mouseY = designY(rawMouseY);
+    protected void renderBg(GuiGraphics g, float partialTick, int rawMouseX, int rawMouseY) {
+        int mouseX = rawMouseX, mouseY = rawMouseY;
         int lx = leftPos, ty = topPos;
 
         DUTheme.frame(g, lx, ty, guiW, guiH);
@@ -651,10 +666,9 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         if (inventoryPopup != null) inventoryPopup.render(g, font, guiW, guiH);
         if (shiftModalNodeId != null && page == PAGE_GRAPH) renderShiftModal(g, mouseX, mouseY);
 
-        g.pose().popMatrix();
     }
 
-    private void renderGraphPage(GuiGraphicsExtractor g, int lx, int ty, double mouseX, double mouseY) {
+    private void renderGraphPage(GuiGraphics g, int lx, int ty, double mouseX, double mouseY) {
         panel(g, leftX, contentY, leftW, contentH, tr("doolestools.computer.panel.network"));
         panel(g, canvasX, contentY, canvasW, contentH, tr("doolestools.computer.panel.canvas"));
         panel(g, rightX, contentY, rightW, contentH, tr("doolestools.computer.panel.details"));
@@ -663,17 +677,19 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         panGlyph(g, canvasX + canvasW - 36, contentY + 2);
         pinGlyph(g, rightX + rightW - 11, contentY + 3);
 
+        canvasWidget.setScissorTransform(uiOffsetX, uiOffsetY, uiScale);
+        detailsPanel.setScissorTransform(uiOffsetX, uiOffsetY, uiScale);
         canvasWidget.render(g, font, mouseX, mouseY);
         renderCanvasTitleStrip(g);
         if (marqueeing) renderMarquee(g);
         if (draggingScanned) renderScannedDragPreview(g);
         if (draggingScanned) renderConnectionDropPreview(g);
         listWidget.render(g, font);
-        renderCanvasLegend(g, canvasX, contentY + contentH);
+        renderCanvasLegend(g, canvasX, contentY + contentH - 4);
 
         syncNameField();
         GraphNodeData sel = ctx.selectedNode();
-        g.text(font, sel != null ? sel.displayName() : "—", rightX + 4, contentY + 14, DUTheme.TEXT, false);
+        g.drawString(font, sel != null ? sel.displayName() : "—", rightX + 4, contentY + 14, DUTheme.TEXT, false);
         int detailsTop = filterNodeEditor.render(g);
         detailsPanel.render(g, font, detailsTop);
 
@@ -685,7 +701,7 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
 
     private static final int SCAN_ROW_H = 28;
 
-    private void renderScannedPage(GuiGraphicsExtractor g, int lx, int ty) {
+    private void renderScannedPage(GuiGraphics g, int lx, int ty) {
         int x = lx + 10, y = contentY, w = guiW - 20, h = tabBarY - contentY - 8;
         panel(g, x, y, w, h, tr("doolestools.computer.panel.network") + " - " + ctx.scan().size() + " " + tr("doolestools.computer.label.devices"));
 
@@ -702,17 +718,17 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         }
         g.disableScissor();
         if (list.isEmpty()) {
-            g.centeredText(font, tr("doolestools.computer.empty.network"), x + w / 2, y + h / 2, DUTheme.TEXT_DIM);
+            g.drawCenteredString(font, tr("doolestools.computer.empty.network"), x + w / 2, y + h / 2, DUTheme.TEXT_DIM);
         }
     }
 
-    private void renderScannedRow(GuiGraphicsExtractor g, ScannedBlockData s, int x, int y, int w, boolean alt) {
+    private void renderScannedRow(GuiGraphics g, ScannedBlockData s, int x, int y, int w, boolean alt) {
         g.fill(x, y, x + w, y + SCAN_ROW_H - 2, alt ? DUTheme.PANEL_ALT : DUTheme.PANEL);
         DUTheme.outline(g, x, y, w, SCAN_ROW_H - 2, DUTheme.PANEL_BORDER);
         ItemIcons.render(g, s.registryId(), x + 5, y + 5, ItemIcons.SIZE, iconColor(s));
 
-        g.text(font, s.blockName(), x + 26, y + 4, DUTheme.TEXT, false);
-        g.text(font, typeLabel(s) + "  •  " + Math.round(s.distance()) + "m  •  "
+        g.drawString(font, s.blockName(), x + 26, y + 4, DUTheme.TEXT, false);
+        g.drawString(font, typeLabel(s) + "  •  " + Math.round(s.distance()) + "m  •  "
                 + s.pos().getX() + "," + s.pos().getY() + "," + s.pos().getZ(), x + 26, y + 15, DUTheme.TEXT_DIM, false);
 
         // Middle: fill bar for storage / status for machines.
@@ -720,10 +736,10 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         if (s.inventory().hasData()) {
             int pct = s.inventory().fillPercent();
             DUTheme.progress(g, midX, y + 6, 90, 8, pct / 100f, pct >= 100 ? DUTheme.ERROR : pct >= 85 ? DUTheme.WARN : DUTheme.OK);
-            g.text(font, pct + "%  (" + s.inventory().usedSlots() + "/" + s.inventory().totalSlots() + ")", midX, y + 16, DUTheme.TEXT_DIM, false);
+            g.drawString(font, pct + "%  (" + s.inventory().usedSlots() + "/" + s.inventory().totalSlots() + ")", midX, y + 16, DUTheme.TEXT_DIM, false);
         } else if (s.furnace().hasData()) {
-            g.text(font, s.furnace().status(), midX, y + 6, DUTheme.OK, false);
-            if (s.furnace().hasRecipe()) g.text(font, "→ " + s.furnace().resultName(), midX, y + 16, DUTheme.TEXT_DIM, false);
+            g.drawString(font, s.furnace().status(), midX, y + 6, DUTheme.OK, false);
+            if (s.furnace().hasRecipe()) g.drawString(font, "→ " + s.furnace().resultName(), midX, y + 16, DUTheme.TEXT_DIM, false);
         }
 
         // Right: top item icons.
@@ -737,7 +753,7 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
 
     // --- Page 3: power usage ---
 
-    private void renderStatsPage(GuiGraphicsExtractor g, int lx, int ty) {
+    private void renderStatsPage(GuiGraphics g, int lx, int ty) {
         int x = lx + 10, y = contentY, w = guiW - 20, h = tabBarY - contentY - 8;
         panel(g, x, y, w, h, tr("doolestools.computer.page.power"));
         statsPanel.render(g, x, y, w, h);
@@ -752,7 +768,7 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
 
     // --- Page 4: settings ---
 
-    private void renderSettingsPage(GuiGraphicsExtractor g, int lx, int ty) {
+    private void renderSettingsPage(GuiGraphics g, int lx, int ty) {
         int x = lx + 10, y = contentY, w = guiW - 20, h = tabBarY - contentY - 8;
         panel(g, x, y, w, h, tr("doolestools.computer.page.settings"));
 
@@ -761,15 +777,15 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         int wx = bx + SETTINGS_COL_W + 20;
         int headY = contentY + 16;
         // Section headers, each above its column of controls.
-        g.text(font, "DISPLAY", sx, headY, DUTheme.TEXT_GREEN, false);
-        g.text(font, "GRAPH DATA", bx, headY, DUTheme.TEXT_GREEN, false);
-        g.text(font, "NETWORK & SHARING", wx, headY, DUTheme.TEXT_GREEN, false);
+        g.drawString(font, "DISPLAY", sx, headY, DUTheme.TEXT_GREEN, false);
+        g.drawString(font, "GRAPH DATA", bx, headY, DUTheme.TEXT_GREEN, false);
+        g.drawString(font, "NETWORK & SHARING", wx, headY, DUTheme.TEXT_GREEN, false);
 
         // Network & sharing readout, below its controls (cycle access / name / whitelist add+remove).
         int netY = contentY + 28 + 4 * 22 + 4;
-        g.text(font, "Name: " + ctx.networkName(), wx, netY, DUTheme.TEXT, false);
-        g.text(font, "ID: " + ctx.networkId(), wx, netY + 11, DUTheme.TEXT_DIM, false);
-        g.text(font, "Access: " + ctx.accessMode().toUpperCase(java.util.Locale.ROOT) + (ctx.canEdit() ? "" : "  (VIEW ONLY)"),
+        g.drawString(font, "Name: " + ctx.networkName(), wx, netY, DUTheme.TEXT, false);
+        g.drawString(font, "ID: " + fourDigitNetworkId(), wx, netY + 11, DUTheme.TEXT_DIM, false);
+        g.drawString(font, "Access: " + ctx.accessMode().toUpperCase(java.util.Locale.ROOT) + (ctx.canEdit() ? "" : "  (VIEW ONLY)"),
                 wx, netY + 22, ctx.canEdit() ? DUTheme.OK : DUTheme.WARN, false);
         String whitelist;
         if (ctx.editorWhitelist().isEmpty()) {
@@ -780,10 +796,10 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
             whitelist = String.join(", ", names);
         }
         if (whitelist.length() > 44) whitelist = whitelist.substring(0, 41) + "...";
-        g.text(font, "Whitelist: " + whitelist, wx, netY + 33, DUTheme.TEXT_DIM, false);
-        g.text(font, "Add an online player's name or a UUID.", wx, netY + 44, DUTheme.TEXT_DIM, false);
+        g.drawString(font, "Whitelist: " + whitelist, wx, netY + 33, DUTheme.TEXT_DIM, false);
+        g.drawString(font, "Add an online player's name or a UUID.", wx, netY + 44, DUTheme.TEXT_DIM, false);
 
-        g.text(font, "Display options are client-side. Graph JSON uses your clipboard + server validation.",
+        g.drawString(font, "Display options are client-side. Graph JSON uses your clipboard + server validation.",
                 sx, tabBarY - 14, DUTheme.TEXT_DIM, false);
     }
 
@@ -795,7 +811,7 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
             if (connection != null) {
                 var info = connection.getPlayerInfo(id);
                 if (info != null && info.getProfile() != null) {
-                    String name = info.getProfile().name();
+                    String name = info.getProfile().getName();
                     if (name != null && !name.isBlank()) return name;
                 }
             }
@@ -838,32 +854,32 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         ClientNetworkSender.setComputerNetworkSettings(ctx.pos(), ctx.networkName(), ctx.accessMode(), next);
     }
 
-    private void renderHeader(GuiGraphicsExtractor g, int lx, int ty) {
+    private void renderHeader(GuiGraphics g, int lx, int ty) {
         DUTheme.box(g, lx + 10, ty + 8, guiW - 20, 28, DUTheme.PANEL, DUTheme.PANEL_BORDER);
         GuiSprites.draw(g, GuiSprites.LOGO, lx + 14, ty + 10, 24);
 
         var pose = g.pose();
-        pose.pushMatrix();
-        pose.translate(lx + 40, ty + 12);
-        pose.scale(1.35f, 1.35f);
+        pose.pushPose();
+        pose.translate(lx + 40, ty + 12, 0.0F);
+        pose.scale(1.35f, 1.35f, 1.0F);
         DUTheme.glowText(g, font, tr("doolestools.logigraph.brand"), 0, 0, DUTheme.TEXT_GREEN);
-        pose.popMatrix();
+        pose.popPose();
         // Subtitle sits directly under the brand wordmark, left-aligned with it.
-        g.text(font, tr("doolestools.logigraph.subtitle"), lx + 41, ty + 25, DUTheme.TEXT_DIM, false);
+        g.drawString(font, tr("doolestools.logigraph.subtitle"), lx + 41, ty + 25, DUTheme.TEXT_DIM, false);
 
         // Network ID — positioned in the free zone between logo area and the SAVE button.
         // Header buttons start at lx+guiW-106 (SAVE). Logo/brand ends around lx+130.
-        String netId = ctx.networkId();
+        String netId = fourDigitNetworkId();
         if (!netId.isBlank()) {
             String idText = "ID: " + netId;
             int rightBound = lx + guiW - 112;  // safe left edge of SAVE button with margin
             int maxIdW = rightBound - (lx + 130);
             while (font.width(idText) > maxIdW && idText.length() > 8) idText = idText.substring(0, idText.length() - 1) + "…";
-            g.text(font, idText, rightBound - font.width(idText), ty + 17, DUTheme.TEXT_DIM, false);
+            g.drawString(font, idText, rightBound - font.width(idText), ty + 17, DUTheme.TEXT_DIM, false);
         }
     }
 
-    private void renderTaskbar(GuiGraphicsExtractor g, int lx, int ty) {
+    private void renderTaskbar(GuiGraphics g, int lx, int ty) {
         int y = tabBarY - 2;
         DUTheme.box(g, lx + 5, y, guiW - 10, 21, DUTheme.PANEL_ALT, DUTheme.PANEL_BORDER);
         // Horizontal page bar bottom-left: one button per page for quick switching (also Left/Right keys).
@@ -873,7 +889,7 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
             boolean active = page == PAGE_ORDER[i];
             int bw = font.width(PAGE_TABS[i]) + 12;
             DUTheme.box(g, bx, by, bw, 15, active ? 0xFF14303a : DUTheme.PANEL, active ? DUTheme.SELECTED : DUTheme.PANEL_BORDER);
-            g.text(font, PAGE_TABS[i], bx + 6, by + 4, active ? DUTheme.SELECTED : DUTheme.TEXT_DIM, false);
+            g.drawString(font, PAGE_TABS[i], bx + 6, by + 4, active ? DUTheme.SELECTED : DUTheme.TEXT_DIM, false);
             bx += bw + 3;
         }
 
@@ -886,22 +902,22 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         int graphStatusColor = ctx.isDirty() ? DUTheme.WARN : DUTheme.OK;
         String clock = LocalTime.now().format(CLOCK);
         int clockX = lx + guiW - 12 - font.width(clock);
-        g.text(font, clock, clockX, startY + 4, DUTheme.TEXT_DIM, false);
+        g.drawString(font, clock, clockX, startY + 4, DUTheme.TEXT_DIM, false);
         int netX = clockX - 12 - font.width(net);
         DUTheme.dot(g, netX - 8, startY + 5, netColor);
-        g.text(font, net, netX, startY + 4, netColor, false);
+        g.drawString(font, net, netX, startY + 4, netColor, false);
         int graphX = netX - 14 - font.width(graphStatus);
         DUTheme.dot(g, graphX - 8, startY + 5, graphStatusColor);
-        g.text(font, graphStatus, graphX, startY + 4, graphStatusColor, false);
+        g.drawString(font, graphStatus, graphX, startY + 4, graphStatusColor, false);
         // Active route count — always visible in the status bar across all pages.
         int routeCount = ctx.activeRouteCount();
         String pktText = routeCount + " PKT";
         int pktX = graphX - 14 - font.width(pktText);
         DUTheme.dot(g, pktX - 8, startY + 5, routeCount > 0 ? DUTheme.SELECTED : DUTheme.TEXT_DIM);
-        g.text(font, pktText, pktX, startY + 4, routeCount > 0 ? DUTheme.SELECTED : DUTheme.TEXT_DIM, false);
+        g.drawString(font, pktText, pktX, startY + 4, routeCount > 0 ? DUTheme.SELECTED : DUTheme.TEXT_DIM, false);
     }
 
-    private void renderStartMenu(GuiGraphicsExtractor g, int lx, int ty, int mouseX, int mouseY) {
+    private void renderStartMenu(GuiGraphics g, int lx, int ty, int mouseX, int mouseY) {
         int x = lx + 10;
         int y = tabBarY - 92;
         int w = 142;
@@ -915,32 +931,41 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         startMenuEntry(g, x, y + 68, w, tr("doolestools.computer.page.settings"), PAGE_SETTINGS, mouseX, mouseY);
     }
 
-    private void startMenuEntry(GuiGraphicsExtractor g, int x, int y, int w, String label, int targetPage, int mouseX, int mouseY) {
+    private void startMenuEntry(GuiGraphics g, int x, int y, int w, String label, int targetPage, int mouseX, int mouseY) {
         boolean hover = mouseX >= x + 4 && mouseX <= x + w - 4 && mouseY >= y && mouseY <= y + 14;
         boolean active = page == targetPage;
         if (hover || active) g.fill(x + 4, y, x + w - 4, y + 14, active ? 0xFF14303a : 0xFF111d16);
-        g.text(font, label, x + 9, y + 3, active ? DUTheme.SELECTED : hover ? DUTheme.TEXT : DUTheme.TEXT_DIM, false);
+        g.drawString(font, label, x + 9, y + 3, active ? DUTheme.SELECTED : hover ? DUTheme.TEXT : DUTheme.TEXT_DIM, false);
     }
 
-    private void panel(GuiGraphicsExtractor g, int x, int y, int w, int h, String title) {
+    private void panel(GuiGraphics g, int x, int y, int w, int h, String title) {
         DUTheme.panelWithHeader(g, font, x, y, w, h, title);
     }
 
-    private void renderCanvasLegend(GuiGraphicsExtractor g, int x, int yBottom) {
-        int ly = yBottom - 10;
-        g.enableScissor(canvasX, ly - 3, canvasX + canvasW, ly + 12);
+    private void renderCanvasLegend(GuiGraphics g, int x, int yBottom) {
+        int top = yBottom - 22;
+        g.fill(canvasX + 1, top, canvasX + canvasW - 1, yBottom, 0xF00a100d);
+        enableDesignScissor(g, canvasX, top, canvasX + canvasW, yBottom);
         int lx = x + 4;
-        lx += legendDot(g, lx, ly - 2, DUTheme.OK, "OK") + 4;
-        lx += legendDot(g, lx, ly - 2, DUTheme.WARN, "Warning") + 4;
-        lx += legendDot(g, lx, ly - 2, DUTheme.ERROR, "Error") + 4;
-        lx += legendDot(g, lx, ly - 2, DUTheme.SELECTED, "Selected") + 4;
-        String hint = "Drag network devices here · OUT→IN links · MMB pan · Scroll zoom";
-        int hintX = canvasX + canvasW - font.width(hint) - 8;
-        if (hintX > lx + 8) g.text(font, hint, hintX, ly + 1, DUTheme.TEXT_DIM, false);
+        int keyY = top + 2;
+        lx += legendDot(g, lx, keyY, DUTheme.OK, "OK") + 4;
+        lx += legendDot(g, lx, keyY, DUTheme.WARN, "Warning") + 4;
+        lx += legendDot(g, lx, keyY, DUTheme.ERROR, "Error") + 4;
+        lx += legendDot(g, lx, keyY, DUTheme.SELECTED, "Selected") + 4;
+        String hint = "Drag devices here | OUT->IN links | MMB pan | Scroll zoom";
+        int hintX = Math.min(canvasX + canvasW - 8, lx + 4);
+        int hintW = Math.max(24, canvasX + canvasW - hintX - 4);
+        g.drawString(font, trim(font, hint, hintW), hintX, keyY + 2, DUTheme.TEXT_DIM, false);
         g.disableScissor();
     }
 
-    private void renderCanvasTitleStrip(GuiGraphicsExtractor g) {
+    private String fourDigitNetworkId() {
+        String id = ctx.networkDisplayId();
+        if (id == null || id.isBlank()) return "";
+        return id.length() > 4 ? id.substring(Math.max(0, id.length() - 4)) : id;
+    }
+
+    private void renderCanvasTitleStrip(GuiGraphics g) {
         List<GraphCanvasData> canvases = ctx.graph().canvasesOrLegacy();
         int x = canvasX + 4;
         int y = contentY + 1;
@@ -956,7 +981,7 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
             GuiSprites.draw(g, GuiSprites.CANVAS, tx + 2, y + 1, 8);
             String title = canvas.title() == null || canvas.title().isBlank() ? "Untitled" : canvas.title();
             int closeReserve = canvases.size() > 1 ? 10 : 0;
-            g.text(font, trim(font, title, tabW - 15 - closeReserve), tx + 13, y + 1, active ? DUTheme.TEXT : DUTheme.TEXT_DIM, false);
+            g.drawString(font, trim(font, title, tabW - 15 - closeReserve), tx + 13, y + 1, active ? DUTheme.TEXT : DUTheme.TEXT_DIM, false);
             if (canvases.size() > 1) {
                 int cx = tx + tabW - 9;
                 GuiSprites.draw(g, GuiSprites.CLOSE, cx + 1, y + 2, 7);
@@ -965,7 +990,7 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         int px = x + canvases.size() * (tabW + gap);
         if (px + plusW <= canvasX + canvasW - 4) {
             DUTheme.box(g, px, y, plusW, 10, 0xE80a100d, DUTheme.PANEL_BORDER);
-            g.centeredText(font, "+", px + plusW / 2, y + 1, DUTheme.TEXT_GREEN);
+            g.drawCenteredString(font, "+", px + plusW / 2, y + 1, DUTheme.TEXT_GREEN);
         }
     }
 
@@ -1003,16 +1028,16 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         return false;
     }
 
-    private void hamburgerGlyph(GuiGraphicsExtractor g, int x, int y) {
+    private void hamburgerGlyph(GuiGraphics g, int x, int y) {
         for (int i = 0; i < 3; i++) g.fill(x, y + i * 3, x + 8, y + i * 3 + 1, DUTheme.TEXT_DIM);
     }
 
-    private void panGlyph(GuiGraphicsExtractor g, int x, int y) {
+    private void panGlyph(GuiGraphics g, int x, int y) {
         g.fill(x + 3, y, x + 5, y + 8, DUTheme.TEXT_DIM);
         g.fill(x, y + 3, x + 8, y + 5, DUTheme.TEXT_DIM);
     }
 
-    private void pinGlyph(GuiGraphicsExtractor g, int x, int y) {
+    private void pinGlyph(GuiGraphics g, int x, int y) {
         g.fill(x + 3, y, x + 5, y + 5, DUTheme.TEXT_DIM);
         g.fill(x + 1, y + 4, x + 7, y + 6, DUTheme.TEXT_DIM);
         g.fill(x + 3, y + 6, x + 5, y + 8, DUTheme.TEXT_DIM);
@@ -1034,7 +1059,7 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         };
     }
 
-    private void renderShiftModal(GuiGraphicsExtractor g, int mouseX, int mouseY) {
+    private void renderShiftModal(GuiGraphics g, int mouseX, int mouseY) {
         GraphNodeData node = ctx.graph().findNode(shiftModalNodeId);
         if (node == null) { shiftModalNodeId = null; return; }
         boolean canCopy = node.scannedBlockId() == null || node.scannedBlockId().isBlank();
@@ -1049,11 +1074,11 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         DUTheme.glowText(g, font, "SHIFT DRAG — CHOOSE ACTION", mx + 5, my + 3, DUTheme.SELECTED);
 
         // Node name sub-label.
-        g.text(font, trim(font, node.displayName(), SM_W - 10), mx + 5, my + 18, DUTheme.TEXT_DIM, false);
+        g.drawString(font, trim(font, node.displayName(), SM_W - 10), mx + 5, my + 18, DUTheme.TEXT_DIM, false);
 
         // Hint line.
         String hint = canCopy ? "Copy: clones settings (routing nodes only)" : "Copy unavailable — block tied to world";
-        g.text(font, trim(font, hint, SM_W - 10), mx + 5, my + 30, canCopy ? DUTheme.TEXT_DIM : DUTheme.WARN, false);
+        g.drawString(font, trim(font, hint, SM_W - 10), mx + 5, my + 30, canCopy ? DUTheme.TEXT_DIM : DUTheme.WARN, false);
 
         // Three buttons.
         int[][] btns = shiftModalButtons(mx, my);
@@ -1066,7 +1091,7 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
             int bg = disabled ? 0xFF0a0d09 : hovered ? 0xFF1a2e1a : DUTheme.PANEL_ALT;
             int border = disabled ? DUTheme.PANEL_BORDER : hovered ? colors[i] : DUTheme.PANEL_BORDER;
             DUTheme.box(g, b[0], b[1], b[2], b[3], bg, border);
-            g.centeredText(font, labels[i], b[0] + b[2] / 2, b[1] + 4, disabled ? DUTheme.TEXT_DIM : colors[i]);
+            g.drawCenteredString(font, labels[i], b[0] + b[2] / 2, b[1] + 4, disabled ? DUTheme.TEXT_DIM : colors[i]);
         }
     }
 
@@ -1104,7 +1129,7 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         return mx >= btn[0] && mx <= btn[0] + btn[2] && my >= btn[1] && my <= btn[1] + btn[3];
     }
 
-    private void renderMarquee(GuiGraphicsExtractor g) {
+    private void renderMarquee(GuiGraphics g) {
         int x1 = (int) Math.min(marqueeStartX, marqueeCurX);
         int y1 = (int) Math.min(marqueeStartY, marqueeCurY);
         int x2 = (int) Math.max(marqueeStartX, marqueeCurX);
@@ -1117,7 +1142,7 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
     }
 
     /** Draws a small two-line tooltip box for whichever tool-palette button is hovered. */
-    private void renderToolTooltips(GuiGraphicsExtractor g, int mouseX, int mouseY) {
+    private void renderToolTooltips(GuiGraphics g, int mouseX, int mouseY) {
         for (ToolTip tip : toolButtons) {
             TerminalButton b = tip.button();
             if (!b.visible || !b.isMouseOver(mouseX, mouseY)) continue;
@@ -1128,13 +1153,13 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
             if (tx + tw > leftPos + guiW - 6) tx = b.getX() - tw - 4;
             if (ty + th > topPos + guiH - 6) ty = topPos + guiH - 6 - th;
             DUTheme.box(g, tx, ty, tw, th, 0xF0121712, DUTheme.SELECTED);
-            g.text(font, tip.title(), tx + 5, ty + 4, DUTheme.SELECTED, false);
-            g.text(font, tip.desc(), tx + 5, ty + 13, DUTheme.TEXT_DIM, false);
+            g.drawString(font, tip.title(), tx + 5, ty + 4, DUTheme.SELECTED, false);
+            g.drawString(font, tip.desc(), tx + 5, ty + 13, DUTheme.TEXT_DIM, false);
             return;
         }
     }
 
-    private void renderScannedDragPreview(GuiGraphicsExtractor g) {
+    private void renderScannedDragPreview(GuiGraphics g) {
         int multi = listWidget.multiSelectedIds().size();
         int border = canvasWidget.contains(scannedDragX, scannedDragY) ? DUTheme.SELECTED : DUTheme.PANEL_BORDER;
         // With multiple rows selected, stack ghost icons, each offset 4px right/down from the previous.
@@ -1149,7 +1174,7 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
                 g.fill(gx + 5, gy + 5, gx + 13, gy + 13, DUTheme.TEXT_GREEN);
             }
             String label = multi + " devices";
-            g.text(font, label, base + 22, baseY + 5, DUTheme.TEXT, false);
+            g.drawString(font, label, base + 22, baseY + 5, DUTheme.TEXT, false);
             return;
         }
         String label = draggingScannedName == null ? "Network Device" : draggingScannedName;
@@ -1158,10 +1183,10 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         int w = Math.min(130, Math.max(72, font.width(label) + 18));
         DUTheme.box(g, x, y, w, 18, 0xEE0a100d, border);
         g.fill(x + 4, y + 5, x + 10, y + 11, DUTheme.TEXT_GREEN);
-        g.text(font, label, x + 14, y + 5, DUTheme.TEXT, false);
+        g.drawString(font, label, x + 14, y + 5, DUTheme.TEXT, false);
     }
 
-    private void renderConnectionDropPreview(GuiGraphicsExtractor g) {
+    private void renderConnectionDropPreview(GuiGraphics g) {
         if (!canvasWidget.contains(scannedDragX, scannedDragY)) return;
         GraphLinkData link = canvasWidget.linkAt(scannedDragX, scannedDragY);
         if (link == null) return;
@@ -1169,10 +1194,10 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         int y = (int) scannedDragY - 20;
         DUTheme.box(g, x, y, 84, 14, 0xEE14201b, DUTheme.SELECTED);
         GuiSprites.draw(g, GuiSprites.CANVAS, x + 4, y + 2, 10);
-        g.text(font, "INSERT HERE", x + 18, y + 4, DUTheme.SELECTED, false);
+        g.drawString(font, "INSERT HERE", x + 18, y + 4, DUTheme.SELECTED, false);
     }
 
-    private int legendDot(GuiGraphicsExtractor g, int x, int y, int color, String label) {
+    private int legendDot(GuiGraphics g, int x, int y, int color, String label) {
         int w = font.width(label) + 20;
         DUTheme.box(g, x, y, w, 13, 0xD50a100d, color);
         g.fill(x, y, x + 1, y + 1, DUTheme.SCREEN);
@@ -1183,7 +1208,7 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         else if (color == DUTheme.WARN) GuiSprites.draw(g, GuiSprites.STATUS_WARN, x + 4, y + 1, 10);
         else if (color == DUTheme.ERROR) GuiSprites.draw(g, GuiSprites.STATUS_ERROR, x + 4, y + 1, 10);
         else g.fill(x + 6, y + 4, x + 12, y + 10, color);
-        g.text(font, label, x + 16, y + 3, DUTheme.TEXT_DIM, false);
+        g.drawString(font, label, x + 16, y + 3, DUTheme.TEXT_DIM, false);
         return w;
     }
 
@@ -1270,17 +1295,16 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
     }
 
     @Override
-    protected void extractLabels(GuiGraphicsExtractor g, int mouseX, int mouseY) { }
+    protected void renderLabels(GuiGraphics g, int mouseX, int mouseY) { }
 
     // --- input ---
 
     @Override
-    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-        double mx = designX(event.x());
-        double my = designY(event.y());
-        MouseButtonEvent de = new MouseButtonEvent(mx, my, event.buttonInfo());
-        boolean right = event.button() == 1;
-        boolean middle = event.button() == 2;
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        double mx = designX(mouseX);
+        double my = designY(mouseY);
+        boolean right = button == 1;
+        boolean middle = button == 2;
 
         if (shiftModalNodeId != null) { handleShiftModalClick(mx, my); return true; }
         if (!right && filterPickerPopup.handleClick(mx, my)) return true;
@@ -1313,9 +1337,10 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
                 ctx.selectedScannedId = ctx.scan().get(idx).id();
                 return true;
             }
-            return super.mouseClicked(de, doubleClick);
+            return super.mouseClicked(mx, my, button);
         }
-        if (page != PAGE_GRAPH) return super.mouseClicked(de, doubleClick);
+        if (page == PAGE_STATS && button == 0 && statsPanel.handleTimeScaleMouse(mx, my)) return true;
+        if (page != PAGE_GRAPH) return super.mouseClicked(mx, my, button);
 
         if (!right && warningBar.click(mx, my)) return true;
         if (!right && handleCanvasTitleStripClick(mx, my)) return true;
@@ -1331,8 +1356,8 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         ScannedBlockData row = listWidget.rowAt(mx, my);
         if (row != null && !right) {
             editingGraphName = false;
-            boolean ctrl = (event.modifiers() & MOD_CTRL) != 0;
-            boolean shift = (event.modifiers() & MOD_SHIFT) != 0;
+            boolean ctrl = hasControlDown();
+            boolean shift = hasShiftDown();
             // Ctrl/Shift toggle or range-select rows for a multi-drop drag, without starting a drag.
             if (ctrl || shift) {
                 listWidget.handleModifierClick(mx, my, ctrl, shift);
@@ -1359,7 +1384,7 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
             // Overlay widgets (zoom, tool palette) take click priority.
             for (var child : children()) {
                 if (child instanceof AbstractWidget w && w.visible && w.isMouseOver(mx, my)) {
-                    return super.mouseClicked(de, doubleClick);
+                    return super.mouseClicked(mx, my, button);
                 }
             }
             lastMouseX = mx;
@@ -1412,7 +1437,7 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
                 if (!ctx.selectedNodeIds.contains(node.nodeId())) ctx.selectSingleNode(node.nodeId());
                 else { ctx.selectedNodeId = node.nodeId(); ctx.selectedFrameId = null; }
                 ctx.selectedScannedId = node.scannedBlockId();
-                if ((event.modifiers() & MOD_SHIFT) != 0) {
+                if (hasShiftDown()) {
                     // Start dragging; defer the modal until mouse release so the user can position first.
                     draggingNodeId = node.nodeId();
                     pendingShiftModalNodeId = node.nodeId();
@@ -1435,7 +1460,7 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
             }
             return true;
         }
-        return super.mouseClicked(de, doubleClick);
+        return super.mouseClicked(mx, my, button);
     }
 
     private boolean handleStartMenuClick(double mx, double my) {
@@ -1460,12 +1485,12 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
     }
 
     @Override
-    public boolean mouseDragged(MouseButtonEvent event, double dx, double dy) {
-        double mx = designX(event.x());
-        double my = designY(event.y());
-        MouseButtonEvent de = new MouseButtonEvent(mx, my, event.buttonInfo());
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double dx, double dy) {
+        double mx = designX(mouseX);
+        double my = designY(mouseY);
         double ddx = dx / uiScale, ddy = dy / uiScale;
-        if (page != PAGE_GRAPH) return super.mouseDragged(de, ddx, ddy);
+        if (page == PAGE_STATS && button == 0 && statsPanel.handleTimeScaleMouse(mx, my)) return true;
+        if (page != PAGE_GRAPH) return super.mouseDragged(mx, my, button, ddx, ddy);
         if (draggingScanned) { scannedDragX = mx; scannedDragY = my; return true; }
         if (ctx.isDraggingPortLink() || ctx.isDraggingLinkRetarget()) { ctx.updateLinkDrag(mx, my); return true; }
         if (marqueeing) { marqueeCurX = mx; marqueeCurY = my; return true; }
@@ -1507,6 +1532,9 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
             if (cdx != 0 || cdy != 0) {
                 java.util.Collection<String> moving = ctx.selectedNodeIds.size() > 1
                         ? new ArrayList<>(ctx.selectedNodeIds) : List.of(draggingNodeId);
+                int[] boundedDelta = clampMoveDeltaToCanvas(ctx.graph(), moving, cdx, cdy);
+                cdx = boundedDelta[0];
+                cdy = boundedDelta[1];
                 LogisticsGraphData gg = ctx.graph();
                 for (String id : moving) {
                     GraphNodeData n = gg.findNode(id);
@@ -1522,13 +1550,12 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
             lastMouseX = mx; lastMouseY = my;
             return true;
         }
-        return super.mouseDragged(de, ddx, ddy);
+        return super.mouseDragged(mx, my, button, ddx, ddy);
     }
 
     @Override
-    public boolean mouseReleased(MouseButtonEvent event) {
-        double mx = designX(event.x()), my = designY(event.y());
-        MouseButtonEvent de = new MouseButtonEvent(mx, my, event.buttonInfo());
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        double mx = designX(mouseX), my = designY(mouseY);
         if (page == PAGE_GRAPH) {
             if (draggingScanned) {
                 // Multi-drop: drop a node for every multi-selected row, laid out in a horizontal row.
@@ -1538,7 +1565,8 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
                         ScannedBlockData s = ctx.scanById().get(id);
                         if (s != null) scans.add(s);
                     }
-                    ctx.addNodesForScans(scans, snap((int) canvasWidget.toCanvasX(mx)), snap((int) canvasWidget.toCanvasY(my)));
+                    int[] pos = clampNodePositionToCanvas(snap((int) canvasWidget.toCanvasX(mx)), snap((int) canvasWidget.toCanvasY(my)), GraphNodeData.DEFAULT_WIDTH, GraphNodeData.DEFAULT_HEIGHT);
+                    ctx.addNodesForScans(scans, pos[0], pos[1]);
                     listWidget.clearMultiSelect();
                     draggingScanned = false;
                     draggingScannedName = null;
@@ -1547,7 +1575,8 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
                 if (canvasWidget.contains(mx, my)) {
                     GraphLinkData link = canvasWidget.linkAt(mx, my);
                     String scannedId = ctx.selectedScannedId;
-                    ctx.addNodeForSelectedScanAt(snap((int) canvasWidget.toCanvasX(mx)), snap((int) canvasWidget.toCanvasY(my)));
+                    int[] pos = clampNodePositionToCanvas(snap((int) canvasWidget.toCanvasX(mx)), snap((int) canvasWidget.toCanvasY(my)), GraphNodeData.DEFAULT_WIDTH, GraphNodeData.DEFAULT_HEIGHT);
+                    ctx.addNodeForSelectedScanAt(pos[0], pos[1]);
                     if (link != null && scannedId != null) {
                         GraphNodeData inserted = null;
                         for (GraphNodeData node : ctx.graph().activeCanvas().nodes()) {
@@ -1604,7 +1633,7 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         draggingScanned = false;
         draggingScannedName = null;
         panning = false;
-        return super.mouseReleased(de);
+        return super.mouseReleased(mx, my, button);
     }
 
     private void snapActiveDragTarget() {
@@ -1631,10 +1660,48 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
             LogisticsGraphData gg = graph;
             for (String id : moving) {
                 GraphNodeData n = gg.findNode(id);
-                if (n != null) gg = LogisticsGraph.updateNode(gg, n.withPosition(snap(n.x()), snap(n.y())));
+                if (n != null) {
+                    int[] pos = clampNodePositionToCanvas(snap(n.x()), snap(n.y()), n.width(), n.height());
+                    gg = LogisticsGraph.updateNode(gg, n.withPosition(pos[0], pos[1]));
+                }
             }
             ctx.setGraph(gg);
         }
+    }
+
+    private int[] clampMoveDeltaToCanvas(LogisticsGraphData graph, java.util.Collection<String> nodeIds, int dx, int dy) {
+        if (nodeIds == null || nodeIds.isEmpty()) return new int[] { dx, dy };
+        int minX = Integer.MAX_VALUE, minY = Integer.MAX_VALUE, maxX = Integer.MIN_VALUE, maxY = Integer.MIN_VALUE;
+        for (String id : nodeIds) {
+            GraphNodeData n = graph.findNode(id);
+            if (n == null) continue;
+            minX = Math.min(minX, n.x());
+            minY = Math.min(minY, n.y());
+            maxX = Math.max(maxX, n.x() + n.width());
+            maxY = Math.max(maxY, n.y() + n.height());
+        }
+        if (minX == Integer.MAX_VALUE) return new int[] { dx, dy };
+        int[] bounds = visibleCanvasBounds(0, 0);
+        if (minX + dx < bounds[0]) dx += bounds[0] - (minX + dx);
+        if (maxX + dx > bounds[2]) dx -= (maxX + dx) - bounds[2];
+        if (minY + dy < bounds[1]) dy += bounds[1] - (minY + dy);
+        if (maxY + dy > bounds[3]) dy -= (maxY + dy) - bounds[3];
+        return new int[] { dx, dy };
+    }
+
+    private int[] clampNodePositionToCanvas(int x, int y, int nodeW, int nodeH) {
+        int[] bounds = visibleCanvasBounds(nodeW, nodeH);
+        return new int[] { Math.max(bounds[0], Math.min(bounds[2], x)), Math.max(bounds[1], Math.min(bounds[3], y)) };
+    }
+
+    private int[] visibleCanvasBounds(int nodeW, int nodeH) {
+        int left = (int) Math.ceil(canvasWidget.toCanvasX(canvasWidget.x + 2));
+        int top = (int) Math.ceil(canvasWidget.toCanvasY(canvasWidget.y + 13));
+        int right = (int) Math.floor(canvasWidget.toCanvasX(canvasWidget.x + canvasWidget.w - 2)) - nodeW;
+        int bottom = (int) Math.floor(canvasWidget.toCanvasY(canvasWidget.y + canvasWidget.h - 2)) - nodeH;
+        if (right < left) right = left;
+        if (bottom < top) bottom = top;
+        return new int[] { left, top, right, bottom };
     }
 
     @Override
@@ -1667,22 +1734,22 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
 
 
     @Override
-    public boolean keyPressed(KeyEvent event) {
-        if (filterPickerPopup.handleKey(event)) return true;
-        if (event.key() == KEY_ESCAPE) {
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (filterPickerPopup.handleKey(keyCode, modifiers)) return true;
+        if (keyCode == KEY_ESCAPE) {
             if (pendingShiftModalNodeId != null) { pendingShiftModalNodeId = null; return true; }
             if (shiftModalNodeId != null) { shiftModalNodeId = null; return true; }
             if (inventoryPopup != null) { inventoryPopup = null; return true; }
             if (contextMenu != null) { contextMenu = null; return true; }
-            return super.keyPressed(event);
+            return super.keyPressed(keyCode, scanCode, modifiers);
         }
         // Route keys to whichever text field is focused (name, whitelist entry, filter rule…).
         if (getFocused() instanceof net.minecraft.client.gui.components.EditBox box && box.isFocused()) {
-            return box.keyPressed(event);
+            return box.keyPressed(keyCode, scanCode, modifiers);
         }
-        if (event.key() == KEY_LEFT) { cyclePage(-1); return true; }
-        if (event.key() == KEY_RIGHT) { cyclePage(1); return true; }
-        if ((event.modifiers() & MOD_SHIFT) != 0 && event.key() == KEY_D && page == PAGE_GRAPH) {
+        if (keyCode == KEY_LEFT) { cyclePage(-1); return true; }
+        if (keyCode == KEY_RIGHT) { cyclePage(1); return true; }
+        if ((modifiers & MOD_SHIFT) != 0 && keyCode == KEY_D && page == PAGE_GRAPH) {
             GraphNodeData sel = ctx.selectedNode();
             if (sel != null) {
                 shiftModalNodeId = sel.nodeId();
@@ -1693,19 +1760,19 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
             }
             return true;
         }
-        if (isAlt(event) && event.key() == KEY_S) {
+        if (isAlt(modifiers) && keyCode == KEY_S) {
             ClientNetworkSender.scanArea(ctx.pos());
             return true;
         }
-        if (isAlt(event) && event.key() == KEY_N) {
+        if (isAlt(modifiers) && keyCode == KEY_N) {
             createCanvas();
             return true;
         }
-        if (page == PAGE_GRAPH && event.key() == KEY_F) {
+        if (page == PAGE_GRAPH && keyCode == KEY_F) {
             canvasWidget.fitView();
             return true;
         }
-        if (page == PAGE_GRAPH && event.key() == KEY_DELETE) {
+        if (page == PAGE_GRAPH && keyCode == KEY_DELETE) {
             if (ctx.selectedTextId != null) { ctx.deleteText(ctx.selectedTextId); return true; }
             if (ctx.selectedFrameId != null) { ctx.deleteFrame(ctx.selectedFrameId); return true; }
             if (ctx.selectedNodeId != null || !ctx.selectedNodeIds.isEmpty()) { ctx.deleteSelectedNode(); return true; }
@@ -1713,8 +1780,8 @@ public class LogisticsComputerScreen extends AbstractContainerScreen<LogisticsCo
         return true;
     }
 
-    private static boolean isAlt(KeyEvent event) {
-        return (event.modifiers() & MOD_ALT) != 0;
+    private static boolean isAlt(int modifiers) {
+        return (modifiers & MOD_ALT) != 0;
     }
 
     private static String trim(Font font, String s, int maxWidth) {

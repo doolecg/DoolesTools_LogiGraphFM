@@ -12,7 +12,11 @@ import net.doole.doolestools.logistics.switchboard.SwitchboardNetworkAccess;
 import net.doole.doolestools.menu.LogisticsComputerMenu;
 import net.doole.doolestools.registry.ModBlockEntities;
 import net.doole.doolestools.world.NetworkIdentitySavedData;
+import net.doole.doolestools.util.ValueInput;
+import net.doole.doolestools.util.ValueOutput;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.MenuProvider;
@@ -21,8 +25,6 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.storage.ValueInput;
-import net.minecraft.world.level.storage.ValueOutput;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -179,18 +181,12 @@ public class LogisticsComputerBlockEntity extends BlockEntity implements MenuPro
         for (net.doole.doolestools.blockentity.NetworkBatteryBlockEntity battery : batteries) {
             if (surplus > 0) {
                 int amount = Math.min(surplus, maxIo);
-                try (var tx = net.neoforged.neoforge.transfer.transaction.Transaction.openRoot()) {
-                    int inserted = battery.energyHandler().insert(amount, tx);
-                    if (inserted > 0) { tx.commit(); surplus -= inserted; }
-                } catch (RuntimeException ignored) {
-                }
+                int inserted = battery.energyStorage().receiveEnergy(amount, false);
+                if (inserted > 0) surplus -= inserted;
             } else if (deficit > 0) {
                 int amount = Math.min(deficit, maxIo);
-                try (var tx = net.neoforged.neoforge.transfer.transaction.Transaction.openRoot()) {
-                    int extracted = battery.energyHandler().extract(amount, tx);
-                    if (extracted > 0) { tx.commit(); deficit -= extracted; }
-                } catch (RuntimeException ignored) {
-                }
+                int extracted = battery.energyStorage().extractEnergy(amount, false);
+                if (extracted > 0) deficit -= extracted;
             } else {
                 break;
             }
@@ -280,7 +276,7 @@ public class LogisticsComputerBlockEntity extends BlockEntity implements MenuPro
     }
 
     public String networkName() {
-        if (networkName == null || networkName.isBlank()) return "NETWORK#" + formattedNetworkNumber();
+        if (networkName == null || networkName.isBlank()) return "NET#" + formattedNetworkNumber();
         return networkName;
     }
 
@@ -512,8 +508,12 @@ public class LogisticsComputerBlockEntity extends BlockEntity implements MenuPro
     // --- Persistence (Value I/O) ---
 
     @Override
-    protected void saveAdditional(ValueOutput output) {
-        super.saveAdditional(output);
+    protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+        super.saveAdditional(tag, registries);
+        saveData(new ValueOutput(tag, registries));
+    }
+
+    private void saveData(ValueOutput output) {
         output.store("graph", LogisticsGraphData.CODEC, graph);
         output.store("scan", ScannedBlockData.CODEC.listOf(), lastScan);
         output.putLong("lastScanTime", lastScanTime);
@@ -553,8 +553,12 @@ public class LogisticsComputerBlockEntity extends BlockEntity implements MenuPro
     }
 
     @Override
-    protected void loadAdditional(ValueInput input) {
-        super.loadAdditional(input);
+    protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+        super.loadAdditional(tag, registries);
+        loadData(new ValueInput(tag, registries));
+    }
+
+    private void loadData(ValueInput input) {
         this.graph = input.read("graph", LogisticsGraphData.CODEC).orElse(LogisticsGraphData.EMPTY);
         this.lastScan = new ArrayList<>(input.read("scan", ScannedBlockData.CODEC.listOf()).orElse(List.of()));
         this.lastScanTime = input.getLongOr("lastScanTime", -1L);

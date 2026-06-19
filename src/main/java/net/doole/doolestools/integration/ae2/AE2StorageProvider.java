@@ -11,11 +11,11 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.neoforge.capabilities.Capabilities;
-import net.neoforged.neoforge.transfer.ResourceHandler;
-import net.neoforged.neoforge.transfer.item.ItemResource;
+import net.neoforged.neoforge.items.IItemHandler;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.LinkedHashMap;
@@ -51,10 +51,10 @@ public final class AE2StorageProvider implements ModStorageProvider {
 
             // AE2 drives/cells already expose items via the NeoForge capability.
             // Walk all faces (and null side) to get the richest view we can.
-            ResourceHandler<ItemResource> handler = findItemHandler(level, pos, state, be);
+            IItemHandler handler = findItemHandler(level, pos, state, be);
             if (handler == null) return null;
 
-            int slots = Math.max(0, handler.size());
+            int slots = Math.max(0, handler.getSlots());
             if (slots == 0) return null;
 
             int used = 0;
@@ -62,14 +62,14 @@ public final class AE2StorageProvider implements ModStorageProvider {
             Map<String, String> names = new LinkedHashMap<>();
 
             for (int i = 0; i < slots; i++) {
-                ItemResource res = handler.getResource(i);
-                long amount = handler.getAmountAsLong(i);
-                if (res == null || res.isEmpty() || amount <= 0) continue;
+                ItemStack stack = handler.getStackInSlot(i);
+                int amount = stack.getCount();
+                if (stack.isEmpty() || amount <= 0) continue;
                 used++;
-                String id = BuiltInRegistries.ITEM.getKey(res.getItem()).toString();
-                int count = amount > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) amount;
+                String id = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+                int count = amount;
                 tally.merge(id, count, Integer::sum);
-                names.putIfAbsent(id, res.getHoverName().getString());
+                names.putIfAbsent(id, stack.getHoverName().getString());
             }
 
             if (tally.isEmpty()) return null;
@@ -137,10 +137,10 @@ public final class AE2StorageProvider implements ModStorageProvider {
     };
 
     @Nullable
-    private static ResourceHandler<ItemResource> findItemHandler(ServerLevel level, net.minecraft.core.BlockPos pos, BlockState state, BlockEntity be) {
+    private static IItemHandler findItemHandler(ServerLevel level, net.minecraft.core.BlockPos pos, BlockState state, BlockEntity be) {
         for (Direction face : FACES) {
             try {
-                ResourceHandler<ItemResource> h = Capabilities.Item.BLOCK.getCapability(level, pos, state, be, face);
+                IItemHandler h = Capabilities.ItemHandler.BLOCK.getCapability(level, pos, state, be, face);
                 if (h != null) return h;
             } catch (RuntimeException ignored) {
                 // some ae2 providers are face sensitive and throw on null side

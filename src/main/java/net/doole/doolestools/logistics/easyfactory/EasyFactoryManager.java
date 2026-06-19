@@ -19,20 +19,21 @@ import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
 import net.minecraft.world.WorldlyContainer;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.level.block.ChestBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.neoforge.capabilities.Capabilities;
-import net.neoforged.neoforge.transfer.ResourceHandler;
-import net.neoforged.neoforge.transfer.energy.EnergyHandler;
-import net.neoforged.neoforge.transfer.fluid.FluidResource;
-import net.neoforged.neoforge.transfer.item.ItemResource;
-import net.neoforged.neoforge.transfer.item.VanillaContainerWrapper;
-import net.neoforged.neoforge.transfer.item.WorldlyContainerWrapper;
-import net.neoforged.neoforge.transfer.transaction.Transaction;
+import net.neoforged.neoforge.energy.IEnergyStorage;
+import net.neoforged.neoforge.fluids.FluidStack;
+import net.neoforged.neoforge.fluids.capability.IFluidHandler;
+import net.neoforged.neoforge.items.IItemHandler;
+import net.neoforged.neoforge.items.wrapper.InvWrapper;
+import net.neoforged.neoforge.items.wrapper.SidedInvWrapper;
 
 public final class EasyFactoryManager {
-    private record ItemTargetSlot(ResourceHandler<ItemResource> handler, int slot) {}
+    private record ItemTargetSlot(IItemHandler handler, int slot) {}
 
     private EasyFactoryManager() {}
 
@@ -185,8 +186,8 @@ public final class EasyFactoryManager {
 
     /** An item test contributed by a Filter on the path. {@code negate} flips it for the reject branch. */
     private record Gate(FilterSettings settings, boolean negate) {
-        boolean passes(ItemResource resource) {
-            return settings.allows(resource) != negate;
+        boolean passes(ItemStack stack) {
+            return settings.allows(stack) != negate;
         }
     }
 
@@ -286,8 +287,8 @@ public final class EasyFactoryManager {
         return copy;
     }
 
-    private static boolean gatesAllow(java.util.List<Gate> gates, ItemResource resource) {
-        for (Gate gate : gates) if (!gate.passes(resource)) return false;
+    private static boolean gatesAllow(java.util.List<Gate> gates, ItemStack stack) {
+        for (Gate gate : gates) if (!gate.passes(stack)) return false;
         return true;
     }
 
@@ -297,28 +298,28 @@ public final class EasyFactoryManager {
         return limit;
     }
 
-    private static ResourceHandler<ItemResource> itemHandler(ServerLevel level, BlockPos pos, Direction side) {
+    private static IItemHandler itemHandler(ServerLevel level, BlockPos pos, Direction side) {
         BlockState state = level.getBlockState(pos);
         BlockEntity be = level.getBlockEntity(pos);
         if (state.getBlock() instanceof ChestBlock chestBlock) {
             Container chestContainer = ChestBlock.getContainer(chestBlock, state, level, pos, false);
-            if (chestContainer != null) return VanillaContainerWrapper.of(chestContainer);
+            if (chestContainer != null) return new InvWrapper(chestContainer);
         }
-        if (be instanceof WorldlyContainer container && side != null) return new WorldlyContainerWrapper(container, side);
-        if (be instanceof Container container) return VanillaContainerWrapper.of(container);
-        return Capabilities.Item.BLOCK.getCapability(level, pos, state, be, side);
+        if (be instanceof WorldlyContainer container && side != null) return new SidedInvWrapper(container, side);
+        if (be instanceof Container container) return new InvWrapper(container);
+        return Capabilities.ItemHandler.BLOCK.getCapability(level, pos, state, be, side);
     }
 
-    private static ResourceHandler<FluidResource> fluidHandler(ServerLevel level, BlockPos pos, Direction side) {
+    private static IFluidHandler fluidHandler(ServerLevel level, BlockPos pos, Direction side) {
         BlockState state = level.getBlockState(pos);
         BlockEntity be = level.getBlockEntity(pos);
-        return Capabilities.Fluid.BLOCK.getCapability(level, pos, state, be, side);
+        return Capabilities.FluidHandler.BLOCK.getCapability(level, pos, state, be, side);
     }
 
-    private static EnergyHandler energyHandler(ServerLevel level, BlockPos pos, Direction side) {
+    private static IEnergyStorage energyHandler(ServerLevel level, BlockPos pos, Direction side) {
         BlockState state = level.getBlockState(pos);
         BlockEntity be = level.getBlockEntity(pos);
-        return Capabilities.Energy.BLOCK.getCapability(level, pos, state, be, side);
+        return Capabilities.EnergyStorage.BLOCK.getCapability(level, pos, state, be, side);
     }
 
     private static Direction sideFrom(BlockPos source, BlockPos target) {
@@ -334,7 +335,7 @@ public final class EasyFactoryManager {
     }
 
     private static int transferItemsCount(ServerLevel level, GraphLinkData link, GraphNodeData sourceNode, GraphNodeData targetNode, BlockPos sourcePos, BlockPos targetPos,
-                                         java.util.function.Predicate<ItemResource> allow, int filterLimit, float rampFraction) {
+                                         java.util.function.Predicate<ItemStack> allow, int filterLimit, float rampFraction) {
         Direction physicalSourceSide = sideFrom(sourcePos, targetPos);
         Direction physicalTargetSide = physicalSourceSide == null ? null : physicalSourceSide.getOpposite();
         Direction overrideSide = sideOverride(link.sideOverride());
@@ -342,8 +343,8 @@ public final class EasyFactoryManager {
         boolean targetMachine = targetNode != null && targetNode.type() == NodeType.MACHINE;
         Direction sourceSide = overrideSide != null && sourceMachine ? overrideSide : null;
         Direction targetSide = overrideSide != null && targetMachine ? overrideSide : null;
-        ResourceHandler<ItemResource> source = itemHandler(level, sourcePos, null);
-        ResourceHandler<ItemResource> target = itemHandler(level, targetPos, null);
+        IItemHandler source = itemHandler(level, sourcePos, null);
+        IItemHandler target = itemHandler(level, targetPos, null);
         if (sourceSide != null) source = itemHandler(level, sourcePos, sourceSide);
         if (targetSide != null) target = itemHandler(level, targetPos, targetSide);
         if (source == null && physicalSourceSide != null) {
@@ -359,50 +360,50 @@ public final class EasyFactoryManager {
         int rawLimit = itemLimit(level, sourcePos, targetPos);
         int rampedLimit = rampFraction >= 1f ? rawLimit : Math.max(1, (int)(rawLimit * rampFraction));
         int max = Math.min(rampedLimit, filterLimit);
-        for (int slot = 0; slot < source.size(); slot++) {
-            ItemResource resource = source.getResource(slot);
-            long available = source.getAmountAsLong(slot);
-            if (resource.isEmpty() || available <= 0) continue;
-            if (!allow.test(resource)) continue;
-            if (!canExtractItemFromSlot(level, link, sourceNode, sourcePos, sourceSide, source, slot, resource)) continue;
+        for (int slot = 0; slot < source.getSlots(); slot++) {
+            ItemStack stack = source.getStackInSlot(slot);
+            int available = stack.getCount();
+            if (stack.isEmpty() || available <= 0) continue;
+            if (!allow.test(stack)) continue;
+            if (!canExtractItemFromSlot(level, link, sourceNode, sourcePos, sourceSide, source, slot, stack)) continue;
             int amount = (int) Math.min(max, available);
-            for (ItemTargetSlot targetSlot : targetSlots(level, link, targetPos, targetSide, target, resource, overrideSide != null && targetMachine)) {
-                // Probe how much the target slot can accept, then do a single atomic move.
-                // This replaces the old O(amount) retry loop (which opened up to 64 transactions
-                // per slot pair on a full stack) with at most 2 transactions total.
-                int insertable;
-                try (Transaction probe = Transaction.openRoot()) {
-                    insertable = (int) Math.min(amount, targetSlot.handler().insert(targetSlot.slot(), resource, amount, probe));
-                }
+            for (ItemTargetSlot targetSlot : targetSlots(level, link, targetPos, targetSide, target, stack, overrideSide != null && targetMachine)) {
+                ItemStack moving = stack.copyWithCount(amount);
+                int insertable = moving.getCount() - targetSlot.handler().insertItem(targetSlot.slot(), moving, true).getCount();
                 if (insertable <= 0) continue;
-                try (Transaction tx = Transaction.openRoot()) {
-                    long extracted = source.extract(slot, resource, insertable, tx);
-                    if (extracted <= 0) continue;
-                    long inserted = targetSlot.handler().insert(targetSlot.slot(), resource, (int) extracted, tx);
-                    if (inserted != extracted) continue;
-                    tx.commit();
-                    return (int) Math.min(Integer.MAX_VALUE, inserted);
+                ItemStack extracted = source.extractItem(slot, insertable, true);
+                if (extracted.isEmpty()) continue;
+                int toMove = Math.min(insertable, extracted.getCount());
+                ItemStack remainder = targetSlot.handler().insertItem(targetSlot.slot(), extracted.copyWithCount(toMove), true);
+                if (!remainder.isEmpty()) continue;
+                ItemStack realExtracted = source.extractItem(slot, toMove, false);
+                if (realExtracted.getCount() != toMove) continue;
+                ItemStack realRemainder = targetSlot.handler().insertItem(targetSlot.slot(), realExtracted, false);
+                if (!realRemainder.isEmpty()) {
+                    source.insertItem(slot, realRemainder, false);
+                    continue;
                 }
+                return toMove;
             }
         }
         return 0;
     }
 
-    private static boolean canExtractItemFromSlot(ServerLevel level, GraphLinkData link, GraphNodeData sourceNode, BlockPos pos, Direction side, ResourceHandler<ItemResource> source, int handlerSlot, ItemResource resource) {
+    private static boolean canExtractItemFromSlot(ServerLevel level, GraphLinkData link, GraphNodeData sourceNode, BlockPos pos, Direction side, IItemHandler source, int handlerSlot, ItemStack stack) {
         BlockEntity be = level.getBlockEntity(pos);
         boolean machineSource = sourceNode != null && sourceNode.type() == NodeType.MACHINE;
         if (machineSource && !isOutputPort(link.sourcePortId())) return false;
         if (!(be instanceof WorldlyContainer container)) {
-            return !machineSource || !source.isValid(handlerSlot, resource);
+            return !machineSource || !source.isItemValid(handlerSlot, stack);
         }
         if (!machineSource) return true;
         int containerSlot = containerSlotForHandlerSlot(container, side, handlerSlot);
         if (containerSlot < 0) return false;
-        if (container.canPlaceItem(containerSlot, resource.toStack())) return false;
-        if (side != null) return container.canTakeItemThroughFace(containerSlot, resource.toStack(), side);
+        if (container.canPlaceItem(containerSlot, stack)) return false;
+        if (side != null) return container.canTakeItemThroughFace(containerSlot, stack, side);
         for (Direction face : Direction.values()) {
             for (int slot : container.getSlotsForFace(face)) {
-                if (slot == containerSlot && container.canTakeItemThroughFace(slot, resource.toStack(), face)) return true;
+                if (slot == containerSlot && container.canTakeItemThroughFace(slot, stack, face)) return true;
             }
         }
         return false;
@@ -415,39 +416,39 @@ public final class EasyFactoryManager {
         return handlerSlot < slots.length ? slots[handlerSlot] : -1;
     }
 
-    private static ItemTargetSlot[] targetSlots(ServerLevel level, GraphLinkData link, BlockPos pos, Direction side, ResourceHandler<ItemResource> target, ItemResource resource, boolean manualSide) {
+    private static ItemTargetSlot[] targetSlots(ServerLevel level, GraphLinkData link, BlockPos pos, Direction side, IItemHandler target, ItemStack stack, boolean manualSide) {
         ItemTargetRole role = ItemTargetRole.fromPort(link.targetPortId());
         BlockEntity be = level.getBlockEntity(pos);
-        if (!(be instanceof WorldlyContainer container)) return capabilityTargetSlotOrder(level, target, resource, role);
-        if (side != null) return sideTargetSlots(level, container, side, resource, role, manualSide);
-        return worldlyTargetSlots(level, container, resource, role);
+        if (!(be instanceof WorldlyContainer container)) return capabilityTargetSlotOrder(level, target, stack, role);
+        if (side != null) return sideTargetSlots(level, container, side, stack, role, manualSide);
+        return worldlyTargetSlots(level, container, stack, role);
     }
 
-    private static ItemTargetSlot[] worldlyTargetSlots(ServerLevel level, WorldlyContainer container, ItemResource resource, ItemTargetRole role) {
+    private static ItemTargetSlot[] worldlyTargetSlots(ServerLevel level, WorldlyContainer container, ItemStack stack, ItemTargetRole role) {
         // Allocate only as many slots as the container has — each container slot can appear at most once
         // thanks to the `added` dedup flag. The old size×6 allocation was a 6× over-allocation.
         ItemTargetSlot[] slots = new ItemTargetSlot[container.getContainerSize()];
         boolean[] added = new boolean[container.getContainerSize()];
         int next = 0;
         if (role != ItemTargetRole.MATERIAL) {
-            next = addFaceSlots(level, container, resource, slots, added, next, role, Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST, Direction.DOWN);
+            next = addFaceSlots(level, container, stack, slots, added, next, role, Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST, Direction.DOWN);
         }
         if (role != ItemTargetRole.FUEL) {
-            next = addFaceSlots(level, container, resource, slots, added, next, role, Direction.UP);
-            next = addFaceSlots(level, container, resource, slots, added, next, role, Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST, Direction.DOWN);
+            next = addFaceSlots(level, container, stack, slots, added, next, role, Direction.UP);
+            next = addFaceSlots(level, container, stack, slots, added, next, role, Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST, Direction.DOWN);
         }
         return copyPrefix(slots, next);
     }
 
-    private static int addFaceSlots(ServerLevel level, WorldlyContainer container, ItemResource resource, ItemTargetSlot[] slots, boolean[] added, int next, ItemTargetRole role, Direction... faces) {
+    private static int addFaceSlots(ServerLevel level, WorldlyContainer container, ItemStack stack, ItemTargetSlot[] slots, boolean[] added, int next, ItemTargetRole role, Direction... faces) {
         for (Direction face : faces) {
             int[] faceSlots = container.getSlotsForFace(face);
-            ResourceHandler<ItemResource> handler = new WorldlyContainerWrapper(container, face);
+            IItemHandler handler = new SidedInvWrapper(container, face);
             for (int exposed = 0; exposed < faceSlots.length; exposed++) {
                 int containerSlot = faceSlots[exposed];
                 if (containerSlot < 0 || containerSlot >= added.length || added[containerSlot]) continue;
-                if (!container.canPlaceItemThroughFace(containerSlot, resource.toStack(), face)) continue;
-                if (!slotMatchesRole(level, container, containerSlot, resource, role)) continue;
+                if (!container.canPlaceItemThroughFace(containerSlot, stack, face)) continue;
+                if (!slotMatchesRole(level, container, containerSlot, stack, role)) continue;
                 slots[next++] = new ItemTargetSlot(handler, exposed);
                 added[containerSlot] = true;
             }
@@ -455,28 +456,28 @@ public final class EasyFactoryManager {
         return next;
     }
 
-    private static ItemTargetSlot[] sideTargetSlots(ServerLevel level, WorldlyContainer container, Direction side, ItemResource resource, ItemTargetRole role, boolean manualSide) {
+    private static ItemTargetSlot[] sideTargetSlots(ServerLevel level, WorldlyContainer container, Direction side, ItemStack stack, ItemTargetRole role, boolean manualSide) {
         int[] exposedSlots = container.getSlotsForFace(side);
-        ResourceHandler<ItemResource> handler = new WorldlyContainerWrapper(container, side);
+        IItemHandler handler = new SidedInvWrapper(container, side);
         ItemTargetSlot[] slots = new ItemTargetSlot[exposedSlots.length];
         int next = 0;
         for (int exposed = 0; exposed < exposedSlots.length; exposed++) {
             int containerSlot = exposedSlots[exposed];
             if (containerSlot < 0 || containerSlot >= container.getContainerSize()) continue;
-            if (!container.canPlaceItemThroughFace(containerSlot, resource.toStack(), side)) continue;
-            if (!slotMatchesRole(level, container, containerSlot, resource, role)) continue;
+            if (!container.canPlaceItemThroughFace(containerSlot, stack, side)) continue;
+            if (!slotMatchesRole(level, container, containerSlot, stack, role)) continue;
             slots[next++] = new ItemTargetSlot(handler, exposed);
         }
         ItemTargetSlot[] matched = copyPrefix(slots, next);
-        return matched.length > 0 || manualSide ? matched : worldlyTargetSlots(level, container, resource, role);
+        return matched.length > 0 || manualSide ? matched : worldlyTargetSlots(level, container, stack, role);
     }
 
-    private static ItemTargetSlot[] capabilityTargetSlotOrder(ServerLevel level, ResourceHandler<ItemResource> target, ItemResource resource, ItemTargetRole role) {
-        ItemTargetSlot[] slots = new ItemTargetSlot[target.size()];
+    private static ItemTargetSlot[] capabilityTargetSlotOrder(ServerLevel level, IItemHandler target, ItemStack stack, ItemTargetRole role) {
+        ItemTargetSlot[] slots = new ItemTargetSlot[target.getSlots()];
         int next = 0;
-        for (int i = 0; i < target.size(); i++) {
-            if (role == ItemTargetRole.FUEL && !isFuelResource(level, resource)) return new ItemTargetSlot[0];
-            if (target.isValid(i, resource)) slots[next++] = new ItemTargetSlot(target, i);
+        for (int i = 0; i < target.getSlots(); i++) {
+            if (role == ItemTargetRole.FUEL && !isFuelResource(level, stack)) return new ItemTargetSlot[0];
+            if (target.isItemValid(i, stack)) slots[next++] = new ItemTargetSlot(target, i);
         }
         return copyPrefix(slots, next);
     }
@@ -563,61 +564,62 @@ public final class EasyFactoryManager {
         return total;
     }
 
-    private static boolean isFuelLikeInsertionSlot(WorldlyContainer container, int slot, ItemResource resource) {
+    private static boolean isFuelLikeInsertionSlot(WorldlyContainer container, int slot, ItemStack stack) {
         if (slot < 0 || slot >= container.getContainerSize()) return false;
-        if (!container.canPlaceItem(slot, resource.toStack())) return false;
-        boolean nonTop = isSlotExposedForInsert(container, slot, resource, Direction.NORTH)
-                || isSlotExposedForInsert(container, slot, resource, Direction.SOUTH)
-                || isSlotExposedForInsert(container, slot, resource, Direction.EAST)
-                || isSlotExposedForInsert(container, slot, resource, Direction.WEST)
-                || isSlotExposedForInsert(container, slot, resource, Direction.DOWN);
-        boolean top = isSlotExposedForInsert(container, slot, resource, Direction.UP);
+        if (!container.canPlaceItem(slot, stack)) return false;
+        boolean nonTop = isSlotExposedForInsert(container, slot, stack, Direction.NORTH)
+                || isSlotExposedForInsert(container, slot, stack, Direction.SOUTH)
+                || isSlotExposedForInsert(container, slot, stack, Direction.EAST)
+                || isSlotExposedForInsert(container, slot, stack, Direction.WEST)
+                || isSlotExposedForInsert(container, slot, stack, Direction.DOWN);
+        boolean top = isSlotExposedForInsert(container, slot, stack, Direction.UP);
         return nonTop && !top;
     }
 
-    private static boolean isSlotExposedForInsert(WorldlyContainer container, int slot, ItemResource resource, Direction face) {
+    private static boolean isSlotExposedForInsert(WorldlyContainer container, int slot, ItemStack stack, Direction face) {
         for (int exposed : container.getSlotsForFace(face)) {
-            if (exposed == slot) return container.canPlaceItemThroughFace(slot, resource.toStack(), face);
+            if (exposed == slot) return container.canPlaceItemThroughFace(slot, stack, face);
         }
         return false;
     }
 
-    private static boolean slotMatchesRole(ServerLevel level, WorldlyContainer container, int slot, ItemResource resource, ItemTargetRole role) {
+    private static boolean slotMatchesRole(ServerLevel level, WorldlyContainer container, int slot, ItemStack stack, ItemTargetRole role) {
         return switch (role) {
-            case MATERIAL -> !isFuelLikeInsertionSlot(container, slot, resource);
-            case FUEL -> isFuelResource(level, resource) && (isFuelLikeInsertionSlot(container, slot, resource) || container.canPlaceItem(slot, resource.toStack()));
+            case MATERIAL -> !isFuelLikeInsertionSlot(container, slot, stack);
+            case FUEL -> isFuelResource(level, stack) && (isFuelLikeInsertionSlot(container, slot, stack) || container.canPlaceItem(slot, stack));
             case GENERIC -> true;
         };
     }
 
-    private static boolean isFuelResource(ServerLevel level, ItemResource resource) {
-        return resource != null && !resource.isEmpty() && level.fuelValues().isFuel(resource.toStack());
+    private static boolean isFuelResource(ServerLevel level, ItemStack stack) {
+        return stack != null && !stack.isEmpty() && stack.getBurnTime(RecipeType.SMELTING) > 0;
     }
 
     private static int transferFluidsCount(ServerLevel level, BlockPos sourcePos, BlockPos targetPos) {
         Direction sourceSide = sideFrom(sourcePos, targetPos);
         Direction targetSide = sourceSide == null ? null : sourceSide.getOpposite();
-        ResourceHandler<FluidResource> source = fluidHandler(level, sourcePos, sourceSide);
-        ResourceHandler<FluidResource> target = fluidHandler(level, targetPos, targetSide);
+        IFluidHandler source = fluidHandler(level, sourcePos, sourceSide);
+        IFluidHandler target = fluidHandler(level, targetPos, targetSide);
         if (source == null) source = fluidHandler(level, sourcePos, null);
         if (target == null) target = fluidHandler(level, targetPos, null);
         if (source == null || target == null) return 0;
 
         long max = ModServerConfig.MAX_FLUID_MOVED_PER_ROUTE.get();
-        for (int tank = 0; tank < source.size(); tank++) {
-            FluidResource resource = source.getResource(tank);
-            long available = source.getAmountAsLong(tank);
+        for (int tank = 0; tank < source.getTanks(); tank++) {
+            FluidStack resource = source.getFluidInTank(tank);
+            int available = resource.getAmount();
             if (resource.isEmpty() || available <= 0) continue;
             int amount = (int) Math.min(Integer.MAX_VALUE, Math.min(max, available));
-            try (Transaction tx = Transaction.openRoot()) {
-                long extracted = source.extract(resource, amount, tx);
-                if (extracted <= 0) continue;
-                long inserted = target.insert(resource, (int) extracted, tx);
-                if (inserted <= 0) continue;
-                if (inserted < extracted) continue;
-                tx.commit();
-                return (int) Math.min(Integer.MAX_VALUE, inserted);
-            }
+            FluidStack request = resource.copyWithAmount(amount);
+            FluidStack extracted = source.drain(request, IFluidHandler.FluidAction.SIMULATE);
+            if (extracted.isEmpty()) continue;
+            int inserted = target.fill(extracted, IFluidHandler.FluidAction.SIMULATE);
+            if (inserted <= 0 || inserted < extracted.getAmount()) continue;
+            FluidStack realExtracted = source.drain(extracted, IFluidHandler.FluidAction.EXECUTE);
+            if (realExtracted.getAmount() != extracted.getAmount()) continue;
+            int realInserted = target.fill(realExtracted, IFluidHandler.FluidAction.EXECUTE);
+            if (realInserted <= 0) continue;
+            return realInserted;
         }
         return 0;
     }
@@ -625,22 +627,21 @@ public final class EasyFactoryManager {
     private static int transferEnergyCount(ServerLevel level, BlockPos sourcePos, BlockPos targetPos) {
         Direction sourceSide = sideFrom(sourcePos, targetPos);
         Direction targetSide = sourceSide == null ? null : sourceSide.getOpposite();
-        EnergyHandler source = energyHandler(level, sourcePos, sourceSide);
-        EnergyHandler target = energyHandler(level, targetPos, targetSide);
+        IEnergyStorage source = energyHandler(level, sourcePos, sourceSide);
+        IEnergyStorage target = energyHandler(level, targetPos, targetSide);
         if (source == null) source = energyHandler(level, sourcePos, null);
         if (target == null) target = energyHandler(level, targetPos, null);
         if (source == null || target == null) return 0;
 
-        int amount = (int) Math.min(Integer.MAX_VALUE, Math.min(ModServerConfig.MAX_ENERGY_MOVED_PER_ROUTE.get(), source.getAmountAsLong()));
+        int amount = (int) Math.min(Integer.MAX_VALUE, Math.min(ModServerConfig.MAX_ENERGY_MOVED_PER_ROUTE.get(), source.getEnergyStored()));
         if (amount <= 0) return 0;
-        try (Transaction tx = Transaction.openRoot()) {
-            long extracted = source.extract(amount, tx);
-            if (extracted <= 0) return 0;
-            long inserted = target.insert((int) extracted, tx);
-            if (inserted <= 0) return 0;
-            if (inserted < extracted) return 0;
-            tx.commit();
-            return (int) Math.min(Integer.MAX_VALUE, inserted);
-        }
+        int extracted = source.extractEnergy(amount, true);
+        if (extracted <= 0) return 0;
+        int inserted = target.receiveEnergy(extracted, true);
+        if (inserted <= 0 || inserted < extracted) return 0;
+        int realExtracted = source.extractEnergy(inserted, false);
+        if (realExtracted <= 0) return 0;
+        int realInserted = target.receiveEnergy(realExtracted, false);
+        return Math.max(0, realInserted);
     }
 }

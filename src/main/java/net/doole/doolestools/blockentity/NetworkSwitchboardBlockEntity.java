@@ -5,7 +5,11 @@ import net.doole.doolestools.logistics.switchboard.SwitchboardLinkData;
 import net.doole.doolestools.logistics.switchboard.SwitchboardNodePositionData;
 import net.doole.doolestools.menu.NetworkSwitchboardMenu;
 import net.doole.doolestools.registry.ModBlockEntities;
+import net.doole.doolestools.util.ValueInput;
+import net.doole.doolestools.util.ValueOutput;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.MenuProvider;
@@ -15,8 +19,6 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.storage.ValueInput;
-import net.minecraft.world.level.storage.ValueOutput;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -163,15 +165,23 @@ public class NetworkSwitchboardBlockEntity extends BlockEntity implements MenuPr
     }
 
     @Override
-    protected void saveAdditional(ValueOutput output) {
-        super.saveAdditional(output);
+    protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+        super.saveAdditional(tag, registries);
+        saveData(new ValueOutput(tag, registries));
+    }
+
+    private void saveData(ValueOutput output) {
         output.store("links", SwitchboardLinkData.CODEC.listOf(), links);
         output.store("nodePositions", SwitchboardNodePositionData.CODEC.listOf(), nodePositions);
     }
 
     @Override
-    protected void loadAdditional(ValueInput input) {
-        super.loadAdditional(input);
+    protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+        super.loadAdditional(tag, registries);
+        loadData(new ValueInput(tag, registries));
+    }
+
+    private void loadData(ValueInput input) {
         this.links = new ArrayList<>(input.read("links", SwitchboardLinkData.CODEC.listOf()).orElse(List.of()));
         this.nodePositions = new ArrayList<>(input.read("nodePositions", SwitchboardNodePositionData.CODEC.listOf()).orElse(List.of()));
     }

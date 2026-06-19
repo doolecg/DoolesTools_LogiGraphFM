@@ -74,11 +74,13 @@ public class LinkingCardItem extends Item {
     }
 
     private static String storedNetworkId(ItemStack stack) {
-        return NetworkEndpointBlockEntity.sanitizeNetworkId(customTag(stack).getStringOr(NETWORK_ID, ""));
+        CompoundTag tag = customTag(stack);
+        return NetworkEndpointBlockEntity.sanitizeNetworkId(tag.contains(NETWORK_ID) ? tag.getString(NETWORK_ID) : "");
     }
 
     private static String storedNetworkName(ItemStack stack) {
-        return NetworkEndpointBlockEntity.sanitize(customTag(stack).getStringOr(NETWORK_NAME, ""));
+        CompoundTag tag = customTag(stack);
+        return NetworkEndpointBlockEntity.sanitize(tag.contains(NETWORK_NAME) ? tag.getString(NETWORK_NAME) : "");
     }
 
     private static CompoundTag customTag(ItemStack stack) {

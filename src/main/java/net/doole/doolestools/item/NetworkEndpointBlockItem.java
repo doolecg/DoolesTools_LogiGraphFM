@@ -24,15 +24,14 @@ public class NetworkEndpointBlockItem extends BlockItem {
     @Override
     public InteractionResult useOn(UseOnContext context) {
         if (context.getLevel().getBlockState(context.getClickedPos()).is(ModBlocks.NETWORK_WIRE.get())) {
-            Direction preferred = context.getClickedFace();
-            if (installIntoWire(context, context.getClickedPos(), preferred)) return InteractionResult.SUCCESS;
-            if (installIntoWire(context, context.getClickedPos(), context.getClickedFace().getOpposite())) return InteractionResult.SUCCESS;
+            if (installIntoWire(context, context.getClickedPos(), context.getClickedFace())) return InteractionResult.SUCCESS;
             return InteractionResult.SUCCESS;
         }
 
         BlockPos wirePos = context.getClickedPos().relative(context.getClickedFace());
-        if (installIntoWire(context, wirePos, context.getClickedFace().getOpposite())) return InteractionResult.SUCCESS;
-        if (createEndpointHost(context, wirePos, context.getClickedFace().getOpposite())) return InteractionResult.SUCCESS;
+        Direction endpointFace = context.getClickedFace().getOpposite();
+        if (installIntoWire(context, wirePos, endpointFace)) return InteractionResult.SUCCESS;
+        if (createEndpointHost(context, wirePos, endpointFace)) return InteractionResult.SUCCESS;
         return super.useOn(context);
     }
 
@@ -40,7 +39,8 @@ public class NetworkEndpointBlockItem extends BlockItem {
         if (!"modem".equals(endpointKind)) return false;
         if (!context.getLevel().getBlockState(wirePos).is(ModBlocks.NETWORK_WIRE.get())) return false;
         if (!(context.getLevel().getBlockEntity(wirePos) instanceof NetworkWireBlockEntity wire)) return false;
-        if (wire.hasEndpointAt(endpointFace)) return true;
+        if (!isEndpointTarget(context.getLevel(), wirePos.relative(endpointFace))) return false;
+        if (wire.hasEndpointAt(endpointFace)) return false;
         if (!context.getLevel().isClientSide()) {
             ItemStack stack = context.getItemInHand();
             if (wire.installEndpoint(endpointKind, endpointFace, "")
@@ -50,6 +50,12 @@ public class NetworkEndpointBlockItem extends BlockItem {
             context.getLevel().sendBlockUpdated(wirePos, wire.getBlockState(), wire.getBlockState(), 3);
         }
         return true;
+    }
+
+    private static boolean isEndpointTarget(Level level, BlockPos pos) {
+        if (level.getBlockState(pos).isAir()) return false;
+        return !(level.getBlockEntity(pos) instanceof NetworkWireBlockEntity)
+                && !(level.getBlockEntity(pos) instanceof net.doole.doolestools.blockentity.NetworkEndpointBlockEntity);
     }
 
     private boolean createEndpointHost(UseOnContext context, BlockPos wirePos, Direction endpointFace) {

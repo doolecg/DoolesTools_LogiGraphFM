@@ -1,8 +1,8 @@
 package net.doole.doolestools.client.gui;
 
-import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -19,8 +19,8 @@ import java.util.Map;
 public final class ItemIcons {
     private ItemIcons() {}
 
-    /** Native vanilla item icon size. */
-    public static final int SIZE = 16;
+    /** Compact UI icon size used by LogiGraph lists and panels. */
+    public static final int SIZE = 12;
 
     private static final Map<String, ItemStack> CACHE = new HashMap<>();
 
@@ -30,11 +30,11 @@ public final class ItemIcons {
     }
 
     private static ItemStack resolve(String id) {
-        Identifier rl = Identifier.tryParse(id);
+        ResourceLocation rl = ResourceLocation.tryParse(id);
         if (rl == null) return ItemStack.EMPTY;
-        Item item = BuiltInRegistries.ITEM.getValue(rl);
+        Item item = BuiltInRegistries.ITEM.get(rl);
         if (item != null && item != Items.AIR) return new ItemStack(item);
-        Block block = BuiltInRegistries.BLOCK.getValue(rl);
+        Block block = BuiltInRegistries.BLOCK.get(rl);
         if (block != null) {
             ItemStack stack = new ItemStack(block);
             if (!stack.isEmpty()) return stack;
@@ -46,14 +46,23 @@ public final class ItemIcons {
      * Draws the item icon for {@code registryId} at ({@code x},{@code y}). If no icon resolves, draws a
      * flat {@code fallbackColor} square ({@code size}px) and returns {@code false}.
      */
-    public static boolean render(GuiGraphicsExtractor g, String registryId, int x, int y, int size, int fallbackColor) {
+    public static boolean render(GuiGraphics g, String registryId, int x, int y, int size, int fallbackColor) {
         ItemStack stack = net.doole.doolestools.client.ClientPrefs.showItemIcons ? stackFor(registryId) : ItemStack.EMPTY;
         if (stack.isEmpty()) {
             g.fill(x, y, x + size, y + size, fallbackColor);
             DUTheme.outline(g, x, y, size, size, 0xFF000000);
             return false;
         }
-        g.item(stack, x, y);
+        if (size == 16) {
+            g.renderItem(stack, x, y);
+        } else {
+            g.pose().pushPose();
+            float scale = size / 16.0f;
+            g.pose().translate(x, y, 0.0f);
+            g.pose().scale(scale, scale, 1.0f);
+            g.renderItem(stack, 0, 0);
+            g.pose().popPose();
+        }
         return true;
     }
 }

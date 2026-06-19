@@ -21,7 +21,6 @@ import net.neoforged.neoforge.registries.DeferredBlock;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
-import java.util.Set;
 import java.util.function.BiFunction;
 
 public final class ModBlockEntities {
@@ -34,7 +33,7 @@ public final class ModBlockEntities {
 
     private static <T extends BlockEntity> DeferredHolder<BlockEntityType<?>, BlockEntityType<T>>
     register(String name, DeferredBlock<?> block, BiFunction<BlockPos, BlockState, T> factory) {
-        return BLOCK_ENTITY_TYPES.register(name, () -> new BlockEntityType<>(factory::apply, Set.of(block.get())));
+        return BLOCK_ENTITY_TYPES.register(name, () -> BlockEntityType.Builder.of(factory::apply, block.get()).build(null));
     }
 
     // --- Block entity registrations ---

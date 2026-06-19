@@ -41,6 +41,7 @@ public class EditorContext {
     private NetworkPowerData power = NetworkPowerData.EMPTY;
     private java.util.Set<String> activeRouteIds = java.util.Set.of();
     private String networkId = "";
+    private String networkDisplayId = "";
     private String networkName = "";
     private String accessMode = "shared";
     private List<String> editorWhitelist = List.of();
@@ -166,12 +167,13 @@ public class EditorContext {
     public Map<String, ScannedBlockData> scanById() { return scanById; }
     public LogisticsGraphData graph() { return graph; }
     public NetworkPowerData power() { return power; }
-    public boolean isRouteActive(String linkId) { return activeRouteIds.contains(linkId); }
+    public boolean isRouteActive(String linkId) { return activeRouteIds.contains(linkId) || latestLinkThroughput(linkId) > 0; }
     public int activeRouteCount() { return activeRouteIds.size(); }
     public void setActiveRouteIds(java.util.List<String> ids) { this.activeRouteIds = ids == null ? java.util.Set.of() : new java.util.HashSet<>(ids); }
     public long lastScanTime() { return lastScanTime; }
     public boolean isDirty() { return dirty; }
     public String networkId() { return networkId; }
+    public String networkDisplayId() { return networkDisplayId == null || networkDisplayId.isBlank() ? networkId : networkDisplayId; }
     public String networkName() { return networkName; }
     public String accessMode() { return accessMode; }
     public List<String> editorWhitelist() { return editorWhitelist; }
@@ -191,7 +193,12 @@ public class EditorContext {
     public boolean canEdit() { return canEdit; }
 
     public void setNetworkState(String networkId, String networkName, String accessMode, List<String> editorWhitelist, boolean canEdit) {
+        setNetworkState(networkId, "", networkName, accessMode, editorWhitelist, canEdit);
+    }
+
+    public void setNetworkState(String networkId, String networkDisplayId, String networkName, String accessMode, List<String> editorWhitelist, boolean canEdit) {
         this.networkId = networkId == null ? "" : networkId;
+        this.networkDisplayId = networkDisplayId == null ? "" : networkDisplayId;
         this.networkName = networkName == null ? "" : networkName;
         this.accessMode = accessMode == null ? "shared" : accessMode;
         this.editorWhitelist = editorWhitelist == null ? List.of() : List.copyOf(editorWhitelist);
@@ -216,6 +223,11 @@ public class EditorContext {
         int interval = Math.max(1, net.doole.doolestools.config.ModServerConfig.LFM_TICK_INTERVAL.get());
         double samplesPerMinute = 1200.0 / interval;
         return (sum / (double) history.size()) * samplesPerMinute;
+    }
+
+    private int latestLinkThroughput(String linkId) {
+        List<Integer> history = linkThroughput.get(linkId);
+        return history == null || history.isEmpty() ? 0 : Math.max(0, history.get(history.size() - 1));
     }
 
     private static List<Short> safeShorts(List<Short> in) {

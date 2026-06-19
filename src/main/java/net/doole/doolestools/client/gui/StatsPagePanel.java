@@ -8,7 +8,7 @@ import net.doole.doolestools.logistics.data.NetworkPowerData;
 import net.doole.doolestools.logistics.data.ScannedBlockData;
 import net.doole.doolestools.logistics.data.WarningData;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
@@ -33,7 +33,7 @@ public final class StatsPagePanel {
     private int batteryScrollOffset = 0;
     private int inventoryX, inventoryY, inventoryW, inventoryH, inventoryMaxScroll;
     private int capacityX, capacityY, capacityW, capacityH, batteryMaxScroll;
-    private final TerminalButton[] scaleButtons = new TerminalButton[SCALE_LABELS.length];
+    private int sliderX, sliderY, sliderW, sliderH;
 
     public StatsPagePanel(EditorContext ctx, Font font) {
         this.ctx = ctx;
@@ -52,27 +52,20 @@ public final class StatsPagePanel {
      * {@code init()} after {@link #updateLayout} has been called.
      */
     public void initButtons(IntConsumer setTimeScale, Consumer<TerminalButton> addWidget) {
-        int x = statsContentX();
-        int y = statsTabStripY();
-        int bw = 34, gap = 3, h = 12;
-        for (int i = 0; i < SCALE_LABELS.length; i++) {
-            final int idx = i;
-            TerminalButton b = new TerminalButton(x + i * (bw + gap), y, bw, h,
-                    Component.literal(SCALE_LABELS[i]), () -> setTimeScale(idx, setTimeScale))
-                    .accent(DUTheme.SELECTED);
-            b.setToggled(i == timeScale);
-            scaleButtons[i] = b;
-            addWidget.accept(b);
-        }
+        // Time scale is rendered as an in-panel slider so it cannot overlap at small UI scales.
     }
 
     private void setTimeScale(int scale, IntConsumer onScaleChanged) {
         timeScale = Math.max(0, Math.min(SCALE_LABELS.length - 1, scale));
         graphScrollOffset = 0;
-        for (int i = 0; i < scaleButtons.length; i++) {
-            if (scaleButtons[i] != null) scaleButtons[i].setToggled(i == timeScale);
-        }
         onScaleChanged.accept(timeScale);
+    }
+
+    public boolean handleTimeScaleMouse(double mx, double my) {
+        if (sliderW <= 0 || mx < sliderX - 4 || mx > sliderX + sliderW + 4 || my < sliderY - 7 || my > sliderY + sliderH + 12) return false;
+        int next = Math.round((float) ((mx - sliderX) / Math.max(1.0, sliderW)) * (SCALE_LABELS.length - 1));
+        setTimeScale(next, scale -> {});
+        return true;
     }
 
     public void scrollGraph(double delta) {
@@ -96,7 +89,7 @@ public final class StatsPagePanel {
         return false;
     }
 
-    public void render(GuiGraphicsExtractor g, int x, int y, int w, int h) {
+    public void render(GuiGraphics g, int x, int y, int w, int h) {
         List<ScannedBlockData> scan = ctx.scan();
         int warnings = 0, errors = 0;
         for (ScannedBlockData s : scan) {
@@ -129,7 +122,7 @@ public final class StatsPagePanel {
                 : power.degraded() ? "LOW POWER — " + Math.round(power.satisfaction() * 100) + "%"
                 : "NETWORK SATISFIED";
         DUTheme.dot(g, rightX + 8, topY + 18, statusColor);
-        g.text(font, statusText, rightX + 18, topY + 16, statusColor, false);
+        g.drawString(font, statusText, rightX + 18, topY + 16, statusColor, false);
 
         int barsTop = topY + 32;
         int peak = Math.max(1, Math.max(power.supplyCentiFe(), power.demandCentiFe()));
@@ -144,8 +137,8 @@ public final class StatsPagePanel {
         ly = statSmall(g, rightX + 8, ly, quadW - 16, "Batteries", formatFe(power.batteryCentiFe()) + " cF/t");
         ThroughputPlanner.PlannerResult plan = ThroughputPlanner.analyse(ctx.graph(), scan);
         if (ly + 10 < topY + quadH) {
-            g.text(font, "Routes " + power.routeCount() + (power.powered() && ClientPrefs.autoRefresh ? "  LIVE" : "  IDLE"), rightX + 8, ly, power.powered() ? DUTheme.OK : DUTheme.DISABLED, false);
-            g.text(font, "Bottlenecks " + plan.totalBottlenecks() + "  Starved " + plan.totalStarved(), rightX + 112, ly, plan.totalBottlenecks() > 0 || plan.totalStarved() > 0 ? DUTheme.WARN : DUTheme.TEXT_DIM, false);
+            g.drawString(font, "Routes " + power.routeCount() + (power.powered() && ClientPrefs.autoRefresh ? "  LIVE" : "  IDLE"), rightX + 8, ly, power.powered() ? DUTheme.OK : DUTheme.DISABLED, false);
+            g.drawString(font, "Bottlenecks " + plan.totalBottlenecks() + "  Starved " + plan.totalStarved(), rightX + 112, ly, plan.totalBottlenecks() > 0 || plan.totalStarved() > 0 ? DUTheme.WARN : DUTheme.TEXT_DIM, false);
         }
 
         // ── BOTTOM LEFT: INVENTORY WATCH ─────────────────────────────────────
@@ -160,7 +153,7 @@ public final class StatsPagePanel {
         if (invBlocks.isEmpty()) {
             inventoryScrollOffset = 0;
             inventoryMaxScroll = 0;
-            g.centeredText(font, "NO INVENTORY DATA", leftX + quadW / 2, bottomY + quadH / 2 - 4, DUTheme.TEXT_DIM);
+            g.drawCenteredString(font, "NO INVENTORY DATA", leftX + quadW / 2, bottomY + quadH / 2 - 4, DUTheme.TEXT_DIM);
         } else {
             int rowY = bottomY + 18;
             int nameW = Math.max(70, quadW / 4);
@@ -178,11 +171,11 @@ public final class StatsPagePanel {
                 int barColor = isFull ? DUTheme.ERROR : pct >= WarningGenerator.NEARLY_FULL_PERCENT ? DUTheme.WARN : DUTheme.OK;
                 int nameColor = isFull && isStorage ? DUTheme.WARN : DUTheme.TEXT_DIM;
                 String name = trim(font, s.blockName(), nameW);
-                g.text(font, name, leftX + 8, rowY, nameColor, false);
+                g.drawString(font, name, leftX + 8, rowY, nameColor, false);
                 int bx = leftX + 10 + nameW;
                 DUTheme.progress(g, bx, rowY, barW, 7, pct / 100f, barColor);
                 String suffix = isFull ? "FULL" : pct + "%";
-                g.text(font, suffix, bx + barW + 5, rowY, isFull && isStorage ? DUTheme.WARN : DUTheme.TEXT_DIM, false);
+                g.drawString(font, suffix, bx + barW + 5, rowY, isFull && isStorage ? DUTheme.WARN : DUTheme.TEXT_DIM, false);
                 rowY += 13;
             }
             renderScrollbar(g, leftX + quadW - 5, bottomY + 14, quadH - 20, inventoryScrollOffset, inventoryMaxScroll);
@@ -200,7 +193,7 @@ public final class StatsPagePanel {
             int battColor = storedFrac > 0.6f ? 0xFF3af0a0 : storedFrac >= 0.3f ? 0xFFf09030 : 0xFFf03030;
             DUTheme.horizBattery(g, rightX + 8, ry, quadW - 16, 14, storedFrac, battColor);
             int pctVal = Math.round(storedFrac * 100f);
-            g.text(font, pctVal + "%  " + formatMfe(power.batteryStored()) + " / " + formatMfe(power.batteryCapacity()),
+            g.drawString(font, pctVal + "%  " + formatMfe(power.batteryStored()) + " / " + formatMfe(power.batteryCapacity()),
                     rightX + 8, ry + 17, DUTheme.TEXT_DIM, false);
             ry += 34;
             if (power.batteryCount() > 0) {
@@ -225,27 +218,27 @@ public final class StatsPagePanel {
                 }
                 if (start + visible < count) {
                     String more = "+" + (count - start - visible);
-                    g.text(font, more, rightX + quadW - 8 - font.width(more), bottomY + quadH - 34, DUTheme.TEXT_GREEN_DIM, false);
+                    g.drawString(font, more, rightX + quadW - 8 - font.width(more), bottomY + quadH - 34, DUTheme.TEXT_GREEN_DIM, false);
                 }
                 renderScrollbar(g, rightX + quadW - 5, ry, gridH, batteryScrollOffset, batteryMaxScroll);
             }
         } else {
             batteryScrollOffset = 0;
             batteryMaxScroll = 0;
-            g.text(font, "No batteries", rightX + 8, ry, DUTheme.TEXT_DIM, false); ry += 14;
+            g.drawString(font, "No batteries", rightX + 8, ry, DUTheme.TEXT_DIM, false); ry += 14;
         }
         int netY = bottomY + quadH - 24;
         g.fill(rightX + 8, netY - 4, rightX + quadW - 8, netY - 3, DUTheme.PANEL_BORDER);
-        g.text(font, "GEN " + power.generatorCount(), rightX + 8, netY, DUTheme.TEXT_DIM, false);
-        g.text(font, "BAT " + power.batteryCount(), rightX + 60, netY, DUTheme.TEXT_DIM, false);
-        g.text(font, "SOCKETS " + power.endpointCount(), rightX + 112, netY, DUTheme.TEXT_DIM, false);
-        g.text(font, warnings + "W " + errors + "E", rightX + quadW - 52, netY, errors > 0 ? DUTheme.ERROR : warnings > 0 ? DUTheme.WARN : DUTheme.OK, false);
+        g.drawString(font, "GEN " + power.generatorCount(), rightX + 8, netY, DUTheme.TEXT_DIM, false);
+        g.drawString(font, "BAT " + power.batteryCount(), rightX + 60, netY, DUTheme.TEXT_DIM, false);
+        g.drawString(font, "SOCKETS " + power.endpointCount(), rightX + 112, netY, DUTheme.TEXT_DIM, false);
+        g.drawString(font, warnings + "W " + errors + "E", rightX + quadW - 52, netY, errors > 0 ? DUTheme.ERROR : warnings > 0 ? DUTheme.WARN : DUTheme.OK, false);
     }
 
     // --- Private helpers ---
 
-    private void statBar(GuiGraphicsExtractor g, int x, int y, int w, String label, float frac, String value, int color) {
-        g.text(font, label, x, y, DUTheme.TEXT_DIM, false);
+    private void statBar(GuiGraphics g, int x, int y, int w, String label, float frac, String value, int color) {
+        g.drawString(font, label, x, y, DUTheme.TEXT_DIM, false);
         int labelW = 80;
         int valW = font.width(value) + 4;
         int barW = Math.max(30, w - labelW - valW - 4);
@@ -255,18 +248,19 @@ public final class StatsPagePanel {
             int sx = barX + 1 + (barW - 2) * i / 4;
             g.fill(sx, y + 1, sx + 1, y + 7, 0x66000000);
         }
-        g.text(font, value, barX + barW + 4, y, DUTheme.TEXT, false);
+        g.drawString(font, value, barX + barW + 4, y, DUTheme.TEXT, false);
     }
 
-    private void renderPowerHistoryGraph(GuiGraphicsExtractor g, int x, int y, int w, int h) {
+    private void renderPowerHistoryGraph(GuiGraphics g, int x, int y, int w, int h) {
         DUTheme.box(g, x, y, w, h, DUTheme.PANEL_ALT, DUTheme.PANEL_BORDER);
-        g.text(font, "POWER HISTORY (" + SCALE_LABELS[timeScale] + ")", x + 5, y + 5, DUTheme.TEXT_GREEN, false);
+        g.drawString(font, "POWER HISTORY (" + SCALE_LABELS[timeScale] + ")", x + 5, y + 5, DUTheme.TEXT_GREEN, false);
+        renderTimeScaleSlider(g, x + 7, y + 16, w - 14);
         List<? extends Number> supply = supplySeries();
         List<? extends Number> demand = demandSeries();
         int max = 1;
         for (Number v : supply) max = Math.max(max, v.intValue());
         for (Number v : demand) max = Math.max(max, v.intValue());
-        int gx = x + 5, gy = y + 18, gw = w - 10, gh = h - 26;
+        int gx = x + 5, gy = y + 34, gw = w - 10, gh = h - 42;
         g.fill(gx, gy, gx + gw, gy + gh, 0xFF070b08);
         for (int i = 1; i < 4; i++) {
             int ly = gy + i * gh / 4;
@@ -274,22 +268,41 @@ public final class StatsPagePanel {
         }
         int seriesMax = Math.max(supply == null ? 0 : supply.size(), demand == null ? 0 : demand.size());
         if (timeScale != 0 && seriesMax < 2) {
-            g.centeredText(font, "Accumulating data…", gx + gw / 2, gy + gh / 2 - 4, DUTheme.TEXT_DIM);
+            g.drawCenteredString(font, "Accumulating data…", gx + gw / 2, gy + gh / 2 - 4, DUTheme.TEXT_DIM);
             return;
         }
         int maxOffset = Math.max(0, seriesMax - 1);
         if (graphScrollOffset > maxOffset) graphScrollOffset = maxOffset;
         drawPowerSeries(g, supply, gx, gy, gw, gh, max, DUTheme.OK);
         drawPowerSeries(g, demand, gx, gy, gw, gh, max, powerColor());
-        if (graphScrollOffset < maxOffset) g.text(font, "◀", gx + 1, gy + gh / 2 - 4, DUTheme.TEXT_DIM, false);
-        if (graphScrollOffset > 0)        g.text(font, "▶", gx + gw - 7, gy + gh / 2 - 4, DUTheme.TEXT_DIM, false);
-        g.text(font, "Prod", x + 5, y + h - 8, DUTheme.OK, false);
-        g.text(font, "Cons", x + 44, y + h - 8, powerColor(), false);
+        if (graphScrollOffset < maxOffset) g.drawString(font, "◀", gx + 1, gy + gh / 2 - 4, DUTheme.TEXT_DIM, false);
+        if (graphScrollOffset > 0)        g.drawString(font, "▶", gx + gw - 7, gy + gh / 2 - 4, DUTheme.TEXT_DIM, false);
+        g.drawString(font, "Prod", x + 5, y + h - 8, DUTheme.OK, false);
+        g.drawString(font, "Cons", x + 44, y + h - 8, powerColor(), false);
         String top = formatFe(max) + "/t";
-        g.text(font, top, x + w - 5 - font.width(top), y + 5, DUTheme.TEXT_DIM, false);
+        g.drawString(font, top, x + w - 5 - font.width(top), y + 5, DUTheme.TEXT_DIM, false);
     }
 
-    private void drawPowerSeries(GuiGraphicsExtractor g, List<? extends Number> values, int x, int y, int w, int h, int max, int color) {
+    private void renderTimeScaleSlider(GuiGraphics g, int x, int y, int w) {
+        sliderX = x + 10;
+        sliderY = y + 5;
+        sliderW = Math.max(24, w - 20);
+        sliderH = 8;
+        g.fill(sliderX, sliderY + 3, sliderX + sliderW, sliderY + 5, DUTheme.PANEL_BORDER);
+        int stops = SCALE_LABELS.length - 1;
+        for (int i = 0; i < SCALE_LABELS.length; i++) {
+            int sx = sliderX + Math.round(sliderW * (i / (float) stops));
+            int color = i == timeScale ? DUTheme.SELECTED : DUTheme.TEXT_DIM;
+            g.fill(sx - 1, sliderY + 1, sx + 2, sliderY + 7, color);
+            String label = SCALE_LABELS[i];
+            int labelX = Math.max(x, Math.min(x + w - font.width(label), sx - font.width(label) / 2));
+            g.drawString(font, label, labelX, y + 15, color, false);
+        }
+        int thumbX = sliderX + Math.round(sliderW * (timeScale / (float) stops));
+        DUTheme.box(g, thumbX - 4, sliderY - 1, 8, 10, 0xFF14303a, DUTheme.SELECTED);
+    }
+
+    private void drawPowerSeries(GuiGraphics g, List<? extends Number> values, int x, int y, int w, int h, int max, int color) {
         if (values == null || values.size() < 2) return;
         int count = Math.min(values.size(), w);
         int start = Math.max(0, values.size() - count - graphScrollOffset);
@@ -303,13 +316,13 @@ public final class StatsPagePanel {
         }
     }
 
-    private int stat(GuiGraphicsExtractor g, int x, int y, String key, String value) {
-        g.text(font, key, x, y, DUTheme.TEXT_DIM, false);
-        g.text(font, value, x + 80, y, DUTheme.TEXT, false);
+    private int stat(GuiGraphics g, int x, int y, String key, String value) {
+        g.drawString(font, key, x, y, DUTheme.TEXT_DIM, false);
+        g.drawString(font, value, x + 80, y, DUTheme.TEXT, false);
         return y + 11;
     }
 
-    private void renderScrollbar(GuiGraphicsExtractor g, int x, int y, int h, int offset, int maxOffset) {
+    private void renderScrollbar(GuiGraphics g, int x, int y, int h, int offset, int maxOffset) {
         if (maxOffset <= 0 || h <= 10) return;
         g.fill(x, y, x + 2, y + h, 0x6632452f);
         int thumbH = Math.max(8, h / (maxOffset + 1));
@@ -318,9 +331,9 @@ public final class StatsPagePanel {
         g.fill(x - 1, thumbY, x + 3, thumbY + thumbH, DUTheme.SELECTED);
     }
 
-    private int statSmall(GuiGraphicsExtractor g, int x, int y, int w, String key, String value) {
-        g.text(font, key, x, y, DUTheme.TEXT_DIM, false);
-        g.text(font, value, x + w - font.width(value), y, DUTheme.TEXT, false);
+    private int statSmall(GuiGraphics g, int x, int y, int w, String key, String value) {
+        g.drawString(font, key, x, y, DUTheme.TEXT_DIM, false);
+        g.drawString(font, value, x + w - font.width(value), y, DUTheme.TEXT, false);
         return y + 10;
     }
 

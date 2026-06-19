@@ -3,7 +3,7 @@ package net.doole.doolestools.client.gui;
 import net.doole.doolestools.client.EditorContext;
 import net.doole.doolestools.logistics.data.ScannedBlockData;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.GuiGraphics;
 
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -96,7 +96,7 @@ public class ScannedBlockListWidget {
         return list.get(idx);
     }
 
-    public void render(GuiGraphicsExtractor g, Font font) {
+    public void render(GuiGraphics g, Font font) {
         renderNetworkTabs(g, font);
         List<ScannedBlockData> list = ctx.filteredScan();
         int listX = x + tabOffset();
@@ -116,16 +116,16 @@ public class ScannedBlockListWidget {
             // Real item icon (falls back to a category-coloured square).
             ItemIcons.render(g, s.registryId(), listX + 3, ry + 3, ItemIcons.SIZE, iconColor(s));
 
-            g.text(font, trim(font, s.blockName(), listW - 56), listX + 23, ry + 4, DUTheme.TEXT, false);
-            g.text(font, Math.round(s.distance()) + "m", listX + 23, ry + 13, DUTheme.TEXT_DIM, false);
+            g.drawString(font, trim(font, s.blockName(), listW - 56), listX + 23, ry + 4, DUTheme.TEXT, false);
+            g.drawString(font, Math.round(s.distance()) + "m", listX + 23, ry + 13, DUTheme.TEXT_DIM, false);
 
             DUTheme.dot(g, x + w - 12, ry + 8, ctx.statusColorFor(s));
         }
         g.disableScissor();
 
         if (list.isEmpty()) {
-            g.centeredText(font, "NO DEVICES", listX + listW / 2, y + 8, DUTheme.TEXT_DIM);
-            g.centeredText(font, "SCAN NETWORK", listX + listW / 2, y + 20, DUTheme.TEXT_DIM);
+            g.drawCenteredString(font, "NO DEVICES", listX + listW / 2, y + 8, DUTheme.TEXT_DIM);
+            g.drawCenteredString(font, "SCAN NETWORK", listX + listW / 2, y + 20, DUTheme.TEXT_DIM);
         }
     }
 
@@ -141,7 +141,7 @@ public class ScannedBlockListWidget {
         return true;
     }
 
-    private void renderNetworkTabs(GuiGraphicsExtractor g, Font font) {
+    private void renderNetworkTabs(GuiGraphics g, Font font) {
         java.util.List<EditorContext.NetworkTab> tabs = ctx.scanNetworkTabs();
         if (tabs.size() <= 1) return;
         for (int i = 0; i < tabs.size(); i++) {
@@ -157,9 +157,9 @@ public class ScannedBlockListWidget {
                     ? label.substring(0, 3).toUpperCase(java.util.Locale.ROOT)
                     : label.toUpperCase(java.util.Locale.ROOT);
             int labelColor = selected ? 0xFF001408 : DUTheme.TEXT_DIM;
-            g.text(font, abbrev.substring(0, Math.min(1, abbrev.length())), x + 3, ty + 6, labelColor, false);
-            if (abbrev.length() >= 2) g.text(font, abbrev.substring(1, 2), x + 3, ty + 14, labelColor, false);
-            if (abbrev.length() >= 3) g.text(font, abbrev.substring(2, 3), x + 3, ty + 22, labelColor, false);
+            g.drawString(font, abbrev.substring(0, Math.min(1, abbrev.length())), x + 3, ty + 6, labelColor, false);
+            if (abbrev.length() >= 2) g.drawString(font, abbrev.substring(1, 2), x + 3, ty + 14, labelColor, false);
+            if (abbrev.length() >= 3) g.drawString(font, abbrev.substring(2, 3), x + 3, ty + 22, labelColor, false);
         }
     }
 

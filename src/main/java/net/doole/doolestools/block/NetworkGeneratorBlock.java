@@ -9,6 +9,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
@@ -66,22 +67,28 @@ public class NetworkGeneratorBlock extends HorizontalDirectionalBlock implements
     }
 
     @Override
-    protected InteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
-        if (NetworkDismantle.tryDismantle(level, pos, player, stack)) return InteractionResult.SUCCESS;
-        if (stack.isEmpty()) return openGenerator(level, pos, player);
+    protected ItemInteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
+        if (NetworkDismantle.tryDismantle(level, pos, player, stack)) return ItemInteractionResult.SUCCESS;
+        if (stack.isEmpty()) {
+            openGenerator(level, pos, player);
+            return ItemInteractionResult.SUCCESS;
+        }
         if (level.getBlockEntity(pos) instanceof NetworkGeneratorBlockEntity generator) {
-            if (!generator.isFuel(stack)) return openGenerator(level, pos, player);
+            if (!generator.isFuel(stack)) {
+                openGenerator(level, pos, player);
+                return ItemInteractionResult.SUCCESS;
+            }
             if (!level.isClientSide() && generator.insertFuelFromPlayer(stack, player.getAbilities().instabuild)) {
                 level.invalidateCapabilities(pos);
             }
-            return InteractionResult.SUCCESS;
+            return ItemInteractionResult.SUCCESS;
         }
-        return InteractionResult.PASS;
+        return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
     }
 
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
-        return openGenerator(level, pos, player);
+        openGenerator(level, pos, player); return InteractionResult.SUCCESS;
     }
 
     private static InteractionResult openGenerator(Level level, BlockPos pos, Player player) {

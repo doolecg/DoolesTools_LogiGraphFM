@@ -2,6 +2,8 @@ package net.doole.doolestools.blockentity;
 
 import net.doole.doolestools.block.LogiGraphWallMonitorBlock;
 import net.doole.doolestools.registry.ModBlockEntities;
+import net.doole.doolestools.util.ValueInput;
+import net.doole.doolestools.util.ValueOutput;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
@@ -9,13 +11,9 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientGamePacketListener;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
-import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.storage.TagValueOutput;
-import net.minecraft.world.level.storage.ValueInput;
-import net.minecraft.world.level.storage.ValueOutput;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayDeque;
@@ -219,8 +217,12 @@ public class LogiGraphWallMonitorBlockEntity extends BlockEntity {
     private record Bounds(BlockPos min, int width, int height) {}
 
     @Override
-    protected void saveAdditional(ValueOutput output) {
-        super.saveAdditional(output);
+    protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+        super.saveAdditional(tag, registries);
+        saveData(new ValueOutput(tag, registries));
+    }
+
+    private void saveData(ValueOutput output) {
         output.putInt("controllerX", controller.getX());
         output.putInt("controllerY", controller.getY());
         output.putInt("controllerZ", controller.getZ());
@@ -236,8 +238,12 @@ public class LogiGraphWallMonitorBlockEntity extends BlockEntity {
     }
 
     @Override
-    protected void loadAdditional(ValueInput input) {
-        super.loadAdditional(input);
+    protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+        super.loadAdditional(tag, registries);
+        loadData(new ValueInput(tag, registries));
+    }
+
+    private void loadData(ValueInput input) {
         this.controller = new BlockPos(input.getIntOr("controllerX", worldPosition.getX()), input.getIntOr("controllerY", worldPosition.getY()), input.getIntOr("controllerZ", worldPosition.getZ()));
         this.width = input.getIntOr("width", 1);
         this.height = input.getIntOr("height", 1);
@@ -256,8 +262,8 @@ public class LogiGraphWallMonitorBlockEntity extends BlockEntity {
 
     @Override
     public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
-        TagValueOutput output = TagValueOutput.createWithContext(ProblemReporter.DISCARDING, registries);
-        saveAdditional(output);
-        return output.buildResult();
+        CompoundTag tag = new CompoundTag();
+        saveAdditional(tag, registries);
+        return tag;
     }
 }
