@@ -1,3 +1,5 @@
+// DISABLED: LogiGraph Wall Monitor renderer commented out per request. Restore by removing this wrapper.
+/*
 package net.doole.doolestools.client.render;
 
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -50,3 +52,4 @@ public class LogiGraphWallMonitorRenderer implements BlockEntityRenderer<LogiGra
         public int mode;
     }
 }
+*/

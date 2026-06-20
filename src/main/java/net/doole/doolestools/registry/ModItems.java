@@ -34,8 +34,9 @@ public final class ModItems {
     public static final DeferredItem<Item> LINKING_CARD =
             ITEMS.registerItem("linking_card", LinkingCardItem::new);
 
-    public static final DeferredItem<BlockItem> LOGIGRAPH_WALL_MONITOR =
-            ITEMS.registerSimpleBlockItem("logigraph_wall_monitor", ModBlocks.LOGIGRAPH_WALL_MONITOR);
+    // DISABLED: LogiGraph Wall Monitor item commented out per request.
+    // public static final DeferredItem<BlockItem> LOGIGRAPH_WALL_MONITOR =
+    //         ITEMS.registerSimpleBlockItem("logigraph_wall_monitor", ModBlocks.LOGIGRAPH_WALL_MONITOR);
 
     public static final DeferredItem<NetworkEndpointBlockItem> WIRELESS_ROUTER =
             ITEMS.registerItem("wireless_router", props -> new NetworkEndpointBlockItem(ModBlocks.WIRELESS_ROUTER.get(), props, "router"));

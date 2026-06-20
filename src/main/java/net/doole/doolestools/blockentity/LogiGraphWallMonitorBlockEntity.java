@@ -1,3 +1,5 @@
+// DISABLED: LogiGraph Wall Monitor block entity commented out per request. Restore by removing this wrapper.
+/*
 package net.doole.doolestools.blockentity;
 
 import net.doole.doolestools.block.LogiGraphWallMonitorBlock;
@@ -80,7 +82,7 @@ public class LogiGraphWallMonitorBlockEntity extends BlockEntity {
 
     public static final int MODE_COUNT = 6;
 
-    /** Cycles the display mode on the controller of this multiblock. */
+    // Cycles the display mode on the controller of this multiblock.
     public void cycleMode() {
         LogiGraphWallMonitorBlockEntity ctrl = controllerEntity();
         ctrl.mode = (ctrl.mode + 1) % MODE_COUNT;
@@ -88,7 +90,7 @@ public class LogiGraphWallMonitorBlockEntity extends BlockEntity {
         ctrl.pushUpdate();
     }
 
-    /** Links the controller to the nearest Logistics Computer within {@code radius}; returns true if one was found. */
+    // Links the controller to the nearest Logistics Computer within {@code radius}; returns true if one was found.
     public boolean linkToNearestComputer(int radius) {
         if (level == null) return false;
         LogiGraphWallMonitorBlockEntity ctrl = controllerEntity();
@@ -261,3 +263,4 @@ public class LogiGraphWallMonitorBlockEntity extends BlockEntity {
         return output.buildResult();
     }
 }
+*/

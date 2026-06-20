@@ -1,6 +1,7 @@
 package net.doole.doolestools.logistics;
 
 import net.doole.doolestools.logistics.data.GraphPortData;
+import net.doole.doolestools.logistics.data.PortIoData;
 import net.doole.doolestools.logistics.data.ScannedBlockData;
 
 import java.util.List;
@@ -14,6 +15,8 @@ public final class PortDiscovery {
 
     public static List<GraphPortData> discover(ScannedBlockData scanned) {
         if (scanned == null) return fallback();
+        PortIoData io = scanned.ports();
+        if (io != null && io.known()) return realPorts(scanned, io);
         if (scanned.furnace().hasData()) {
             java.util.ArrayList<GraphPortData> ports = new java.util.ArrayList<>(List.of(
                     new GraphPortData("material_in", PortDirection.IN, PortKind.ITEM, "Material"),
@@ -48,6 +51,34 @@ public final class PortDiscovery {
         addFluidEnergyPorts(scanned, ports);
         if (!ports.isEmpty()) return ports;
         return fallbackFor(scanned);
+    }
+
+    /**
+     * Build planning ports from the real per-face IO the scanner probed off the block's capabilities.
+     * This is the authoritative path (Mekanism side-config, GregTech covers, EnderIO I/O, vanilla sided
+     * containers all surface here); the namespace heuristics below are only the fallback for blocks that
+     * expose no standard item/fluid/energy capability (e.g. AE2/RS network devices).
+     */
+    private static List<GraphPortData> realPorts(ScannedBlockData scanned, PortIoData io) {
+        java.util.ArrayList<GraphPortData> ports = new java.util.ArrayList<>();
+        boolean machine = scanned.isMachineLike();
+        if (scanned.furnace().hasData()) {
+            // Keep the furnace's semantic split so material vs. fuel routing still works in the planner.
+            ports.add(new GraphPortData("material_in", PortDirection.IN, PortKind.ITEM, "Material"));
+            ports.add(new GraphPortData("fuel_in", PortDirection.IN, PortKind.ITEM, "Fuel"));
+            ports.add(new GraphPortData("item_out", PortDirection.OUT, PortKind.ITEM, "Output"));
+        } else {
+            if (io.itemIn())  ports.add(new GraphPortData("item_in", PortDirection.IN, PortKind.ITEM, machine ? "Input" : "Items"));
+            if (io.itemOut()) ports.add(new GraphPortData("item_out", PortDirection.OUT, PortKind.ITEM, machine ? "Output" : "Items"));
+        }
+        if (io.fluidIn())  ports.add(new GraphPortData("fluid_in", PortDirection.IN, PortKind.FLUID, "Fluid"));
+        if (io.fluidOut()) ports.add(new GraphPortData("fluid_out", PortDirection.OUT, PortKind.FLUID, "Fluid"));
+        if (io.energyIn())  ports.add(new GraphPortData("energy_in", PortDirection.IN, PortKind.ENERGY, "Energy"));
+        if (io.energyOut()) ports.add(new GraphPortData("energy_out", PortDirection.OUT, PortKind.ENERGY, "Energy"));
+        // Additive mod-aware ports for resources that aren't item/fluid/energy capabilities
+        // (Mekanism chemicals, Create kinetics, storage-network access, machine redstone control).
+        addModSpecificPorts(namespace(scanned.registryId()), ports);
+        return ports.isEmpty() ? fallback() : ports;
     }
 
     private static void addFluidEnergyPorts(ScannedBlockData scanned, java.util.List<GraphPortData> ports) {

@@ -53,7 +53,7 @@ public final class NetworkDismantle {
         Block block = state.getBlock();
         return block == ModBlocks.LOGISTICS_COMPUTER.get()
                 || block == ModBlocks.LOGISTICS_MONITOR.get()
-                || block == ModBlocks.LOGIGRAPH_WALL_MONITOR.get()
+                // DISABLED: || block == ModBlocks.LOGIGRAPH_WALL_MONITOR.get()
                 || block == ModBlocks.WIRELESS_ROUTER.get()
                 || block == ModBlocks.WIRELESS_DONGLE.get()
                 || block == ModBlocks.NETWORK_MODEM.get()

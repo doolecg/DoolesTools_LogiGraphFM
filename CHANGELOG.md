@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Weather affects wireless transport** — wireless routes lose throughput while it's raining (−20% by
+  default) or thundering (−40%) in the network's dimension. Wired links are unaffected. Tunable/disablable
+  under the new `wireless` server-config section (`wirelessWeatherEnable`, `wirelessRainPenaltyPercent`,
+  `wirelessThunderPenaltyPercent`).
+- **Wireless signal strength** — each wireless device now has a real 0–100% signal that falls off with
+  distance to its nearest access point (computer / router / relay) down to a configurable floor at the
+  range edge. Low signal throttles that route's throughput, and the strength is shown in the device list
+  and node details. Tunable via `wirelessSignalFalloffEnable` / `wirelessMinSignalPercent`.
+- **New network relay model** — the relay block uses an updated Blockbench model.
+- **Capability-driven port discovery** — scans now probe each block's real per-face item/fluid/energy
+  capabilities (via non-mutating simulate) and record the true input/output directions on the scanned
+  block. The graph editor's machine ports reflect what a block actually accepts and emits — Mekanism
+  side-config, GregTech covers, EnderIO I/O config and vanilla sided containers all surface correctly —
+  instead of being guessed from the mod namespace. Blocks that expose no standard capability (e.g. AE2/RS
+  network devices) keep the previous namespace heuristics as a fallback.
+- **Transport prefers the real IO face** — Easy Factory now probes the face a machine actually outputs/
+  accepts a resource on first (from the scan-derived ports), ahead of its full face sweep. This only
+  reorders probing — every face plus the unsided handler is still tried — so stale scan data can never
+  block a move, only make the common case hit the right face on the first try.
+
 ## [0.8.0] — 2026-06-19
 
 ### Added

@@ -48,4 +48,36 @@ class WirelessNetworkPolicyTest {
         assertEquals(50, WirelessNetworkPolicy.wirelessRouteSurcharge(200, 3));
         assertEquals(0, WirelessNetworkPolicy.wirelessRouteSurcharge(200, 4));
     }
+
+    @Test
+    void weatherMultiplierAppliesRainAndThunderPenalties() {
+        // clear weather → no penalty
+        assertEquals(1f, WirelessNetworkPolicy.weatherMultiplier(false, false, 20, 40), 1e-6);
+        // raining → 20% off
+        assertEquals(0.8f, WirelessNetworkPolicy.weatherMultiplier(true, false, 20, 40), 1e-6);
+        // thundering → 40% off, and thunder takes precedence over rain
+        assertEquals(0.6f, WirelessNetworkPolicy.weatherMultiplier(true, true, 20, 40), 1e-6);
+        assertEquals(0.6f, WirelessNetworkPolicy.weatherMultiplier(false, true, 20, 40), 1e-6);
+        // 0% penalties disable the effect even while raining
+        assertEquals(1f, WirelessNetworkPolicy.weatherMultiplier(true, true, 0, 0), 1e-6);
+    }
+
+    @Test
+    void signalStrengthFallsOffLinearlyToFloor() {
+        // at the access point → full signal
+        assertEquals(1f, WirelessNetworkPolicy.signalStrength(0, 32, 25), 1e-6);
+        // at the range edge → the configured floor (25%)
+        assertEquals(0.25f, WirelessNetworkPolicy.signalStrength(32L * 32L, 32, 25), 1e-6);
+        // halfway → halfway between 1.0 and the floor
+        assertEquals(0.625f, WirelessNetworkPolicy.signalStrength(16L * 16L, 32, 25), 1e-6);
+        // beyond the range edge → clamped to the floor, never below
+        assertEquals(0.25f, WirelessNetworkPolicy.signalStrength(64L * 64L, 32, 25), 1e-6);
+    }
+
+    @Test
+    void wirelessThroughputMultiplierCombinesAndClamps() {
+        assertEquals(0.5f, WirelessNetworkPolicy.wirelessThroughputMultiplier(0.625f, 0.8f), 1e-6);
+        assertEquals(1f, WirelessNetworkPolicy.wirelessThroughputMultiplier(1f, 1f), 1e-6);
+        assertEquals(0f, WirelessNetworkPolicy.wirelessThroughputMultiplier(0f, 0.8f), 1e-6);
+    }
 }

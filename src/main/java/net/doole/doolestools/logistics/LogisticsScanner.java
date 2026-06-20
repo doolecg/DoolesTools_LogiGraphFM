@@ -18,6 +18,7 @@ import net.doole.doolestools.logistics.data.FurnaceSummary;
 import net.doole.doolestools.logistics.data.InventorySummary;
 import net.doole.doolestools.logistics.data.ItemEntry;
 import net.doole.doolestools.logistics.data.MachineProgressData;
+import net.doole.doolestools.logistics.data.PortIoData;
 import net.doole.doolestools.logistics.data.ScannedBlockData;
 import net.doole.doolestools.logistics.data.WarningData;
 import net.doole.doolestools.logistics.tags.ModBlockTags;
@@ -44,6 +45,7 @@ import net.neoforged.neoforge.transfer.ResourceHandler;
 import net.neoforged.neoforge.transfer.energy.EnergyHandler;
 import net.neoforged.neoforge.transfer.fluid.FluidResource;
 import net.neoforged.neoforge.transfer.item.ItemResource;
+import net.neoforged.neoforge.transfer.transaction.Transaction;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -248,7 +250,7 @@ public final class LogisticsScanner {
         List<WarningData> warnings = WarningGenerator.forScannedBlock(type, inventory, furnace);
 
         ScannedBlockData snapshot = new ScannedBlockData(id, pos, dimension, blockName, registryId, type, distance,
-                inventory, fluids, energy, furnace, warnings, gameTime);
+                inventory, fluids, energy, furnace, warnings, gameTime).withPorts(readPorts(level, pos, state, be));
         return liveProgress.present() ? snapshot.withProgress(liveProgress) : snapshot;
     }
 
@@ -277,7 +279,11 @@ public final class LogisticsScanner {
         if (attachedBe == null || attachedBe instanceof NetworkEndpointBlockEntity) return null;
         ScannedBlockData attachedData = readBlock(level, center, attached, gameTime, labels, false);
         if (attachedData == null) return null;
-        return attachedData.withNetworkIdentity("net_" + endpoint.deviceId(), endpoint.deviceName());
+        attachedData = attachedData.withNetworkIdentity("net_" + endpoint.deviceId(), endpoint.deviceName());
+        if (!(endpoint instanceof NetworkModemBlockEntity)) {
+            attachedData = attachedData.withSignal(signalFor(center, endpoint.getBlockPos(), endpoint.upgradeCount("range"), relays));
+        }
+        return attachedData;
     }
 
     private static ScannedBlockData readWireHostedEndpoint(ServerLevel level, BlockPos center, NetworkWireBlockEntity wire,
@@ -301,7 +307,11 @@ public final class LogisticsScanner {
         if (attachedBe == null || attachedBe instanceof NetworkEndpointBlockEntity || attachedBe instanceof NetworkWireBlockEntity) return null;
         ScannedBlockData attachedData = readBlock(level, center, attached, gameTime, labels, false);
         if (attachedData == null) return null;
-        return attachedData.withNetworkIdentity("net_" + wire.endpointId(face), wire.endpointName(face));
+        attachedData = attachedData.withNetworkIdentity("net_" + wire.endpointId(face), wire.endpointName(face));
+        if (wire.hasRouter()) {
+            attachedData = attachedData.withSignal(signalFor(center, wire.getBlockPos(), wire.upgradeCount(face, "range"), relays));
+        }
+        return attachedData;
     }
 
     private static boolean isWiredModemOnline(ServerLevel level, NetworkModemBlockEntity start) {
@@ -315,6 +325,23 @@ public final class LogisticsScanner {
                 rangeUpgrades,
                 ModServerConfig.WIRELESS_MAX_RANGE.get(),
                 distanceSqr(computerPos, endpointPos));
+    }
+
+    /**
+     * Wireless signal strength in [0,1] for an endpoint, based on its distance to the nearest access
+     * point (the computer or any discovered relay) relative to its effective range. Read-only; 1.0
+     * when distance-falloff is disabled in config.
+     */
+    private static double signalFor(BlockPos center, BlockPos endpointPos, int rangeUpgrades, List<RelayNode> relays) {
+        if (!ModServerConfig.WIRELESS_SIGNAL_FALLOFF_ENABLE.get()) return 1.0;
+        long nearestSqr = distanceSqr(center, endpointPos);
+        for (RelayNode relay : relays) nearestSqr = Math.min(nearestSqr, distanceSqr(relay.pos(), endpointPos));
+        int range = WirelessNetworkPolicy.effectiveRange(
+                ModServerConfig.WIRELESS_BASE_RANGE.get(),
+                ModServerConfig.WIRELESS_RANGE_UPGRADE_BLOCKS.get(),
+                rangeUpgrades,
+                ModServerConfig.WIRELESS_MAX_RANGE.get());
+        return WirelessNetworkPolicy.signalStrength(nearestSqr, range, ModServerConfig.WIRELESS_MIN_SIGNAL_PERCENT.get());
     }
 
     private static boolean wirelessReachable(BlockPos computerPos, BlockPos endpointPos, int endpointRangeUpgrades, List<RelayNode> relays) {
@@ -599,6 +626,55 @@ public final class LogisticsScanner {
         } catch (RuntimeException e) {
             return EnergySummary.EMPTY;
         }
+    }
+
+    /**
+     * Probe the block's real per-face IO ports without mutating anything. Every probe runs inside a
+     * {@link Transaction} that is never committed (try-with-resources rolls it back), so this stays inside
+     * the scanner's read-only contract while still asking the handler — not a namespace guess — whether it
+     * accepts insertion and/or permits extraction. A direction a handler is present for but can neither be
+     * proven to take nor give (e.g. an empty machine) is exposed as both, so the block stays wireable.
+     */
+    private static PortIoData readPorts(ServerLevel level, BlockPos pos, BlockState state, BlockEntity be) {
+        PortIoData.Builder ports = PortIoData.builder();
+        for (Direction dir : PROBE_DIRECTIONS) {
+            try {
+                ResourceHandler<ItemResource> h = Capabilities.Item.BLOCK.getCapability(level, pos, state, be, dir);
+                if (h != null && h.size() > 0) {
+                    boolean in = false, out = false;
+                    for (int s = 0; s < h.size() && !(in && out); s++) {
+                        ItemResource r = h.getResource(s);
+                        if (r == null || r.isEmpty() || h.getAmountAsLong(s) <= 0) continue;
+                        if (!out) { try (Transaction tx = Transaction.openRoot()) { if (h.extract(s, r, Integer.MAX_VALUE, tx) > 0) out = true; } }
+                        if (!in)  { try (Transaction tx = Transaction.openRoot()) { if (h.insert(s, r, Integer.MAX_VALUE, tx) > 0) in = true; } }
+                    }
+                    ports.face(PortIoData.ITEM_IN, PortIoData.ITEM_OUT, dir, in, out);
+                }
+            } catch (RuntimeException ignored) { /* side-sensitive or mid-update providers: keep probing */ }
+            try {
+                ResourceHandler<FluidResource> h = Capabilities.Fluid.BLOCK.getCapability(level, pos, state, be, dir);
+                if (h != null && h.size() > 0) {
+                    boolean in = false, out = false;
+                    for (int t = 0; t < h.size() && !(in && out); t++) {
+                        FluidResource r = h.getResource(t);
+                        if (r == null || r.isEmpty() || h.getAmountAsLong(t) <= 0) continue;
+                        if (!out) { try (Transaction tx = Transaction.openRoot()) { if (h.extract(t, r, Integer.MAX_VALUE, tx) > 0) out = true; } }
+                        if (!in)  { try (Transaction tx = Transaction.openRoot()) { if (h.insert(t, r, Integer.MAX_VALUE, tx) > 0) in = true; } }
+                    }
+                    ports.face(PortIoData.FLUID_IN, PortIoData.FLUID_OUT, dir, in, out);
+                }
+            } catch (RuntimeException ignored) { /* keep probing */ }
+            try {
+                EnergyHandler h = Capabilities.Energy.BLOCK.getCapability(level, pos, state, be, dir);
+                if (h != null && h.getCapacityAsLong() > 0) {
+                    boolean out = false, in = false;
+                    try (Transaction tx = Transaction.openRoot()) { if (h.extract(Integer.MAX_VALUE, tx) > 0) out = true; }
+                    try (Transaction tx = Transaction.openRoot()) { if (h.insert(Integer.MAX_VALUE, tx) > 0) in = true; }
+                    ports.face(PortIoData.ENERGY_IN, PortIoData.ENERGY_OUT, dir, in, out);
+                }
+            } catch (RuntimeException ignored) { /* keep probing */ }
+        }
+        return ports.build();
     }
 
     private static ResourceHandler<ItemResource> firstItemHandler(ServerLevel level, BlockPos pos, BlockState state, BlockEntity be) {

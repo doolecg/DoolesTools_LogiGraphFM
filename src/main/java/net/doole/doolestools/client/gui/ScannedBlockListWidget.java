@@ -117,7 +117,9 @@ public class ScannedBlockListWidget {
             ItemIcons.render(g, s.registryId(), listX + 3, ry + 3, ItemIcons.SIZE, iconColor(s));
 
             g.text(font, trim(font, s.blockName(), listW - 56), listX + 23, ry + 4, DUTheme.TEXT, false);
-            g.text(font, Math.round(s.distance()) + "m", listX + 23, ry + 13, DUTheme.TEXT_DIM, false);
+            String meta = Math.round(s.distance()) + "m";
+            if (s.signalStrength() < 0.999) meta += " · " + Math.round(s.signalStrength() * 100) + "% signal";
+            g.text(font, meta, listX + 23, ry + 13, DUTheme.TEXT_DIM, false);
 
             DUTheme.dot(g, x + w - 12, ry + 8, ctx.statusColorFor(s));
         }

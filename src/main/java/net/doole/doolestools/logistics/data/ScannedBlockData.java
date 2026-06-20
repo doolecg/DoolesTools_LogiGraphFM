@@ -1,11 +1,13 @@
 package net.doole.doolestools.logistics.data;
 
 import com.mojang.serialization.Codec;
+import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.doole.doolestools.logistics.ScannedType;
 import net.minecraft.core.BlockPos;
 
 import java.util.List;
+import java.util.function.Function;
 
 /**
  * An immutable, read-only snapshot of a single block discovered during a scan.
@@ -26,9 +28,14 @@ public record ScannedBlockData(String id,
                                 List<WarningData> warnings,
                                 long lastScannedGameTime,
                                 String networkId,
-                                String networkName) {
+                                String networkName,
+                                PortIoData ports,
+                                double signalStrength) {
 
-    public static final Codec<ScannedBlockData> CODEC = RecordCodecBuilder.create(inst -> inst.group(
+    // DFU's RecordCodecBuilder.group tops out at 16 fields, so the original 16 columns live in CORE and
+    // the outer codec appends the optional "ports" column. All existing keys are unchanged → old saves and
+    // exports keep loading; missing "ports" defaults to EMPTY (the scanner re-derives it on the next scan).
+    private static final MapCodec<ScannedBlockData> CORE = RecordCodecBuilder.mapCodec(inst -> inst.group(
             Codec.STRING.fieldOf("id").forGetter(ScannedBlockData::id),
             BlockPos.CODEC.fieldOf("pos").forGetter(ScannedBlockData::pos),
             Codec.STRING.fieldOf("dimension").forGetter(ScannedBlockData::dimension),
@@ -45,31 +52,54 @@ public record ScannedBlockData(String id,
             Codec.LONG.fieldOf("lastScannedGameTime").forGetter(ScannedBlockData::lastScannedGameTime),
             Codec.STRING.optionalFieldOf("networkId", "").forGetter(ScannedBlockData::networkId),
             Codec.STRING.optionalFieldOf("networkName", "").forGetter(ScannedBlockData::networkName)
-    ).apply(inst, ScannedBlockData::new));
+    ).apply(inst, (id, pos, dimension, blockName, registryId, type, distance, inventory, fluids, energy,
+                   furnace, progress, warnings, lastScannedGameTime, networkId, networkName) ->
+            new ScannedBlockData(id, pos, dimension, blockName, registryId, type, distance, inventory, fluids,
+                    energy, furnace, progress, warnings, lastScannedGameTime, networkId, networkName, PortIoData.EMPTY, 1.0)));
+
+    public static final Codec<ScannedBlockData> CODEC = RecordCodecBuilder.create(inst -> inst.group(
+            CORE.forGetter(Function.identity()),
+            PortIoData.CODEC.optionalFieldOf("ports", PortIoData.EMPTY).forGetter(ScannedBlockData::ports),
+            Codec.DOUBLE.optionalFieldOf("signal", 1.0).forGetter(ScannedBlockData::signalStrength)
+    ).apply(inst, (core, ports, signal) -> core.withPorts(ports).withSignal(signal)));
 
     public ScannedBlockData(String id, BlockPos pos, String dimension, String blockName, String registryId,
                             ScannedType type, double distance, InventorySummary inventory, FluidSummary fluids,
                             EnergySummary energy, FurnaceSummary furnace, List<WarningData> warnings,
                             long lastScannedGameTime) {
         this(id, pos, dimension, blockName, registryId, type, distance, inventory, fluids, energy, furnace,
-                MachineProgressData.EMPTY, warnings, lastScannedGameTime, "", "");
+                MachineProgressData.EMPTY, warnings, lastScannedGameTime, "", "", PortIoData.EMPTY, 1.0);
     }
 
     public ScannedBlockData withProgress(MachineProgressData progress) {
         return new ScannedBlockData(id, pos, dimension, blockName, registryId, type, distance, inventory,
-                fluids, energy, furnace, progress, warnings, lastScannedGameTime, networkId, networkName);
+                fluids, energy, furnace, progress, warnings, lastScannedGameTime, networkId, networkName, ports, signalStrength);
+    }
+
+    public ScannedBlockData withPorts(PortIoData newPorts) {
+        return new ScannedBlockData(id, pos, dimension, blockName, registryId, type, distance, inventory,
+                fluids, energy, furnace, progress, warnings, lastScannedGameTime, networkId, networkName,
+                newPorts == null ? PortIoData.EMPTY : newPorts, signalStrength);
+    }
+
+    /** Wireless signal strength in [0,1]; 1.0 means wired or full signal. */
+    public ScannedBlockData withSignal(double newSignal) {
+        return new ScannedBlockData(id, pos, dimension, blockName, registryId, type, distance, inventory,
+                fluids, energy, furnace, progress, warnings, lastScannedGameTime, networkId, networkName,
+                ports, Math.max(0.0, Math.min(1.0, newSignal)));
     }
 
     public ScannedBlockData withNetworkIdentity(String newId, String newName) {
         return new ScannedBlockData(newId, pos, dimension, newName, registryId, type, distance, inventory,
-                fluids, energy, furnace, progress, warnings, lastScannedGameTime, networkId, networkName);
+                fluids, energy, furnace, progress, warnings, lastScannedGameTime, networkId, networkName, ports, signalStrength);
     }
 
     public ScannedBlockData withNetworkSource(String sourceNetworkId, String sourceNetworkName) {
         return new ScannedBlockData(id, pos, dimension, blockName, registryId, type, distance, inventory,
                 fluids, energy, furnace, progress, warnings, lastScannedGameTime,
                 sourceNetworkId == null ? "" : sourceNetworkId,
-                sourceNetworkName == null || sourceNetworkName.isBlank() ? sourceNetworkId == null ? "" : sourceNetworkId : sourceNetworkName);
+                sourceNetworkName == null || sourceNetworkName.isBlank() ? sourceNetworkId == null ? "" : sourceNetworkId : sourceNetworkName,
+                ports, signalStrength);
     }
 
     public boolean isStorageLike() {

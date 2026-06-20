@@ -2,7 +2,7 @@ package net.doole.doolestools.registry;
 
 import net.doole.doolestools.DoolesTools;
 import net.doole.doolestools.block.LogisticsComputerBlock;
-import net.doole.doolestools.block.LogiGraphWallMonitorBlock;
+// DISABLED: import net.doole.doolestools.block.LogiGraphWallMonitorBlock;
 import net.doole.doolestools.block.LogisticsMonitorBlock;
 import net.doole.doolestools.block.NetworkBatteryBlock;
 import net.doole.doolestools.block.NetworkModemBlock;
@@ -46,9 +46,9 @@ public final class ModBlocks {
         return () -> BlockBehaviour.Properties.of().strength(0.4F, 1.0F).sound(SoundType.METAL);
     }
 
-    /** Network relay: mid-weight infrastructure block. */
+    /** Network relay: mid-weight infrastructure block. Non-occluding — its model is smaller than a full cube. */
     private static Supplier<BlockBehaviour.Properties> relay() {
-        return () -> BlockBehaviour.Properties.of().strength(1.5F, 4.0F).sound(SoundType.METAL);
+        return () -> BlockBehaviour.Properties.of().strength(1.5F, 4.0F).sound(SoundType.METAL).noOcclusion();
     }
 
     // --- Block registrations ---
@@ -59,8 +59,9 @@ public final class ModBlocks {
     public static final DeferredBlock<LogisticsMonitorBlock> LOGISTICS_MONITOR =
             BLOCKS.registerBlock("logistics_monitor", LogisticsMonitorBlock::new, monitorPanel());
 
-    public static final DeferredBlock<LogiGraphWallMonitorBlock> LOGIGRAPH_WALL_MONITOR =
-            BLOCKS.registerBlock("logigraph_wall_monitor", LogiGraphWallMonitorBlock::new, monitorPanel());
+    // DISABLED: LogiGraph Wall Monitor (multiblock display) commented out per request.
+    // public static final DeferredBlock<LogiGraphWallMonitorBlock> LOGIGRAPH_WALL_MONITOR =
+    //         BLOCKS.registerBlock("logigraph_wall_monitor", LogiGraphWallMonitorBlock::new, monitorPanel());
 
     public static final DeferredBlock<WirelessRouterBlock> WIRELESS_ROUTER =
             BLOCKS.registerBlock("wireless_router", WirelessRouterBlock::new, lightDevice());
