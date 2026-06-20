@@ -340,25 +340,37 @@ public final class EasyFactoryManager {
         Direction overrideSide = sideOverride(link.sideOverride());
         boolean sourceMachine = sourceNode != null && sourceNode.type() == NodeType.MACHINE;
         boolean targetMachine = targetNode != null && targetNode.type() == NodeType.MACHINE;
-        Direction sourceSide = overrideSide != null && sourceMachine ? overrideSide : null;
-        Direction targetSide = overrideSide != null && targetMachine ? overrideSide : null;
-        ResourceHandler<ItemResource> source = itemHandler(level, sourcePos, null);
-        ResourceHandler<ItemResource> target = itemHandler(level, targetPos, null);
-        if (sourceSide != null) source = itemHandler(level, sourcePos, sourceSide);
-        if (targetSide != null) target = itemHandler(level, targetPos, targetSide);
-        if (source == null && physicalSourceSide != null) {
-            sourceSide = physicalSourceSide;
-            source = itemHandler(level, sourcePos, sourceSide);
-        }
-        if (target == null && physicalTargetSide != null) {
-            targetSide = physicalTargetSide;
-            target = itemHandler(level, targetPos, targetSide);
-        }
-        if (source == null || target == null) return 0;
+        boolean manualTargetSide = overrideSide != null && targetMachine;
 
         int rawLimit = itemLimit(level, sourcePos, targetPos);
         int rampedLimit = rampFraction >= 1f ? rawLimit : Math.max(1, (int)(rawLimit * rampFraction));
         int max = Math.min(rampedLimit, filterLimit);
+
+        // Modded machines (Mekanism, GregTech, EnderIO, Thermal…) only expose item capabilities on their
+        // configured IO faces; the wireless/wired source and target are rarely physically adjacent so the
+        // single-side probe used to come back null. Walk the candidate faces and commit the first that
+        // yields a move — exactly how an item conduit on any connected face would behave.
+        java.util.List<Direction> sourceSides = orderedSides(sourceMachine, overrideSide, physicalSourceSide);
+        java.util.List<Direction> targetSides = orderedSides(targetMachine, overrideSide, physicalTargetSide);
+        for (Direction sourceSide : sourceSides) {
+            ResourceHandler<ItemResource> source = itemHandler(level, sourcePos, sourceSide);
+            if (source == null) continue;
+            for (Direction targetSide : targetSides) {
+                ResourceHandler<ItemResource> target = itemHandler(level, targetPos, targetSide);
+                if (target == null) continue;
+                int moved = moveItemsBetween(level, link, sourceNode, sourcePos, sourceSide, source,
+                        target, targetPos, targetSide, allow, max, manualTargetSide);
+                if (moved > 0) return moved;
+            }
+        }
+        return 0;
+    }
+
+    /** Move at most one slot's worth of items from a resolved source handler/side to a target. */
+    private static int moveItemsBetween(ServerLevel level, GraphLinkData link, GraphNodeData sourceNode,
+            BlockPos sourcePos, Direction sourceSide, ResourceHandler<ItemResource> source,
+            ResourceHandler<ItemResource> target, BlockPos targetPos, Direction targetSide,
+            java.util.function.Predicate<ItemResource> allow, int max, boolean manualTargetSide) {
         for (int slot = 0; slot < source.size(); slot++) {
             ItemResource resource = source.getResource(slot);
             long available = source.getAmountAsLong(slot);
@@ -366,7 +378,7 @@ public final class EasyFactoryManager {
             if (!allow.test(resource)) continue;
             if (!canExtractItemFromSlot(level, link, sourceNode, sourcePos, sourceSide, source, slot, resource)) continue;
             int amount = (int) Math.min(max, available);
-            for (ItemTargetSlot targetSlot : targetSlots(level, link, targetPos, targetSide, target, resource, overrideSide != null && targetMachine)) {
+            for (ItemTargetSlot targetSlot : targetSlots(level, link, targetPos, targetSide, target, resource, manualTargetSide)) {
                 // Probe how much the target slot can accept, then do a single atomic move.
                 // This replaces the old O(amount) retry loop (which opened up to 64 transactions
                 // per slot pair on a full stack) with at most 2 transactions total.
@@ -388,12 +400,41 @@ public final class EasyFactoryManager {
         return 0;
     }
 
+    /**
+     * Candidate access faces to probe, in priority order, de-duplicated (may include {@code null} =
+     * unsided). For machines we try the explicit side override, the physically-adjacent face, then every
+     * face, and only fall back to the unsided handler last — so a furnace's input slots (exposed only via
+     * the unsided {@code VanillaContainerWrapper}) aren't preferred over its real sided output face.
+     * Storage tries the unsided handler first since a chest exposes the same slots from any side.
+     */
+    private static java.util.List<Direction> orderedSides(boolean machine, Direction override, Direction physical) {
+        java.util.List<Direction> order = new java.util.ArrayList<>();
+        java.util.Set<Direction> seen = new java.util.HashSet<>();
+        if (machine && override != null) addSide(order, seen, override);
+        addSide(order, seen, physical);
+        if (!machine) addSide(order, seen, null);
+        for (Direction d : Direction.values()) addSide(order, seen, d);
+        if (machine) addSide(order, seen, null);
+        return order;
+    }
+
+    private static void addSide(java.util.List<Direction> order, java.util.Set<Direction> seen, Direction side) {
+        if (seen.add(side)) order.add(side);
+    }
+
     private static boolean canExtractItemFromSlot(ServerLevel level, GraphLinkData link, GraphNodeData sourceNode, BlockPos pos, Direction side, ResourceHandler<ItemResource> source, int handlerSlot, ItemResource resource) {
         BlockEntity be = level.getBlockEntity(pos);
         boolean machineSource = sourceNode != null && sourceNode.type() == NodeType.MACHINE;
-        if (machineSource && !isOutputPort(link.sourcePortId())) return false;
+        // Only refuse to pull from a port the user explicitly declared an INPUT. Auto-discovered and
+        // generic links still extract — the handler decides what's actually extractable below.
+        if (machineSource && isInputPort(link.sourcePortId())) return false;
         if (!(be instanceof WorldlyContainer container)) {
-            return !machineSource || !source.isValid(handlerSlot, resource);
+            // Modded machine exposed through a NeoForge capability handler. Trust it: its extract()
+            // (simulated atomically by the caller) already enforces which slots/faces are output-only,
+            // and well-behaved mods (EnderIO, Mekanism, Thermal, GregTech) expose only extractable
+            // contents on their configured output face. The old isValid() inversion wrongly blocked
+            // any handler whose output slots also report insert-valid (EnderIO "pulls in, won't push out").
+            return true;
         }
         if (!machineSource) return true;
         int containerSlot = containerSlotForHandlerSlot(container, side, handlerSlot);
@@ -487,9 +528,12 @@ public final class EasyFactoryManager {
         return out;
     }
 
-    private static boolean isOutputPort(String sourcePortId) {
-        String port = sourcePortId == null ? "" : sourcePortId.toLowerCase(java.util.Locale.ROOT);
-        return port.contains("out") || port.equals("output");
+    /** True only when the port id clearly names a dedicated input (material_in, fuel_in, power_in, …). */
+    private static boolean isInputPort(String sourcePortId) {
+        if (sourcePortId == null) return false;
+        String port = sourcePortId.toLowerCase(java.util.Locale.ROOT);
+        if (port.contains("out")) return false; // e.g. "item_out" must never read as input
+        return port.contains("_in") || port.equals("in") || port.equals("input");
     }
 
     private static Direction sideOverride(String sideOverride) {
@@ -595,14 +639,30 @@ public final class EasyFactoryManager {
     }
 
     private static int transferFluidsCount(ServerLevel level, BlockPos sourcePos, BlockPos targetPos) {
-        Direction sourceSide = sideFrom(sourcePos, targetPos);
-        Direction targetSide = sourceSide == null ? null : sourceSide.getOpposite();
-        ResourceHandler<FluidResource> source = fluidHandler(level, sourcePos, sourceSide);
-        ResourceHandler<FluidResource> target = fluidHandler(level, targetPos, targetSide);
-        if (source == null) source = fluidHandler(level, sourcePos, null);
-        if (target == null) target = fluidHandler(level, targetPos, null);
-        if (source == null || target == null) return 0;
+        Direction physical = sideFrom(sourcePos, targetPos);
+        java.util.List<Direction> sourceSides = orderedSides(true, null, physical);
+        java.util.List<Direction> targetSides = orderedSides(true, null, physical == null ? null : physical.getOpposite());
+        for (Direction sourceSide : sourceSides) {
+            ResourceHandler<FluidResource> source = fluidHandler(level, sourcePos, sourceSide);
+            if (source == null || !hasFluidContent(source)) continue;
+            for (Direction targetSide : targetSides) {
+                ResourceHandler<FluidResource> target = fluidHandler(level, targetPos, targetSide);
+                if (target == null) continue;
+                int moved = moveFluidBetween(source, target);
+                if (moved > 0) return moved;
+            }
+        }
+        return 0;
+    }
 
+    private static boolean hasFluidContent(ResourceHandler<FluidResource> source) {
+        for (int tank = 0; tank < source.size(); tank++) {
+            if (!source.getResource(tank).isEmpty() && source.getAmountAsLong(tank) > 0) return true;
+        }
+        return false;
+    }
+
+    private static int moveFluidBetween(ResourceHandler<FluidResource> source, ResourceHandler<FluidResource> target) {
         long max = ModServerConfig.MAX_FLUID_MOVED_PER_ROUTE.get();
         for (int tank = 0; tank < source.size(); tank++) {
             FluidResource resource = source.getResource(tank);
@@ -623,14 +683,23 @@ public final class EasyFactoryManager {
     }
 
     private static int transferEnergyCount(ServerLevel level, BlockPos sourcePos, BlockPos targetPos) {
-        Direction sourceSide = sideFrom(sourcePos, targetPos);
-        Direction targetSide = sourceSide == null ? null : sourceSide.getOpposite();
-        EnergyHandler source = energyHandler(level, sourcePos, sourceSide);
-        EnergyHandler target = energyHandler(level, targetPos, targetSide);
-        if (source == null) source = energyHandler(level, sourcePos, null);
-        if (target == null) target = energyHandler(level, targetPos, null);
-        if (source == null || target == null) return 0;
+        Direction physical = sideFrom(sourcePos, targetPos);
+        java.util.List<Direction> sourceSides = orderedSides(true, null, physical);
+        java.util.List<Direction> targetSides = orderedSides(true, null, physical == null ? null : physical.getOpposite());
+        for (Direction sourceSide : sourceSides) {
+            EnergyHandler source = energyHandler(level, sourcePos, sourceSide);
+            if (source == null || source.getAmountAsLong() <= 0) continue;
+            for (Direction targetSide : targetSides) {
+                EnergyHandler target = energyHandler(level, targetPos, targetSide);
+                if (target == null) continue;
+                int moved = moveEnergyBetween(source, target);
+                if (moved > 0) return moved;
+            }
+        }
+        return 0;
+    }
 
+    private static int moveEnergyBetween(EnergyHandler source, EnergyHandler target) {
         int amount = (int) Math.min(Integer.MAX_VALUE, Math.min(ModServerConfig.MAX_ENERGY_MOVED_PER_ROUTE.get(), source.getAmountAsLong()));
         if (amount <= 0) return 0;
         try (Transaction tx = Transaction.openRoot()) {

@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-06-19
+
+### Added
+
+- **Minecraft 26.1.2 release jar** — built as `doolestools-0.8.0.jar` for Minecraft 26.1.2 / NeoForge 26.1.2.76.
+- **Power history time slider** — replaces the old time-range buttons with a draggable slider for `NOW`, `30M`, `1H`, `12H`, `1D`, and `ALL`.
+- **Visible four-digit network IDs** — computer UI now shows the compact four-digit network number instead of the long internal network id.
+
+### Changed
+
+- **Graph canvas footer** — restored warning colour keys and left-aligned canvas instructions in the factory graph footer.
+- **Switchboard layout** — moved controls into reserved strips, fixed overlap with cache/scan controls, and preserved unsaved node/link edits during refresh.
+- **Graph node placement** — new, dragged, snapped, and multi-selected nodes are clamped to the visible canvas bounds instead of drifting under side panels.
+- **Endpoint and naming screens** — replaced blurred vanilla backgrounds with the LogiGraph dark terminal background.
+
+### Fixed
+
+- **Node details panel clipping** — scale-aware scissor bounds now keep graph nodes out of the details panel and allow details text to render again.
+- **Wire-hosted socket upgrades** — upgrade cards and screwdriver removal now target the clicked socket face, including multi-socket wires.
+- **Upgrade card feedback/effects** — successful and failed upgrade installs now report to the player; wire-hosted upgrades are read per attached machine for power/routing calculations.
+- **Socket placement semantics** — socket placement is strict to the clicked face and direct target block, avoiding accidental opposite/neighbor fallback placement.
+- **Multi-socket scan identity** — wire-hosted endpoints expose separate network identity/name data so each socket can appear as its own reachable network entry.
+- **Packet/link animation** — graph links animate when their route is active or their latest throughput sample is positive.
+- **Model/resource issues** — fixed modem/dongle invalid model rotations, relay texture references, wall monitor item model, and east/west wire endpoint face rotations.
+- **UI scaling and text overflow** — improved terminal button labels, item icon sizing, monitor footer trimming, and graph/switchboard hit testing under UI scale.
+- **Modded machine transport** — Easy Factory now probes every IO face and trusts each machine's own capability handler, so machines that expose item/fluid/energy only on their configured sides (Mekanism, GregTech, EnderIO, Thermal, …) transport correctly instead of silently moving nothing. Extraction from machine outputs no longer requires the old input/output slot heuristic that blocked combined handlers (EnderIO "pulls in, won't push out").
+
 ## [0.6.0] — 2026-06-17
 
 ### Added
