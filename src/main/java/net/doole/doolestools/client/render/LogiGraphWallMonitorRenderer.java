@@ -1,3 +1,5 @@
+// DISABLED: LogiGraph Wall Monitor renderer commented out per request. Restore by removing this wrapper.
+/*
 package net.doole.doolestools.client.render;
 
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -16,3 +18,4 @@ public class LogiGraphWallMonitorRenderer implements BlockEntityRenderer<LogiGra
         // Chunk-safe placeholder renderer for 1.21.1; monitor state is still synced for client screens.
     }
 }
+*/

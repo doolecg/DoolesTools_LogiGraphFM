@@ -277,7 +277,11 @@ public final class LogisticsScanner {
         if (attachedBe == null || attachedBe instanceof NetworkEndpointBlockEntity) return null;
         ScannedBlockData attachedData = readBlock(level, center, attached, gameTime, labels, false);
         if (attachedData == null) return null;
-        return attachedData.withNetworkIdentity("net_" + endpoint.deviceId(), endpoint.deviceName());
+        attachedData = attachedData.withNetworkIdentity("net_" + endpoint.deviceId(), endpoint.deviceName());
+        if (!(endpoint instanceof NetworkModemBlockEntity)) {
+            attachedData = attachedData.withSignal(signalFor(center, endpoint.getBlockPos(), endpoint.upgradeCount("range"), relays));
+        }
+        return attachedData;
     }
 
     private static ScannedBlockData readWireHostedEndpoint(ServerLevel level, BlockPos center, NetworkWireBlockEntity wire,
@@ -302,7 +306,11 @@ public final class LogisticsScanner {
         if (attachedBe == null || attachedBe instanceof NetworkEndpointBlockEntity || attachedBe instanceof NetworkWireBlockEntity) return null;
         ScannedBlockData attachedData = readBlock(level, center, attached, gameTime, labels, false);
         if (attachedData == null) return null;
-        return attachedData.withNetworkIdentity("net_" + wire.endpointId(face), wire.endpointName(face));
+        attachedData = attachedData.withNetworkIdentity("net_" + wire.endpointId(face), wire.endpointName(face));
+        if (wire.hasRouter()) {
+            attachedData = attachedData.withSignal(signalFor(center, wire.getBlockPos(), wire.upgradeCount(face, "range"), relays));
+        }
+        return attachedData;
     }
 
     private static boolean isWiredModemOnline(ServerLevel level, NetworkModemBlockEntity start) {
@@ -316,6 +324,23 @@ public final class LogisticsScanner {
                 rangeUpgrades,
                 ModServerConfig.WIRELESS_MAX_RANGE.get(),
                 distanceSqr(computerPos, endpointPos));
+    }
+
+    /**
+     * Wireless signal strength in [0,1] for an endpoint, based on its distance to the nearest access
+     * point (the computer or any discovered relay) relative to its effective range. Read-only; 1.0
+     * when distance-falloff is disabled in config.
+     */
+    private static double signalFor(BlockPos center, BlockPos endpointPos, int rangeUpgrades, List<RelayNode> relays) {
+        if (!ModServerConfig.WIRELESS_SIGNAL_FALLOFF_ENABLE.get()) return 1.0;
+        long nearestSqr = distanceSqr(center, endpointPos);
+        for (RelayNode relay : relays) nearestSqr = Math.min(nearestSqr, distanceSqr(relay.pos(), endpointPos));
+        int range = WirelessNetworkPolicy.effectiveRange(
+                ModServerConfig.WIRELESS_BASE_RANGE.get(),
+                ModServerConfig.WIRELESS_RANGE_UPGRADE_BLOCKS.get(),
+                rangeUpgrades,
+                ModServerConfig.WIRELESS_MAX_RANGE.get());
+        return WirelessNetworkPolicy.signalStrength(nearestSqr, range, ModServerConfig.WIRELESS_MIN_SIGNAL_PERCENT.get());
     }
 
     private static boolean wirelessReachable(BlockPos computerPos, BlockPos endpointPos, int endpointRangeUpgrades, List<RelayNode> relays) {

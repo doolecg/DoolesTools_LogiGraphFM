@@ -14,16 +14,23 @@ import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.EntityBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.shapes.CollisionContext;
+import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jetbrains.annotations.Nullable;
 
 public class NetworkRelayBlock extends Block implements EntityBlock {
     public static final MapCodec<NetworkRelayBlock> CODEC = simpleCodec(NetworkRelayBlock::new);
+
+    // Matches the Blockbench model footprint (8×10×8 centred) so selection/collision and lighting
+    // line up with the visible model — the block is non-occluding (see ModBlocks.relay()).
+    private static final VoxelShape SHAPE = Block.box(4, 0, 4, 12, 10, 12);
 
     public NetworkRelayBlock(Properties properties) {
         super(properties);
@@ -32,6 +39,11 @@ public class NetworkRelayBlock extends Block implements EntityBlock {
     @Override
     protected MapCodec<? extends Block> codec() {
         return CODEC;
+    }
+
+    @Override
+    protected VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
+        return SHAPE;
     }
 
     @Nullable

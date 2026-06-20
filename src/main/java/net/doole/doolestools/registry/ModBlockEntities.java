@@ -2,7 +2,7 @@ package net.doole.doolestools.registry;
 
 import net.doole.doolestools.DoolesTools;
 import net.doole.doolestools.blockentity.LogisticsComputerBlockEntity;
-import net.doole.doolestools.blockentity.LogiGraphWallMonitorBlockEntity;
+// DISABLED: import net.doole.doolestools.blockentity.LogiGraphWallMonitorBlockEntity;
 import net.doole.doolestools.blockentity.LogisticsMonitorBlockEntity;
 import net.doole.doolestools.blockentity.NetworkBatteryBlockEntity;
 import net.doole.doolestools.blockentity.NetworkModemBlockEntity;
@@ -44,8 +44,9 @@ public final class ModBlockEntities {
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<LogisticsMonitorBlockEntity>> LOGISTICS_MONITOR =
             register("logistics_monitor", ModBlocks.LOGISTICS_MONITOR, LogisticsMonitorBlockEntity::new);
 
-    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<LogiGraphWallMonitorBlockEntity>> LOGIGRAPH_WALL_MONITOR =
-            register("logigraph_wall_monitor", ModBlocks.LOGIGRAPH_WALL_MONITOR, LogiGraphWallMonitorBlockEntity::new);
+    // DISABLED: LogiGraph Wall Monitor block entity commented out per request.
+    // public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<LogiGraphWallMonitorBlockEntity>> LOGIGRAPH_WALL_MONITOR =
+    //         register("logigraph_wall_monitor", ModBlocks.LOGIGRAPH_WALL_MONITOR, LogiGraphWallMonitorBlockEntity::new);
 
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<WirelessRouterBlockEntity>> WIRELESS_ROUTER =
             register("wireless_router", ModBlocks.WIRELESS_ROUTER, WirelessRouterBlockEntity::new);

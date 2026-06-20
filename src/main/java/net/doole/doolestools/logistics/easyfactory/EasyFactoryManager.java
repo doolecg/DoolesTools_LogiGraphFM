@@ -73,6 +73,11 @@ public final class EasyFactoryManager {
         java.util.List<GraphLinkData> orderedLinks = new java.util.ArrayList<>(graph.activeCanvas().links());
         orderedLinks.sort((a, b) -> Integer.compare(routePriority(level, graph, b, scannedById), routePriority(level, graph, a, scannedById)));
         long gameTime = level.getGameTime();
+        // Wireless routes lose throughput in rain/thunder; computed once per tick for the whole network.
+        float weather = ModServerConfig.WIRELESS_WEATHER_ENABLE.get()
+                ? WirelessNetworkPolicy.weatherMultiplier(level.isRaining(), level.isThundering(),
+                        ModServerConfig.WIRELESS_RAIN_PENALTY_PERCENT.get(), ModServerConfig.WIRELESS_THUNDER_PENALTY_PERCENT.get())
+                : 1f;
         for (GraphLinkData link : orderedLinks) {
             if (processed >= routeBudget) break;
             if (linkBirthTimes != null) linkBirthTimes.putIfAbsent(link.linkId(), gameTime);
@@ -84,13 +89,13 @@ public final class EasyFactoryManager {
             if (sourcePos != null && targetNode != null && isRoutingNode(targetNode.type())) {
                 if (!level.hasChunkAt(sourcePos)) continue;
                 if (!switchboardAllows(level, link, sourceNode, targetNode, scannedById)) continue;
-                if (routeThroughNodesCount(graph, level, link, sourceNode, sourcePos, positions, movedByLink, outboundIndex, rampFraction) > 0) processed++;
+                if (routeThroughNodesCount(graph, level, link, sourceNode, sourcePos, positions, movedByLink, outboundIndex, rampFraction, scannedById, weather) > 0) processed++;
                 continue;
             }
             if (sourcePos == null || targetPos == null) continue;
             if (!level.hasChunkAt(sourcePos) || !level.hasChunkAt(targetPos)) continue;
             if (!switchboardAllows(level, link, sourceNode, targetNode, scannedById)) continue;
-            int moved = transferCount(link, level, sourceNode, targetNode, sourcePos, targetPos, rampFraction);
+            int moved = transferCount(link, level, sourceNode, targetNode, sourcePos, targetPos, rampFraction, scannedById, weather);
             if (moved > 0) {
                 movedByLink.merge(link.linkId(), moved, Integer::sum);
                 processed++;
@@ -168,13 +173,43 @@ public final class EasyFactoryManager {
         }
     }
 
-    private static int transferCount(GraphLinkData link, ServerLevel level, GraphNodeData sourceNode, GraphNodeData targetNode, BlockPos sourcePos, BlockPos targetPos, float rampFraction) {
+    private static int transferCount(GraphLinkData link, ServerLevel level, GraphNodeData sourceNode, GraphNodeData targetNode, BlockPos sourcePos, BlockPos targetPos, float rampFraction,
+                                     java.util.Map<String, ScannedBlockData> scannedById, float weather) {
+        float wirelessMult = wirelessMultiplier(level, sourcePos, targetPos, sourceNode, targetNode, scannedById, weather);
         return switch (link.type()) {
-            case ITEMS -> ModServerConfig.ENABLE_ITEM_ROUTES.get() ? transferItemsCount(level, link, sourceNode, targetNode, sourcePos, targetPos, r -> true, Integer.MAX_VALUE, rampFraction) : 0;
-            case FLUIDS -> ModServerConfig.ENABLE_FLUID_ROUTES.get() ? transferFluidsCount(level, sourcePos, targetPos) : 0;
-            case ENERGY -> ModServerConfig.ENABLE_ENERGY_ROUTES.get() ? transferEnergyCount(level, sourcePos, targetPos) : 0;
+            case ITEMS -> ModServerConfig.ENABLE_ITEM_ROUTES.get() ? transferItemsCount(level, link, sourceNode, targetNode, sourcePos, targetPos, r -> true, Integer.MAX_VALUE, rampFraction * wirelessMult) : 0;
+            case FLUIDS -> ModServerConfig.ENABLE_FLUID_ROUTES.get() ? transferFluidsCount(level, sourcePos, targetPos, wirelessMult) : 0;
+            case ENERGY -> ModServerConfig.ENABLE_ENERGY_ROUTES.get() ? transferEnergyCount(level, sourcePos, targetPos, wirelessMult) : 0;
             case MANUAL -> 0;
         };
+    }
+
+    /**
+     * Throughput multiplier for a single route from wireless signal strength and weather. Wired-only
+     * routes return 1.0. When it isn't raining the cheap path applies signal alone (wired endpoints
+     * always report 1.0 signal); only rain/thunder needs the per-block wireless-endpoint probe to
+     * decide whether the weather penalty applies.
+     */
+    private static float wirelessMultiplier(ServerLevel level, BlockPos sourcePos, BlockPos targetPos,
+            GraphNodeData sourceNode, GraphNodeData targetNode,
+            java.util.Map<String, ScannedBlockData> scannedById, float weather) {
+        float signal = Math.min(signalOf(sourceNode, scannedById), signalOf(targetNode, scannedById));
+        if (weather >= 1f) return signal; // wired endpoints carry 1.0 signal, so this is a no-op for them
+        boolean wireless = (sourcePos != null && hasWirelessEndpoint(level, sourcePos))
+                || (targetPos != null && hasWirelessEndpoint(level, targetPos));
+        if (!wireless) return 1f;
+        return WirelessNetworkPolicy.wirelessThroughputMultiplier(signal, weather);
+    }
+
+    private static float signalOf(GraphNodeData node, java.util.Map<String, ScannedBlockData> scannedById) {
+        ScannedBlockData scanned = scannedFor(node, scannedById);
+        return scanned == null ? 1f : (float) scanned.signalStrength();
+    }
+
+    /** Scale a per-route resource cap by a throttle multiplier, keeping a floor of 1 so a throttled route still trickles. */
+    private static long throttle(long base, float mult) {
+        if (mult >= 1f || base <= 0) return base;
+        return Math.max(1L, (long) (base * mult));
     }
 
     // ---- Multi-hop routing through Filter / Splitter / Combine / Channel nodes ----
@@ -197,7 +232,7 @@ public final class EasyFactoryManager {
     private static int routeThroughNodesCount(LogisticsGraphData graph, ServerLevel level, GraphLinkData inbound,
             GraphNodeData sourceNode, BlockPos sourcePos, java.util.Map<String, BlockPos> positions,
             java.util.Map<String, Integer> movedByLink, java.util.Map<String, java.util.List<GraphLinkData>> outboundIndex,
-            float rampFraction) {
+            float rampFraction, java.util.Map<String, ScannedBlockData> scannedById, float weather) {
         if (inbound.type() != LinkType.ITEMS) return 0;
         GraphNodeData first = graph.findNode(inbound.targetNodeId());
         if (first == null || !isRoutingNode(first.type())) return 0;
@@ -214,8 +249,9 @@ public final class EasyFactoryManager {
             GraphLinkData route = new GraphLinkData(inbound.linkId(), inbound.sourceNodeId(), inbound.sourcePortId(),
                     r.finalLink().targetNodeId(), r.finalLink().targetPortId(), r.finalLink().label(),
                     LinkType.ITEMS, r.finalLink().sideOverride());
+            float wirelessMult = wirelessMultiplier(level, sourcePos, r.targetPos(), sourceNode, r.targetNode(), scannedById, weather);
             int moved = transferItemsCount(level, route, sourceNode, r.targetNode(), sourcePos, r.targetPos(),
-                    resource -> gatesAllow(r.gates(), resource), gateLimit(r.gates()), rampFraction);
+                    resource -> gatesAllow(r.gates(), resource), gateLimit(r.gates()), rampFraction * wirelessMult);
             if (moved > 0) {
                 for (String linkId : r.linkPath()) movedByLink.merge(linkId, moved, Integer::sum);
                 movedTotal += moved;
@@ -595,7 +631,7 @@ public final class EasyFactoryManager {
         return stack != null && !stack.isEmpty() && stack.getBurnTime(RecipeType.SMELTING) > 0;
     }
 
-    private static int transferFluidsCount(ServerLevel level, BlockPos sourcePos, BlockPos targetPos) {
+    private static int transferFluidsCount(ServerLevel level, BlockPos sourcePos, BlockPos targetPos, float wirelessMult) {
         Direction sourceSide = sideFrom(sourcePos, targetPos);
         Direction targetSide = sourceSide == null ? null : sourceSide.getOpposite();
         IFluidHandler source = fluidHandler(level, sourcePos, sourceSide);
@@ -604,7 +640,7 @@ public final class EasyFactoryManager {
         if (target == null) target = fluidHandler(level, targetPos, null);
         if (source == null || target == null) return 0;
 
-        long max = ModServerConfig.MAX_FLUID_MOVED_PER_ROUTE.get();
+        long max = throttle(ModServerConfig.MAX_FLUID_MOVED_PER_ROUTE.get(), wirelessMult);
         for (int tank = 0; tank < source.getTanks(); tank++) {
             FluidStack resource = source.getFluidInTank(tank);
             int available = resource.getAmount();
@@ -624,7 +660,7 @@ public final class EasyFactoryManager {
         return 0;
     }
 
-    private static int transferEnergyCount(ServerLevel level, BlockPos sourcePos, BlockPos targetPos) {
+    private static int transferEnergyCount(ServerLevel level, BlockPos sourcePos, BlockPos targetPos, float wirelessMult) {
         Direction sourceSide = sideFrom(sourcePos, targetPos);
         Direction targetSide = sourceSide == null ? null : sourceSide.getOpposite();
         IEnergyStorage source = energyHandler(level, sourcePos, sourceSide);
@@ -633,7 +669,7 @@ public final class EasyFactoryManager {
         if (target == null) target = energyHandler(level, targetPos, null);
         if (source == null || target == null) return 0;
 
-        int amount = (int) Math.min(Integer.MAX_VALUE, Math.min(ModServerConfig.MAX_ENERGY_MOVED_PER_ROUTE.get(), source.getEnergyStored()));
+        int amount = (int) Math.min(Integer.MAX_VALUE, Math.min(throttle(ModServerConfig.MAX_ENERGY_MOVED_PER_ROUTE.get(), wirelessMult), source.getEnergyStored()));
         if (amount <= 0) return 0;
         int extracted = source.extractEnergy(amount, true);
         if (extracted <= 0) return 0;

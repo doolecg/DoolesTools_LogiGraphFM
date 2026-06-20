@@ -115,6 +115,7 @@ public class NodeDetailsPanel {
             cy = kv(g, font, "Block", s.blockName(), cy);
             cy = kv(g, font, "Pos", s.pos().getX() + ", " + s.pos().getY() + ", " + s.pos().getZ(), cy);
             cy = kv(g, font, "Status", s.hasWarnings() ? "Attention" : "Online", cy);
+            if (s.signalStrength() < 0.999) cy = kv(g, font, "Signal", Math.round(s.signalStrength() * 100) + "% (wireless)", cy);
         } else if (node.type() != NodeType.FILTER) {
             cy = kv(g, font, "Status", "Block missing / unloaded", cy);
         }

@@ -25,7 +25,7 @@ public final class ModCreativeTabs {
                         output.accept(ModItems.LABEL_GUN.get());
                         output.accept(ModItems.NETWORK_SCREWDRIVER.get());
                         output.accept(ModItems.LINKING_CARD.get());
-                        output.accept(ModItems.LOGIGRAPH_WALL_MONITOR.get());
+                        // DISABLED: output.accept(ModItems.LOGIGRAPH_WALL_MONITOR.get());
                         output.accept(ModItems.WIRELESS_ROUTER.get());
                         output.accept(ModItems.WIRELESS_DONGLE.get());
                         output.accept(ModItems.NETWORK_MODEM.get());

@@ -33,4 +33,39 @@ public final class WirelessNetworkPolicy {
         int reductionSteps = Math.max(0, Math.min(4, efficiencyUpgrades));
         return surcharge * (4 - reductionSteps) / 4;
     }
+
+    /**
+     * Throughput multiplier applied to wireless routes while it is raining/thundering. Thunder takes
+     * precedence over rain. Penalties are percentages in [0,100]; a 20% rain penalty returns 0.8.
+     */
+    public static float weatherMultiplier(boolean raining, boolean thundering, int rainPenaltyPct, int thunderPenaltyPct) {
+        if (thundering) return clamp01((100 - clampPct(thunderPenaltyPct)) / 100f);
+        if (raining) return clamp01((100 - clampPct(rainPenaltyPct)) / 100f);
+        return 1f;
+    }
+
+    /**
+     * Wireless signal strength in [floor,1]: 1.0 at distance 0, falling linearly to
+     * {@code minSignalPct/100} at the effective range edge and clamped to that floor beyond it.
+     */
+    public static float signalStrength(long distanceSqr, int effectiveRange, int minSignalPct) {
+        int range = Math.max(1, effectiveRange);
+        float floor = clamp01(clampPct(minSignalPct) / 100f);
+        double dist = Math.sqrt(Math.max(0L, distanceSqr));
+        double t = Math.min(1.0, dist / range);
+        return clamp01((float) (1.0 - (1.0 - floor) * t));
+    }
+
+    /** Combined wireless throughput multiplier (signal strength × weather), clamped to [0,1]. */
+    public static float wirelessThroughputMultiplier(float signalStrength, float weatherMultiplier) {
+        return clamp01(signalStrength * weatherMultiplier);
+    }
+
+    private static int clampPct(int pct) {
+        return Math.max(0, Math.min(100, pct));
+    }
+
+    private static float clamp01(float value) {
+        return Math.max(0f, Math.min(1f, value));
+    }
 }

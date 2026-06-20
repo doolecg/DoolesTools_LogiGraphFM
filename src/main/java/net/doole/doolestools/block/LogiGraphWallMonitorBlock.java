@@ -1,3 +1,5 @@
+// DISABLED: LogiGraph Wall Monitor block commented out per request. Restore by removing this wrapper.
+/*
 package net.doole.doolestools.block;
 
 import com.mojang.serialization.MapCodec;
@@ -92,3 +94,4 @@ public class LogiGraphWallMonitorBlock extends HorizontalDirectionalBlock implem
         };
     }
 }
+*/

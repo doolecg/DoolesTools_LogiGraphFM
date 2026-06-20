@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Weather affects wireless transport** — wireless routes lose throughput while it's raining (−20% by
+  default) or thundering (−40%) in the network's dimension. Wired links are unaffected. Tunable/disablable
+  under the new `wireless` server-config section (`wirelessWeatherEnable`, `wirelessRainPenaltyPercent`,
+  `wirelessThunderPenaltyPercent`).
+- **Wireless signal strength** — each wireless device now has a real 0–100% signal that falls off with
+  distance to its nearest access point (computer / router / relay) down to a configurable floor at the
+  range edge. Low signal throttles that route's throughput, and the strength is shown in the device list
+  and node details. Tunable via `wirelessSignalFalloffEnable` / `wirelessMinSignalPercent`.
+- **New network relay model** — the relay block uses an updated Blockbench model.
+
 ## [0.6.0] — 2026-06-17
 
 ### Added
