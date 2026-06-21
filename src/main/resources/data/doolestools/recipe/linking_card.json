@@ -1,19 +1,17 @@
 {
   "type": "minecraft:crafting_shaped",
   "pattern": [
-    "SGS",
-    "ECE",
-    "SRS"
+    " E ",
+    "EPE",
+    " R "
   ],
   "key": {
-    "S": "minecraft:smooth_stone",
-    "G": "minecraft:glass",
     "E": "minecraft:ender_pearl",
-    "C": "minecraft:comparator",
+    "P": "minecraft:paper",
     "R": "minecraft:redstone"
   },
   "result": {
-    "id": "doolestools:logistics_computer",
+    "id": "doolestools:linking_card",
     "count": 1
   }
 }

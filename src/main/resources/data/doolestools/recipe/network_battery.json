@@ -1,12 +1,12 @@
 {
   "type": "minecraft:crafting_shaped",
   "pattern": [
-    "IRI",
+    "SRS",
     "EGE",
-    "IRI"
+    "SRS"
   ],
   "key": {
-    "I": "minecraft:iron_ingot",
+    "S": "minecraft:smooth_stone",
     "R": "minecraft:redstone",
     "E": "minecraft:ender_pearl",
     "G": "minecraft:gold_ingot"
