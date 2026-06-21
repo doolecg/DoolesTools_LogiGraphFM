@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] — 2026-06-21
+
 ### Added
 
 - **Weather affects wireless transport** — wireless routes lose throughput while it's raining (−20% by
@@ -28,6 +30,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   accepts a resource on first (from the scan-derived ports), ahead of its full face sweep. This only
   reorders probing — every face plus the unsided handler is still tried — so stale scan data can never
   block a move, only make the common case hit the right face on the first try.
+- **Crafting coverage** — added recipes for the Linking Card and Network Screwdriver so all core network
+  tooling is craftable in survival.
+
+### Changed
+
+- **Crafting balance pass** — revised core LogiGraph block recipes around smooth stone, comparators,
+  ender pearls, and nether stars to better match the network progression curve.
+- **Dev recipe verification** — added JEI as a dev-only runtime dependency so recipes can be checked in
+  `runClient` without making JEI a compile dependency or bundled feature.
 
 ## [0.8.0] — 2026-06-19
 
@@ -222,7 +233,8 @@ and planning tool. No item/fluid/energy transport — observation and visualisat
   only inside lambda bodies, so they never load on a dedicated server.
 - One Mojang `CODEC` per data record drives both persistence and networking.
 
-[Unreleased]: https://github.com/doolecg/DoolesTools_LogiGraph/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/doolecg/DoolesTools_LogiGraphFM/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/doolecg/DoolesTools_LogiGraphFM/compare/v0.8.0...v1.0.0
 [0.6.0]: https://github.com/doolecg/DoolesTools_LogiGraph/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/doolecg/DoolesTools_LogiGraph/compare/v0.3.0...v0.5.0
 [0.3.0]: https://github.com/doolecg/DoolesTools_LogiGraph/compare/v0.2.0...v0.3.0

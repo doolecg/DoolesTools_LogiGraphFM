@@ -1,15 +1,16 @@
 {
   "type": "minecraft:crafting_shaped",
   "pattern": [
-    "IRI",
     "ECE",
-    "IRI"
+    "SNS",
+    "ERE"
   ],
   "key": {
-    "I": "minecraft:iron_ingot",
-    "R": "minecraft:redstone",
+    "S": "minecraft:smooth_stone",
     "E": "minecraft:ender_pearl",
-    "C": "minecraft:comparator"
+    "C": "minecraft:comparator",
+    "N": "minecraft:nether_star",
+    "R": "minecraft:redstone"
   },
   "result": {
     "id": "doolestools:wireless_router",

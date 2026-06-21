@@ -1,16 +1,16 @@
 {
   "type": "minecraft:crafting_shaped",
   "pattern": [
-    "ERE",
-    "CNC",
-    "ESE"
+    "SOS",
+    "ENE",
+    "SMS"
   ],
   "key": {
+    "S": "minecraft:smooth_stone",
+    "O": "doolestools:wireless_router",
     "E": "minecraft:ender_pearl",
-    "R": "doolestools:wireless_router",
-    "C": "minecraft:comparator",
     "N": "minecraft:nether_star",
-    "S": "doolestools:logistics_computer"
+    "M": "doolestools:logistics_computer"
   },
   "result": {
     "id": "doolestools:network_switchboard",

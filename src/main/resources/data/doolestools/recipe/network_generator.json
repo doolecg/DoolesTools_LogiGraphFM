@@ -1,12 +1,12 @@
 {
   "type": "minecraft:crafting_shaped",
   "pattern": [
-    "IEI",
-    "IFI",
-    "IRI"
+    "SES",
+    "SFS",
+    "SRS"
   ],
   "key": {
-    "I": "minecraft:iron_ingot",
+    "S": "minecraft:smooth_stone",
     "E": "minecraft:ender_pearl",
     "F": "minecraft:furnace",
     "R": "minecraft:redstone"

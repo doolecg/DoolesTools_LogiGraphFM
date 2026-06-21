@@ -1,13 +1,14 @@
 {
   "type": "minecraft:crafting_shaped",
   "pattern": [
-    "III",
-    "GGG",
-    "IRI"
+    "SSS",
+    "GCG",
+    "SRS"
   ],
   "key": {
-    "I": "minecraft:iron_ingot",
+    "S": "minecraft:smooth_stone",
     "G": "minecraft:glass",
+    "C": "minecraft:comparator",
     "R": "minecraft:redstone"
   },
   "result": {

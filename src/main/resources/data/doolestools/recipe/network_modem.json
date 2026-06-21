@@ -2,14 +2,14 @@
   "type": "minecraft:crafting_shaped",
   "pattern": [
     "ERE",
-    "RGR",
-    "IRI"
+    "RCR",
+    "SRS"
   ],
   "key": {
-    "I": "minecraft:iron_ingot",
+    "S": "minecraft:smooth_stone",
     "E": "minecraft:ender_pearl",
     "R": "minecraft:redstone",
-    "G": "minecraft:glass"
+    "C": "minecraft:comparator"
   },
   "result": {
     "id": "doolestools:network_modem",

@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "  I",
+    " R ",
+    "H  "
+  ],
+  "key": {
+    "I": "minecraft:iron_ingot",
+    "R": "minecraft:redstone",
+    "H": "minecraft:stick"
+  },
+  "result": {
+    "id": "doolestools:network_screwdriver",
+    "count": 1
+  }
+}
