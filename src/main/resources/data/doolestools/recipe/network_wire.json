@@ -6,9 +6,15 @@
     "IRI"
   ],
   "key": {
-    "I": "minecraft:iron_ingot",
-    "R": "minecraft:redstone",
-    "G": "minecraft:glass_pane"
+    "I": {
+      "item": "minecraft:iron_ingot"
+    },
+    "R": {
+      "item": "minecraft:redstone"
+    },
+    "G": {
+      "item": "minecraft:glass_pane"
+    }
   },
   "result": {
     "id": "doolestools:network_wire",

@@ -19,12 +19,20 @@ java {
 repositories {
     mavenCentral()
     maven { url = 'https://maven.neoforged.net/releases' }
+    // JEI (recipe viewer) — used only to verify the mod's recipes display in dev.
+    maven { url = 'https://maven.blamejared.com' }
 }
 
 dependencies {
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    // Dev-only recipe viewer so crafting recipes can be checked in runClient. The mod needs no
+    // plugin code: standard crafting recipes appear in JEI/REI/EMI automatically — players install
+    // whichever viewer they prefer. This is a runtime mod jar, not a compile dependency, and is not
+    // bundled into the built mod jar.
+    runtimeOnly "mezz.jei:jei-${jei_mc_version}-neoforge:${jei_version}"
 }
 
 neoForge {

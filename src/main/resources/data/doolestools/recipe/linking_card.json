@@ -2,22 +2,22 @@
   "type": "minecraft:crafting_shaped",
   "pattern": [
     " E ",
-    "RPR",
-    " E "
+    "EPE",
+    " R "
   ],
   "key": {
     "E": {
       "item": "minecraft:ender_pearl"
     },
-    "R": {
-      "item": "minecraft:redstone"
-    },
     "P": {
       "item": "minecraft:paper"
+    },
+    "R": {
+      "item": "minecraft:redstone"
     }
   },
   "result": {
-    "id": "doolestools:range_upgrade_card",
+    "id": "doolestools:linking_card",
     "count": 1
   }
 }

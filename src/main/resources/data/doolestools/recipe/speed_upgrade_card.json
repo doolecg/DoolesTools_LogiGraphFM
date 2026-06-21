@@ -6,8 +6,12 @@
     " R "
   ],
   "key": {
-    "R": "minecraft:redstone",
-    "P": "minecraft:paper"
+    "R": {
+      "item": "minecraft:redstone"
+    },
+    "P": {
+      "item": "minecraft:paper"
+    }
   },
   "result": {
     "id": "doolestools:speed_upgrade_card",

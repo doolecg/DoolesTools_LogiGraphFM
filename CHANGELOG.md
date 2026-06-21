@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] — 2026-06-21
+
 ### Added
 
 - **Weather affects wireless transport** — wireless routes lose throughput while it's raining (−20% by
@@ -18,6 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   range edge. Low signal throttles that route's throughput, and the strength is shown in the device list
   and node details. Tunable via `wirelessSignalFalloffEnable` / `wirelessMinSignalPercent`.
 - **New network relay model** — the relay block uses an updated Blockbench model.
+- **Minecraft 1.21.1 release jar** — built as `doolestools-1.0.0.jar` for Minecraft 1.21.1 / NeoForge 21.1.216.
+- **Crafting coverage** — added recipes for the Linking Card, Network Screwdriver, and ATM variants of key network blocks.
+
+### Changed
+
+- **Crafting balance pass** — revised core LogiGraph, upgrade-card, wire, and label-gun recipes around smooth stone, comparators, ender pearls, and nether stars to better match the network progression curve.
+- **Dev recipe verification** — added JEI as a dev-only runtime dependency so recipes can be checked in `runClient` without making JEI a compile dependency or bundled feature.
 
 ## [0.6.0] — 2026-06-17
 
@@ -185,7 +194,8 @@ and planning tool. No item/fluid/energy transport — observation and visualisat
   only inside lambda bodies, so they never load on a dedicated server.
 - One Mojang `CODEC` per data record drives both persistence and networking.
 
-[Unreleased]: https://github.com/doolecg/DoolesTools_LogiGraph/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/doolecg/DoolesTools_LogiGraphFM/compare/v1.0.0-1.21.1...HEAD
+[1.0.0]: https://github.com/doolecg/DoolesTools_LogiGraphFM/compare/v0.9.0-1.21.1...v1.0.0-1.21.1
 [0.6.0]: https://github.com/doolecg/DoolesTools_LogiGraph/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/doolecg/DoolesTools_LogiGraph/compare/v0.3.0...v0.5.0
 [0.3.0]: https://github.com/doolecg/DoolesTools_LogiGraph/compare/v0.2.0...v0.3.0

@@ -6,10 +6,18 @@
     "S  "
   ],
   "key": {
-    "I": "minecraft:iron_ingot",
-    "N": "minecraft:name_tag",
-    "R": "minecraft:redstone",
-    "S": "minecraft:stick"
+    "I": {
+      "item": "minecraft:iron_ingot"
+    },
+    "N": {
+      "item": "minecraft:name_tag"
+    },
+    "R": {
+      "item": "minecraft:redstone"
+    },
+    "S": {
+      "item": "minecraft:stick"
+    }
   },
   "result": {
     "id": "doolestools:label_gun",

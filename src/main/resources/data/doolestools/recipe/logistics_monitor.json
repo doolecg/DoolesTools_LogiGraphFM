@@ -1,14 +1,23 @@
 {
   "type": "minecraft:crafting_shaped",
   "pattern": [
-    "III",
-    "GGG",
-    "IRI"
+    "SSS",
+    "GCG",
+    "SRS"
   ],
   "key": {
-    "I": "minecraft:iron_ingot",
-    "G": "minecraft:glass",
-    "R": "minecraft:redstone"
+    "S": {
+      "item": "minecraft:smooth_stone"
+    },
+    "G": {
+      "item": "minecraft:glass"
+    },
+    "C": {
+      "item": "minecraft:comparator"
+    },
+    "R": {
+      "item": "minecraft:redstone"
+    }
   },
   "result": {
     "id": "doolestools:logistics_monitor",

@@ -6,9 +6,15 @@
     " G "
   ],
   "key": {
-    "G": "minecraft:gold_ingot",
-    "R": "minecraft:redstone",
-    "P": "minecraft:paper"
+    "G": {
+      "item": "minecraft:gold_ingot"
+    },
+    "R": {
+      "item": "minecraft:redstone"
+    },
+    "P": {
+      "item": "minecraft:paper"
+    }
   },
   "result": {
     "id": "doolestools:efficiency_upgrade_card",

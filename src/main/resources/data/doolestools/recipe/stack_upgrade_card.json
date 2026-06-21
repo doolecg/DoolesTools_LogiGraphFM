@@ -6,8 +6,12 @@
     " I "
   ],
   "key": {
-    "I": "minecraft:iron_ingot",
-    "P": "minecraft:paper"
+    "I": {
+      "item": "minecraft:iron_ingot"
+    },
+    "P": {
+      "item": "minecraft:paper"
+    }
   },
   "result": {
     "id": "doolestools:stack_upgrade_card",

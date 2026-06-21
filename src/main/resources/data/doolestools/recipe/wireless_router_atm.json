@@ -1,16 +1,22 @@
 {
+  "neoforge:conditions": [
+    {
+      "type": "neoforge:mod_loaded",
+      "modid": "allthemodium"
+    }
+  ],
   "type": "minecraft:crafting_shaped",
   "pattern": [
-    "SGS",
     "ECE",
-    "SRS"
+    "AUA",
+    "ERE"
   ],
   "key": {
-    "S": {
-      "item": "minecraft:smooth_stone"
+    "A": {
+      "item": "allthemodium:allthemodium_ingot"
     },
-    "G": {
-      "item": "minecraft:glass"
+    "U": {
+      "item": "allthemodium:unobtainium_ingot"
     },
     "E": {
       "item": "minecraft:ender_pearl"
@@ -23,7 +29,7 @@
     }
   },
   "result": {
-    "id": "doolestools:logistics_computer",
+    "id": "doolestools:wireless_router",
     "count": 1
   }
 }
