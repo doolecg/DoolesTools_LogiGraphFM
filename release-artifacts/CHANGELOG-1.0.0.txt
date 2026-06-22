@@ -1,0 +1,42 @@
+Doole's Tools LogiGraph 1.0.0
+Release date: 2026-06-21
+
+Files built for this release:
+doolestools-1.0.0-mc26.1.2.jar
+doolestools-1.0.0-mc1.21.1.jar
+
+Minecraft 26.1.2 / NeoForge 26.1.2.76
+
+New in this version:
+Weather now affects wireless transport. Wireless routes lose throughput while it is raining or thundering in the network's dimension. Wired links are unaffected, and the feature can be tuned or disabled in server config.
+
+Wireless devices now report real signal strength from 0 to 100 percent. Signal falls off with distance to the nearest computer, router, or relay, and low signal can throttle route throughput.
+
+Scans now detect real per-face item, fluid, and energy capabilities. Machine ports in the graph editor better reflect what each block can actually accept or output, including sided machines from other mods.
+
+Easy Factory transport now tries the scan-detected IO face first, while still falling back to every face and unsided handlers so stale scan data does not block transfers.
+
+The Network Relay has an updated model.
+
+The Linking Card and Network Screwdriver now have survival recipes.
+
+Changed in this version:
+Core LogiGraph block recipes were rebalanced around smooth stone, comparators, ender pearls, and nether stars to better match network progression.
+
+JEI is included only as a development runtime dependency for recipe verification. It is not required by players, is not a compile dependency, and is not bundled into the mod jar.
+
+Minecraft 1.21.1 / NeoForge 21.1.216
+
+New in this version:
+Weather now affects wireless transport. Wireless routes lose throughput while it is raining or thundering in the network's dimension. Wired links are unaffected, and the feature can be tuned or disabled in server config.
+
+Wireless devices now report real signal strength from 0 to 100 percent. Signal falls off with distance to the nearest computer, router, or relay, and low signal can throttle route throughput.
+
+The Network Relay has an updated model.
+
+The Linking Card, Network Screwdriver, and ATM variants of key network blocks now have recipes.
+
+Changed in this version:
+Core LogiGraph, upgrade-card, wire, and label-gun recipes were rebalanced around smooth stone, comparators, ender pearls, and nether stars to better match network progression.
+
+JEI is included only as a development runtime dependency for recipe verification. It is not required by players, is not a compile dependency, and is not bundled into the mod jar.
